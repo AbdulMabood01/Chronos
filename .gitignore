@@ -1,0 +1,23 @@
+# Java / Maven
+target/
+*.class
+
+# Node / React / Vite
+node_modules/
+dist/
+.vite/
+
+# Logs
+*.log
+
+# Local editor and OS files
+.vscode/
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.*
+!.env.example
