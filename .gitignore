@@ -1,11 +1,13 @@
 # Java / Maven
 target/
 *.class
+compile_output.txt
 
 # Node / React / Vite
 node_modules/
 dist/
 .vite/
+__pycache__/
 
 # Logs
 *.log
@@ -21,3 +23,8 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+postgres-pw.txt
+
+# Local runtime data
+.postgres/
+backend/calendar_test.json

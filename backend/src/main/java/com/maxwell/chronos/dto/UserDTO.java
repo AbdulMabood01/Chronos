@@ -1,0 +1,44 @@
+package com.maxwell.chronos.dto;
+
+import com.maxwell.chronos.enums.UserRole;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class UserDTO {
+    private Long id;
+    private String employeeId;
+    private String firstName;
+    private String lastName;
+    private String jobTitle;
+    private LocalDate dateOfBirth;
+    private String ssnLast4;
+    private String profileImageUrl;
+    private Boolean profileCompleted;
+    private String email;
+    private UserRole role;
+    private BigDecimal hourlyRate;
+    private BigDecimal defaultHourlyRate;
+    private BigDecimal adminOverrideHourlyRate;
+    private BigDecimal effectiveHourlyRate;
+    private Boolean rateOverridden;
+    private String rateOverriddenByName;
+    private LocalDateTime rateOverriddenAt;
+    private String rateOverrideReason;
+    private Boolean isActive;
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
+
+    public String getFullName() {
+        return firstName + " " + lastName;
+    }
+}

@@ -1,0 +1,7 @@
+ALTER TYPE audit_action ADD VALUE IF NOT EXISTS 'USER_PROFILE_UPDATED';
+
+ALTER TABLE users
+    ADD COLUMN job_title VARCHAR(120),
+    ADD COLUMN date_of_birth DATE,
+    ADD COLUMN ssn_last4 VARCHAR(4),
+    ADD COLUMN profile_completed BOOLEAN NOT NULL DEFAULT false;

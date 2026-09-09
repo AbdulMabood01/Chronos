@@ -5,11 +5,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api")
+@RequestMapping
 public class WelcomeController {
 
     @GetMapping("/welcome")
     public WelcomeResponse welcome() {
-        return new WelcomeResponse("Welcome to Chronos website - Maxwells time keeping app");
+        return new WelcomeResponse("Welcome to Chronos - Maxwell Network Employee Timekeeping & Vacation Management System");
     }
 }
