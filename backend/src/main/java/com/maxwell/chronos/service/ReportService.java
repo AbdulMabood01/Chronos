@@ -4,6 +4,7 @@ import com.maxwell.chronos.domain.TimeEntry;
 import com.maxwell.chronos.domain.Timesheet;
 import com.maxwell.chronos.domain.TimesheetProjectSubmission;
 import com.maxwell.chronos.domain.VacationRequest;
+import com.maxwell.chronos.domain.Project;
 import com.maxwell.chronos.repository.ProjectAssignmentRepository;
 import com.maxwell.chronos.enums.TimesheetStatus;
 import com.maxwell.chronos.enums.UserRole;
@@ -28,11 +29,6 @@ import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.apache.poi.xssf.usermodel.XSSFFont;
 import org.apache.poi.xssf.usermodel.XSSFRichTextString;
-import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.pdmodel.PDPage;
-import org.apache.pdfbox.pdmodel.PDPageContentStream;
-import org.apache.pdfbox.pdmodel.common.PDRectangle;
-import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -66,14 +62,42 @@ public class ReportService {
     private final VacationRequestRepository vacationRequestRepository;
 
     public byte[] exportTimesheets(int year, int month, List<Long> userIds) {
-        List<Timesheet> timesheets = filterTimesheets(timesheetRepository.findByYearAndMonth(year, month), userIds);
+        List<Timesheet> timesheets = filterTimesheets(timesheetRepository.findByYearAndMonth(year, month), userIds)
+                .stream()
+                .filter(this::isReportExportEligible)
+                .toList();
 
         try (ByteArrayOutputStream out = new ByteArrayOutputStream();
              ZipOutputStream zip = new ZipOutputStream(out)) {
             Set<String> entryNames = new HashSet<>();
             for (Timesheet ts : timesheets) {
                 zip.putNextEntry(new ZipEntry(buildUniqueTimesheetFilename(ts, entryNames)));
-                zip.write(buildTimesheetWorkbook(ts));
+                zip.write(buildTimesheetPdf(ts));
+                zip.closeEntry();
+            }
+            zip.finish();
+            return out.toByteArray();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    public byte[] exportProjectTimesheets(List<Long> submissionIds) {
+        if (submissionIds == null || submissionIds.isEmpty()) {
+            throw new IllegalArgumentException("Select at least one approved project timesheet");
+        }
+
+        try (ByteArrayOutputStream out = new ByteArrayOutputStream();
+             ZipOutputStream zip = new ZipOutputStream(out)) {
+            Set<String> entryNames = new HashSet<>();
+            for (Long submissionId : submissionIds) {
+                TimesheetProjectSubmission submission = projectSubmissionRepository.findById(submissionId)
+                        .orElseThrow(() -> new IllegalArgumentException("Project timesheet not found"));
+                if (!submission.isPdfExportEligible()) {
+                    continue;
+                }
+                zip.putNextEntry(new ZipEntry(buildUniqueProjectTimesheetFilename(submission, entryNames)));
+                zip.write(buildTimesheetPdf(submission.getTimesheet(), submission));
                 zip.closeEntry();
             }
             zip.finish();
@@ -123,7 +147,7 @@ public class ReportService {
                 .orElseThrow(() -> new IllegalArgumentException("Timesheet not found"));
 
         if (!isAdmin && !timesheet.getUser().getId().equals(requestingUserId)) {
-            throw new IllegalArgumentException("Not authorized to export this timesheet");
+            throw new org.springframework.security.access.AccessDeniedException("Not authorized to export this timesheet");
         }
 
         return buildTimesheetWorkbook(timesheet);
@@ -134,7 +158,7 @@ public class ReportService {
                 .orElseThrow(() -> new IllegalArgumentException("Timesheet not found"));
 
         if (!isAdmin && !timesheet.getUser().getId().equals(requestingUserId)) {
-            throw new IllegalArgumentException("Not authorized to export this timesheet");
+            throw new org.springframework.security.access.AccessDeniedException("Not authorized to export this timesheet");
         }
         if (!com.maxwell.chronos.enums.TimesheetStatus.APPROVED.equals(timesheet.getStatus())
                 && !com.maxwell.chronos.enums.TimesheetStatus.LOCKED.equals(timesheet.getStatus())) {
@@ -150,7 +174,7 @@ public class ReportService {
         Timesheet timesheet = submission.getTimesheet();
 
         if (!isAdmin && !timesheet.getUser().getId().equals(requestingUserId)) {
-            throw new IllegalArgumentException("Not authorized to export this timesheet");
+            throw new org.springframework.security.access.AccessDeniedException("Not authorized to export this timesheet");
         }
         if (!submission.isPdfExportEligible()) {
             throw new IllegalArgumentException("Timesheet must be approved before PDF export");
@@ -164,104 +188,218 @@ public class ReportService {
     }
 
     private byte[] buildTimesheetPdf(Timesheet timesheet, TimesheetProjectSubmission submission) {
-        try (PDDocument document = new PDDocument(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            PDPage page = new PDPage(PDRectangle.LETTER);
-            document.addPage(page);
-            try (PDPageContentStream content = new PDPageContentStream(document, page)) {
-                float y = 742;
-                TimesheetStatus status = submission != null ? submission.getStatus() : timesheet.getStatus();
-                String projectLabel = submission != null
-                        ? submission.getProject().getCode() + " - " + submission.getProject().getName()
-                        : timesheet.getPrimaryProject() != null ? timesheet.getPrimaryProject().getCode() + " - " + timesheet.getPrimaryProject().getName() : "";
-                y = writeLine(content, "Approved Timesheet", 50, y, 18, true);
-                y -= 10;
-                y = writeLine(content, "Employee: " + timesheet.getUser().getFullName(), 50, y, 11, false);
-                y = writeLine(content, "Designation: " + safe(timesheet.getUser().getJobTitle()), 50, y, 11, false);
-                y = writeLine(content, "Project: " + projectLabel, 50, y, 11, false);
-                y = writeLine(content, "Bill Rate: $" + resolveBillRate(timesheet, submission).stripTrailingZeros().toPlainString() + " per hour", 50, y, 11, false);
-                y = writeLine(content, "Period: " + displayMonth(YearMonth.of(timesheet.getYear(), timesheet.getMonth()).getMonth()) + " " + timesheet.getYear(), 50, y, 11, false);
-                y = writeLine(content, "Status: " + status, 50, y, 11, false);
-                y = writeLine(content, "Approver: " + approverName(timesheet, submission), 50, y, 11, false);
-                y = writeLine(content, "Approval Date: " + approvalDate(timesheet, submission), 50, y, 11, false);
-                y -= 12;
-                y = writeLine(content, "Date        Project      Hours   Login/Logout", 50, y, 11, true);
-                y -= 4;
-
-                List<TimeEntry> entries = timesheet.getTimeEntries().stream()
-                        .filter(entry -> submission == null
-                                || (entry.getProject() != null && entry.getProject().getId().equals(submission.getProject().getId())))
-                        .sorted(Comparator.comparing(TimeEntry::getEntryDate))
-                        .toList();
-                for (TimeEntry entry : entries) {
-                    String sessions = entry.getSessions().stream()
-                            .map(session -> session.getLoginTime() + "-" + session.getLogoutTime())
-                            .collect(Collectors.joining(", "));
-                    String project = entry.getProject() != null ? entry.getProject().getCode() : "";
-                    y = writeLine(content, entry.getEntryDate() + "  " + pad(project, 10) + "  "
-                            + entry.getHours() + "    " + sessions, 50, y, 10, false);
-                    if (y < 70) {
-                        break;
+        String period = displayMonth(Month.of(timesheet.getMonth())) + " " + timesheet.getYear();
+        var approvals = submission != null ? List.of(submission)
+                : projectSubmissionRepository.findByTimesheetId(timesheet.getId()).stream()
+                    .filter(TimesheetProjectSubmission::isPdfExportEligible)
+                    .sorted(Comparator.comparing(s -> s.getProject().getCode())).toList();
+        String reference = "TS-" + timesheet.getId() + (submission == null ? "" : " / PRJ-" + submission.getId());
+        try (TimesheetPdf pdf = new TimesheetPdf(reference, period)) {
+            pdf.section("Employee & reporting period");
+            pdf.field("Employee", timesheet.getUser().getFullName());
+            pdf.field("Employee ID", timesheet.getUser().getEmployeeId());
+            pdf.field("Designation", timesheet.getUser().getJobTitle());
+            pdf.field("Project", submission != null
+                    ? submission.getProject().getCode() + " - " + submission.getProject().getName()
+                    : "All projects for this reporting period");
+            pdf.field("Status", (submission != null ? submission.getStatus() : timesheet.getStatus()).name());
+            pdf.section("Approval record");
+            if (approvals.isEmpty()) {
+                pdf.field("Approver", timesheet.getApprovedBy() == null ? null : timesheet.getApprovedBy().getFullName());
+                pdf.field("Approval date", timesheet.getApprovedAt() == null ? null : timesheet.getApprovedAt().toLocalDate().toString());
+                pdf.field("Approved bill rate", rateLabel(timesheet.getApprovedHourlyRate()));
+            } else {
+                for (var approval : approvals) {
+                    pdf.field("Approved project", approval.getProject().getCode() + " - " + approval.getProject().getName());
+                    pdf.field("Approver", approval.getApprovedBy() == null ? null : approval.getApprovedBy().getFullName());
+                    pdf.field("Approval date", approval.getApprovedAt() == null ? null : approval.getApprovedAt().toLocalDate().toString());
+                    pdf.field("Approved bill rate", rateLabel(projectReportRate(timesheet, approval)));
+                }
+            }
+            List<TimeEntry> entries = timesheet.getTimeEntries().stream()
+                    .filter(entry -> includesEntryInPdf(entry, submission, approvals))
+                    .sorted(Comparator.comparing(TimeEntry::getEntryDate)
+                            .thenComparing(e -> e.getProject() == null ? "" : e.getProject().getCode())
+                            .thenComparing(TimeEntry::getId, Comparator.nullsLast(Comparator.naturalOrder())))
+                    .toList();
+            if (submission == null) {
+                List<ProjectSummaryRow> summaryRows = projectSummaryRows(timesheet, approvals);
+                if (!summaryRows.isEmpty()) {
+                    pdf.beginProjectSummary();
+                    BigDecimal totalAmount = BigDecimal.ZERO;
+                    boolean hasUnknownAmount = false;
+                    for (ProjectSummaryRow row : summaryRows) {
+                        pdf.projectSummary(row.project(), hoursLabel(row.hours()), rateSummaryLabel(row.rate()), amountLabel(row.amount()));
+                        if (row.amount() == null) {
+                            hasUnknownAmount = true;
+                        } else {
+                            totalAmount = totalAmount.add(row.amount());
+                        }
+                    }
+                    pdf.amountTotal(hasUnknownAmount ? "Unavailable - missing historical rate" : amountLabel(totalAmount));
+                }
+            }
+            if (entries.isEmpty()) {
+                pdf.beginEntries();
+                pdf.entry("", "", "", "No time entries recorded.");
+            } else if (submission == null) {
+                Map<String, List<TimeEntry>> entriesByProject = entries.stream()
+                        .collect(Collectors.groupingBy(this::projectEntryKey, LinkedHashMap::new, Collectors.toList()));
+                for (var group : entriesByProject.entrySet()) {
+                    pdf.beginProjectEntries(group.getKey());
+                    for (TimeEntry entry : group.getValue()) {
+                        writePdfEntry(pdf, entry);
                     }
                 }
-                y -= 12;
-                BigDecimal totalHours = submission != null ? submission.getTotalHours() : timesheet.getTotalHours();
-                writeLine(content, "Total Hours: " + (totalHours != null ? totalHours : BigDecimal.ZERO), 50, y, 12, true);
+            } else {
+                pdf.beginEntries();
+                for (TimeEntry entry : entries) {
+                    writePdfEntry(pdf, entry);
+                }
             }
-            document.save(out);
-            return out.toByteArray();
+            BigDecimal hours = submission != null ? submission.getTotalHours() : timesheet.getTotalHours();
+            if (hours == null) hours = entries.stream().map(TimeEntry::getHours).reduce(BigDecimal.ZERO, BigDecimal::add);
+            pdf.total(hours.setScale(2, RoundingMode.HALF_UP).toPlainString());
+            return pdf.finish();
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
     }
 
-    private String approverName(Timesheet timesheet, TimesheetProjectSubmission submission) {
+    private void writePdfEntry(TimesheetPdf pdf, TimeEntry entry) throws IOException {
+        String sessions = entry.getSessions().stream()
+                .map(session -> session.getLoginTime() + " - " + session.getLogoutTime())
+                .collect(Collectors.joining("; "));
+        String details = sessions.isBlank() ? "Manual hours" : sessions;
+        if (entry.getNotes() != null && !entry.getNotes().isBlank()) details += " | " + entry.getNotes();
+        pdf.entry(entry.getEntryDate().toString(), entry.getProject() == null ? "Unassigned" : entry.getProject().getCode(),
+                entry.getHours().setScale(2, RoundingMode.HALF_UP).toPlainString(), details);
+    }
+
+    private String projectEntryKey(TimeEntry entry) {
+        Project project = entry.getProject();
+        return project == null ? "Unassigned" : project.getCode() + " - " + project.getName();
+    }
+
+    private boolean includesEntryInPdf(TimeEntry entry, TimesheetProjectSubmission submission, List<TimesheetProjectSubmission> approvals) {
         if (submission != null) {
-            return submission.getApprovedBy() != null ? submission.getApprovedBy().getFullName() : "";
+            return entry.getProject() != null && entry.getProject().getId().equals(submission.getProject().getId());
         }
-        return timesheet.getApprovedBy() != null ? timesheet.getApprovedBy().getFullName() : "";
-    }
-
-    private String approvalDate(Timesheet timesheet, TimesheetProjectSubmission submission) {
-        if (submission != null) {
-            return submission.getApprovedAt() != null ? submission.getApprovedAt().toLocalDate().toString() : "";
+        if (!approvals.isEmpty()) {
+            return entry.getProject() != null && approvals.stream()
+                    .anyMatch(approval -> approval.getProject().getId().equals(entry.getProject().getId()));
         }
-        return timesheet.getApprovedAt() != null ? timesheet.getApprovedAt().toLocalDate().toString() : "";
+        return true;
     }
 
-    private float writeLine(PDPageContentStream content, String text, float x, float y, int fontSize, boolean bold) throws IOException {
-        content.beginText();
-        content.setFont(bold ? PDType1Font.HELVETICA_BOLD : PDType1Font.HELVETICA, fontSize);
-        content.newLineAtOffset(x, y);
-        content.showText(safe(text));
-        content.endText();
-        return y - fontSize - 6;
+    private BigDecimal historicalProjectRate(Timesheet timesheet, TimesheetProjectSubmission submission) {
+        if (submission.getApprovedBillRate() != null) return submission.getApprovedBillRate();
+        if (timesheet.getPrimaryProject() != null
+                && timesheet.getPrimaryProject().getId().equals(submission.getProject().getId())) {
+            return timesheet.getApprovedHourlyRate();
+        }
+        return null;
     }
 
-    private String safe(String value) {
-        return value == null ? "" : value.replaceAll("[\\r\\n]+", " ").replaceAll("[^\\x20-\\x7E]", "");
+    private BigDecimal projectReportRate(Timesheet timesheet, TimesheetProjectSubmission submission) {
+        BigDecimal historicalRate = historicalProjectRate(timesheet, submission);
+        if (historicalRate != null) return historicalRate;
+        return projectAssignmentRepository.findByProjectIdAndUserId(submission.getProject().getId(), timesheet.getUser().getId())
+                .map(assignment -> assignment.getBillRate() == null ? BigDecimal.ZERO : assignment.getBillRate())
+                .orElse(null);
     }
 
-    private String pad(String value, int size) {
-        String safeValue = safe(value);
-        return safeValue.length() >= size ? safeValue : safeValue + " ".repeat(size - safeValue.length());
+    private String rateLabel(BigDecimal rate) {
+        return rate == null ? "Unavailable - no historical rate was recorded"
+                : "$" + rate.setScale(2, RoundingMode.HALF_UP).toPlainString() + " per hour";
+    }
+
+    private String rateSummaryLabel(BigDecimal rate) {
+        return rate == null ? "Unavailable"
+                : "$" + rate.setScale(2, RoundingMode.HALF_UP).toPlainString() + "/hr";
+    }
+
+    private String amountLabel(BigDecimal amount) {
+        return amount == null ? "Unavailable"
+                : "$" + amount.setScale(2, RoundingMode.HALF_UP).toPlainString();
+    }
+
+    private String hoursLabel(BigDecimal hours) {
+        return (hours == null ? BigDecimal.ZERO : hours).setScale(2, RoundingMode.HALF_UP).toPlainString();
+    }
+
+    private List<ProjectSummaryRow> projectSummaryRows(Timesheet timesheet, List<TimesheetProjectSubmission> approvals) {
+        if (!approvals.isEmpty()) {
+            return approvals.stream()
+                    .map(approval -> {
+                        BigDecimal hours = approval.getTotalHours();
+                        if (hours == null) {
+                            hours = timesheet.getTimeEntries().stream()
+                                    .filter(entry -> entry.getProject() != null
+                                            && entry.getProject().getId().equals(approval.getProject().getId()))
+                                    .map(TimeEntry::getHours)
+                                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+                        }
+                        BigDecimal rate = projectReportRate(timesheet, approval);
+                        return new ProjectSummaryRow(
+                                approval.getProject().getCode() + " - " + approval.getProject().getName(),
+                                hours,
+                                rate,
+                                rate == null ? null : hours.multiply(rate));
+                    })
+                    .toList();
+        }
+
+        BigDecimal hours = timesheet.getTotalHours();
+        if (hours == null) {
+            hours = timesheet.getTimeEntries().stream()
+                    .map(TimeEntry::getHours)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+        }
+        BigDecimal rate = timesheet.getApprovedHourlyRate();
+        return List.of(new ProjectSummaryRow(
+                timesheet.getPrimaryProject() == null ? "All projects" : timesheet.getPrimaryProject().getCode() + " - " + timesheet.getPrimaryProject().getName(),
+                hours,
+                rate,
+                rate == null ? null : hours.multiply(rate)));
     }
 
     private BigDecimal resolveBillRate(Timesheet timesheet, TimesheetProjectSubmission submission) {
-        Long projectId = submission != null
-                ? submission.getProject().getId()
-                : timesheet.getPrimaryProject() != null ? timesheet.getPrimaryProject().getId() : null;
-        if (projectId != null) {
-            BigDecimal projectRate = projectAssignmentRepository.findByProjectIdAndUserId(projectId, timesheet.getUser().getId())
-                    .map(assignment -> assignment.getBillRate() != null ? assignment.getBillRate() : BigDecimal.ZERO)
-                    .orElse(BigDecimal.ZERO);
-            if (projectRate.compareTo(BigDecimal.ZERO) > 0) {
-                return projectRate;
+        return resolveBillRate(timesheet, submission, false);
+    }
+
+    private BigDecimal resolveBillRate(Timesheet timesheet, TimesheetProjectSubmission submission, boolean allowMissingHistoricalRate) {
+        if (submission != null && submission.isPdfExportEligible()) {
+            if (submission.getApprovedBillRate() == null) {
+                if (allowMissingHistoricalRate) return null;
+                throw new IllegalArgumentException("Historical approved rate is unavailable; reopen and reapprove this project timesheet");
+            }
+            return submission.getApprovedBillRate();
+        }
+        if (submission == null) {
+            var submissions = projectSubmissionRepository.findByTimesheetId(timesheet.getId()).stream()
+                    .filter(TimesheetProjectSubmission::isPdfExportEligible)
+                    .filter(s -> s.getTotalHours() != null && s.getTotalHours().signum() > 0).toList();
+            if (!submissions.isEmpty()) {
+                BigDecimal hours = BigDecimal.ZERO, amount = BigDecimal.ZERO;
+                for (var project : submissions) {
+                    BigDecimal rate = resolveBillRate(timesheet, project, allowMissingHistoricalRate);
+                    if (rate == null) return null;
+                    hours = hours.add(project.getTotalHours());
+                    amount = amount.add(project.getTotalHours().multiply(rate));
+                }
+                return amount.divide(hours, 6, RoundingMode.HALF_UP);
+            }
+            if (timesheet.getStatus() == TimesheetStatus.APPROVED || timesheet.isLocked()) {
+                if (timesheet.getApprovedHourlyRate() == null && !allowMissingHistoricalRate) throw new IllegalArgumentException("Historical approved rate is unavailable");
+                return timesheet.getApprovedHourlyRate();
             }
         }
-        if (timesheet.getUser().getHourlyRate() != null) {
-            return timesheet.getUser().getHourlyRate();
+        if (submission != null) {
+            return projectAssignmentRepository.findByProjectIdAndUserId(submission.getProject().getId(), timesheet.getUser().getId())
+                    .map(a -> a.getBillRate() == null ? BigDecimal.ZERO : a.getBillRate()).orElse(BigDecimal.ZERO);
         }
-        return BigDecimal.ZERO;
+        return timesheet.getBillRate() == null ? BigDecimal.ZERO : timesheet.getBillRate();
     }
 
     private byte[] buildTimesheetWorkbook(Timesheet timesheet) {
@@ -289,10 +427,10 @@ public class ReportService {
             printSetup.setFitWidth((short) 1);
             printSetup.setFitHeight((short) 0);
 
-            BigDecimal rate = resolveBillRate(timesheet, null).setScale(2, RoundingMode.HALF_UP);
+            BigDecimal rate = resolveBillRate(timesheet, null, true);
             YearMonth period = YearMonth.of(timesheet.getYear(), timesheet.getMonth());
-            Map<LocalDate, TimeEntry> entriesByDate = timesheet.getTimeEntries().stream()
-                    .collect(Collectors.toMap(TimeEntry::getEntryDate, entry -> entry, (left, right) -> left));
+            Map<LocalDate, BigDecimal> hoursByDate = timesheet.getTimeEntries().stream()
+                    .collect(Collectors.toMap(TimeEntry::getEntryDate, TimeEntry::getHours, BigDecimal::add));
             Map<LocalDate, String> vacationStatusByDate = getVacationStatusByDate(timesheet, period);
             CellStyle vacationDateStyle = cloneWithFill(workbook, cellAt(sheet, 13, 1).getCellStyle(), IndexedColors.LIGHT_GREEN);
             CellStyle vacationValueStyle = cloneWithFill(workbook, cellAt(sheet, 13, 2).getCellStyle(), IndexedColors.LIGHT_GREEN);
@@ -300,7 +438,8 @@ public class ReportService {
             CellStyle vacationNoteStyle = cloneWithFill(workbook, cellAt(sheet, 25, 9).getCellStyle(), IndexedColors.LIGHT_GREEN);
 
             setCellValue(sheet, 1, 1, "TIMESHEET for " + displayMonth(period.getMonth()) + " (" + period.getYear() + ")");
-            setCellValue(sheet, 1, 9, "Pay rate: $" + rate.stripTrailingZeros().toPlainString() + " per hour");
+            setCellValue(sheet, 1, 9, rate == null ? "Pay rate: Unavailable - no historical rate was recorded"
+                    : "Pay rate: $" + rate.setScale(2, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString() + " per hour");
             setRichLabelCell(workbook, sheet, 5, 1, "Name", ": " + timesheet.getUser().getFullName(), 12, IndexedColors.BLUE);
             setRichLabelCell(workbook, sheet, 6, 1, "Last 4 digits of SS", ":", 12, IndexedColors.BLUE);
             setCellValue(sheet, 6, 2, timesheet.getUser().getSsnLast4());
@@ -313,10 +452,10 @@ public class ReportService {
             BigDecimal totalHours = BigDecimal.ZERO;
             for (int day = 1; day <= 31; day++) {
                 LocalDate date = day <= period.lengthOfMonth() ? period.atDay(day) : null;
-                TimeEntry entry = entriesByDate.get(date);
+
                 String vacationStatus = date != null ? vacationStatusByDate.getOrDefault(date, "") : "";
                 boolean approvedVacation = isApprovedVacationStatus(vacationStatus);
-                BigDecimal hours = entry != null && entry.getHours() != null ? entry.getHours() : BigDecimal.ZERO;
+                BigDecimal hours = hoursByDate.getOrDefault(date, BigDecimal.ZERO);
                 if (approvedVacation) {
                     hours = BigDecimal.ZERO;
                 }
@@ -341,7 +480,9 @@ public class ReportService {
                     cellAt(sheet, rowNumber, 6).setCellStyle(vacationHoursStyle);
                 }
 
-                String note = entry != null && entry.getNotes() != null ? entry.getNotes() : "";
+                String note = timesheet.getTimeEntries().stream().filter(e -> java.util.Objects.equals(date, e.getEntryDate()))
+                        .map(TimeEntry::getNotes).filter(java.util.Objects::nonNull).filter(n -> !n.isBlank())
+                        .collect(Collectors.joining("; "));
                 if (approvedVacation) {
                     note = vacationStatus;
                 }
@@ -472,7 +613,7 @@ public class ReportService {
         if (safeName.isBlank()) {
             safeName = "employee_" + timesheet.getUser().getId();
         }
-        return safeName + "," + displayMonth(period.getMonth()) + "," + period.getYear() + ".xlsx";
+        return safeName + "," + displayMonth(period.getMonth()) + "," + period.getYear() + ".pdf";
     }
 
     private String buildUniqueTimesheetFilename(Timesheet timesheet, Set<String> entryNames) {
@@ -481,20 +622,52 @@ public class ReportService {
             return filename;
         }
 
-        String baseName = filename.substring(0, filename.length() - ".xlsx".length());
+        String baseName = filename.substring(0, filename.length() - ".pdf".length());
         String suffix = timesheet.getUser().getEmployeeId() != null && !timesheet.getUser().getEmployeeId().isBlank()
                 ? timesheet.getUser().getEmployeeId()
                 : "timesheet_" + timesheet.getId();
-        String candidate = baseName + "_" + suffix.replaceAll("[^A-Za-z0-9]+", "_") + ".xlsx";
+        String candidate = baseName + "_" + suffix.replaceAll("[^A-Za-z0-9]+", "_") + ".pdf";
 
         int counter = 2;
         while (!entryNames.add(candidate)) {
-            candidate = baseName + "_" + suffix.replaceAll("[^A-Za-z0-9]+", "_") + "_" + counter + ".xlsx";
+            candidate = baseName + "_" + suffix.replaceAll("[^A-Za-z0-9]+", "_") + "_" + counter + ".pdf";
             counter++;
         }
 
         return candidate;
     }
+
+    private String buildProjectTimesheetFilename(TimesheetProjectSubmission submission) {
+        Timesheet timesheet = submission.getTimesheet();
+        YearMonth period = YearMonth.of(timesheet.getYear(), timesheet.getMonth());
+        String safeEmployee = timesheet.getUser().getFullName().trim()
+                .replaceAll("[^A-Za-z0-9]+", "_")
+                .replaceAll("^_+|_+$", "");
+        String safeProject = submission.getProject().getCode().trim()
+                .replaceAll("[^A-Za-z0-9]+", "_")
+                .replaceAll("^_+|_+$", "");
+        if (safeEmployee.isBlank()) safeEmployee = "employee_" + timesheet.getUser().getId();
+        if (safeProject.isBlank()) safeProject = "project_" + submission.getProject().getId();
+        return safeProject + "_" + safeEmployee + "," + displayMonth(period.getMonth()) + "," + period.getYear() + ".pdf";
+    }
+
+    private String buildUniqueProjectTimesheetFilename(TimesheetProjectSubmission submission, Set<String> entryNames) {
+        String filename = buildProjectTimesheetFilename(submission);
+        if (entryNames.add(filename)) {
+            return filename;
+        }
+
+        String baseName = filename.substring(0, filename.length() - ".pdf".length());
+        String candidate = baseName + "_submission_" + submission.getId() + ".pdf";
+        int counter = 2;
+        while (!entryNames.add(candidate)) {
+            candidate = baseName + "_submission_" + submission.getId() + "_" + counter + ".pdf";
+            counter++;
+        }
+        return candidate;
+    }
+
+    private record ProjectSummaryRow(String project, BigDecimal hours, BigDecimal rate, BigDecimal amount) {}
 
     private String displayMonth(Month month) {
         String lower = month.name().toLowerCase();
@@ -635,7 +808,8 @@ public class ReportService {
             row.put("status", ts.getStatus().name());
             row.put("totalHours", ts.getTotalHours() != null ? ts.getTotalHours() : BigDecimal.ZERO);
             row.put("approvedHourlyRate", ts.getApprovedHourlyRate());
-            row.put("effectiveRate", resolveBillRate(ts, null));
+            row.put("effectiveRate", resolveBillRate(ts, null, true));
+            row.put("exportEligible", isReportExportEligible(ts));
             return row;
         }).sorted((left, right) -> {
             int statusCompare = Integer.compare(statusSortOrder(left.get("status")), statusSortOrder(right.get("status")));
@@ -660,6 +834,14 @@ public class ReportService {
 
     private boolean isEmployeeTimesheet(Timesheet timesheet) {
         return timesheet.getUser() != null && !UserRole.SUPER_ADMIN.equals(timesheet.getUser().getRole());
+    }
+
+    private boolean isReportExportEligible(Timesheet timesheet) {
+        List<TimesheetProjectSubmission> submissions = projectSubmissionRepository.findByTimesheetId(timesheet.getId());
+        if (!submissions.isEmpty()) {
+            return submissions.stream().anyMatch(TimesheetProjectSubmission::isPdfExportEligible);
+        }
+        return TimesheetStatus.APPROVED.equals(timesheet.getStatus()) || timesheet.isLocked();
     }
 
     private int statusSortOrder(Object status) {

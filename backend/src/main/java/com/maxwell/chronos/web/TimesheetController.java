@@ -88,8 +88,8 @@ public class TimesheetController {
             TimeEntryDTO entry = timesheetService.addTimeEntry(timesheetId, entryDate, hours,
                     request.getNotes(), request.getProjectId(), request.getSessions(), user.getId());
             return ResponseEntity.ok(entry);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().build();
+        } catch (IllegalArgumentException e) {
+            throw e;
         }
     }
 
@@ -109,8 +109,8 @@ public class TimesheetController {
             TimeEntryDTO entry = timesheetService.updateTimeEntry(timesheetId, entryId, hours,
                     request.getNotes(), request.getProjectId(), request.getSessions(), user.getId());
             return ResponseEntity.ok(entry);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().build();
+        } catch (IllegalArgumentException e) {
+            throw e;
         }
     }
 
@@ -128,7 +128,7 @@ public class TimesheetController {
             timesheetService.deleteTimeEntry(timesheetId, entryId, user.getId());
             return ResponseEntity.noContent().build();
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().build();
+            throw e;
         }
     }
 
@@ -148,7 +148,7 @@ public class TimesheetController {
             TimesheetDTO timesheet = timesheetService.reopenTimesheet(timesheetId, reason, user.getId());
             return ResponseEntity.ok(timesheet);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().build();
+            throw e;
         }
     }
 
@@ -166,7 +166,7 @@ public class TimesheetController {
             TimesheetDTO timesheet = timesheetService.submitTimesheet(timesheetId, user.getId());
             return ResponseEntity.ok(timesheet);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().build();
+            throw e;
         }
     }
 
@@ -204,7 +204,7 @@ public class TimesheetController {
             TimesheetProjectSubmissionDTO submission = timesheetService.submitProjectTimesheet(timesheetId, projectId, user.getId());
             return ResponseEntity.ok(submission);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().build();
+            throw e;
         }
     }
 

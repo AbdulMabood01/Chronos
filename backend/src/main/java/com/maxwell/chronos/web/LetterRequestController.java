@@ -34,7 +34,7 @@ public class LetterRequestController {
         try {
             return ResponseEntity.ok(letterRequestService.createLetterRequest(user.getId(), request));
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().build();
+            throw e;
         }
     }
 
@@ -51,7 +51,7 @@ public class LetterRequestController {
     @GetMapping("/pending")
     public ResponseEntity<List<LetterRequestDTO>> getPendingLetterRequests(@AuthenticationPrincipal Jwt jwt) {
         var user = currentUser(jwt);
-        if (user == null || (!user.isSuperAdmin() && !user.isAdmin())) {
+        if (user == null || !user.isSuperAdmin()) {
             return ResponseEntity.status(403).build();
         }
 
@@ -68,9 +68,9 @@ public class LetterRequestController {
         }
 
         try {
-            return ResponseEntity.ok(letterRequestService.getRequest(requestId, user.getId(), user.isSuperAdmin() || user.isAdmin()));
+            return ResponseEntity.ok(letterRequestService.getRequest(requestId, user.getId(), user.isSuperAdmin()));
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().build();
+            throw e;
         }
     }
 
@@ -84,7 +84,7 @@ public class LetterRequestController {
         }
 
         try {
-            boolean canReviewLetters = user.isSuperAdmin() || user.isAdmin();
+            boolean canReviewLetters = user.isSuperAdmin();
             byte[] pdf = letterRequestService.generatePdf(requestId, user.getId(), canReviewLetters);
             String filename = letterRequestService.buildFilename(requestId, user.getId(), canReviewLetters);
             return ResponseEntity.ok()
@@ -92,7 +92,7 @@ public class LetterRequestController {
                     .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(filename).build().toString())
                     .body(pdf);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().build();
+            throw e;
         }
     }
 

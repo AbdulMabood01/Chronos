@@ -1,3 +1,4 @@
+import ScreenTitle from '../components/ScreenTitle';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
@@ -51,7 +52,7 @@ export default function Timesheets() {
 
   return (
     <div className="page-container">
-      <h1>My Timesheets</h1>
+      <ScreenTitle title="My Timesheets" icon="clock" eyebrow="YOUR TIME ARCHIVE" />
 
       {error && <div className="error-message">{error}</div>}
 
@@ -60,12 +61,12 @@ export default function Timesheets() {
         <form onSubmit={handleOpenTimesheet} className="form">
           <div className="form-row">
             <div className="form-group">
-              <label>Year</label>
-              <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} required />
+              <label htmlFor="timesheets-field-1">Year</label>
+              <input id="timesheets-field-1" type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} required />
             </div>
             <div className="form-group">
-              <label>Month</label>
-              <input type="number" min="1" max="12" value={month} onChange={(e) => setMonth(Number(e.target.value))} required />
+              <label htmlFor="timesheets-field-2">Month</label>
+              <input id="timesheets-field-2" type="number" min="1" max="12" value={month} onChange={(e) => setMonth(Number(e.target.value))} required />
             </div>
           </div>
           <button type="submit" className="button button-primary">Open Timesheet</button>

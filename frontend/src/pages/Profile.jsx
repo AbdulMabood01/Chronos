@@ -1,3 +1,4 @@
+import ScreenTitle from '../components/ScreenTitle';
 import React from 'react';
 import { useAuth } from '../AuthContext';
 import ProfileForm from '../components/ProfileForm';
@@ -16,7 +17,7 @@ export default function Profile() {
     <div className="page-container profile-page">
       <div className="header-bar">
         <div>
-          <h1>Profile</h1>
+          <ScreenTitle title="Profile" icon="users" eyebrow="YOUR ACCOUNT" />
           <p className="page-subtitle">Keep your employee details current.</p>
         </div>
       </div>

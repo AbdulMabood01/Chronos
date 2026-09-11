@@ -1,5 +1,7 @@
 import csv
 import os
+import argparse
+from urllib.parse import urljoin, urlparse
 from datetime import date
 
 import requests
@@ -8,11 +10,8 @@ import requests
 BASE_URL = os.getenv("OPENPROJECT_BASE_URL", "https://openproject.maxwellnetwork.org").rstrip("/")
 TOKEN = os.getenv("OPENPROJECT_TOKEN")
 PROJECT_ID = os.getenv("OPENPROJECT_PROJECT_ID", "maxwell-timekeeping")
-PROJECT_HREF = "/api/v3/projects/8"
+DRY_RUN = False
 CSV_PATH = os.getenv("OPENPROJECT_CSV_PATH", "OPENPROJECT_TASKS_IMPORT.csv")
-
-if not TOKEN:
-    raise SystemExit("OPENPROJECT_TOKEN environment variable is required.")
 
 AUTH = ("apikey", TOKEN)
 HEADERS = {"Content-Type": "application/json"}
@@ -64,15 +63,30 @@ PHASES = {
 
 def api(method, path, **kwargs):
     url = path if path.startswith("http") else f"{BASE_URL}{path}"
-    response = requests.request(method, url, auth=AUTH, headers=HEADERS, **kwargs)
+    if urlparse(url).netloc != urlparse(BASE_URL).netloc or urlparse(url).scheme != urlparse(BASE_URL).scheme:
+        raise ValueError("Refusing to send credentials to another origin")
+    if DRY_RUN and method != "GET":
+        payload = kwargs.get("json", {})
+        print(f"Would {method} {url}: {payload}")
+        return {"_links": {"self": {"href": path}}, "lockVersion": 0, **payload}
+    response = requests.request(method, url, auth=AUTH, headers=HEADERS, timeout=(10, 60), **kwargs)
     if response.status_code >= 400:
         raise RuntimeError(f"{method} {url} failed: {response.status_code} {response.text}")
     return response.json() if response.text else None
 
 
 def collection(path):
-    data = api("GET", path)
-    return data.get("_embedded", {}).get("elements", [])
+    elements = []
+    seen = set()
+    while path:
+        if path in seen:
+            raise ValueError("Repeated pagination link")
+        seen.add(path)
+        data = api("GET", path)
+        elements.extend(data.get("_embedded", {}).get("elements", []))
+        next_path = data.get("_links", {}).get("nextByOffset", {}).get("href")
+        path = urljoin(BASE_URL + path if path.startswith("/") else path, next_path) if next_path else None
+    return elements
 
 
 def load_work_packages():
@@ -94,7 +108,7 @@ def ensure_version(phase):
         "description": {"format": "markdown", "raw": phase["description"]},
         "startDate": phase["start"],
         "_links": {
-            "definingProject": {"href": PROJECT_HREF},
+            "definingProject": {"href": api("GET", f"/api/v3/projects/{PROJECT_ID}")["_links"]["self"]["href"]},
         },
     }
     return api("POST", "/api/v3/versions", json=payload)
@@ -187,7 +201,13 @@ def update_task(row, work_package, version, parent):
     patch_work_package(work_package, payload)
 
 
-def main():
+def main(argv=None):
+    global DRY_RUN
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dry-run", action="store_true")
+    DRY_RUN = parser.parse_args(argv).dry_run
+    if not TOKEN:
+        raise ValueError("OPENPROJECT_TOKEN environment variable is required.")
     with open(CSV_PATH, mode="r", encoding="utf-8") as f:
         rows = [row for row in csv.DictReader(f) if row.get("subject")]
 
@@ -214,7 +234,7 @@ def main():
         updated += 1
 
     technical_review = work_packages.get("Technical Architecture Review")
-    if technical_review:
+    if technical_review and not any(row["subject"] == "Technical Architecture Review" for row in rows):
         patch_work_package(
             technical_review,
             {
@@ -238,7 +258,12 @@ def main():
         print("Missing CSV tasks:")
         for subject in missing:
             print(f"- {subject}")
+        raise RuntimeError("Some CSV tasks were not found")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (requests.RequestException, RuntimeError, ValueError, OSError) as error:
+        print(f"Organization failed: {error}")
+        raise SystemExit(1)

@@ -15,6 +15,7 @@ import java.util.Date;
 
 // Issues locally-signed JWTs for development/testing, bypassing real Microsoft Entra ID login.
 @Service
+@org.springframework.context.annotation.Profile("dev")
 public class DevJwtService {
     private final SecretKey secretKey;
 

@@ -54,10 +54,11 @@ public class TimesheetService {
     private final ProjectService projectService;
 
     public TimesheetDTO getOrCreateTimesheet(Long userId, int year, int month) {
-        User user = userRepository.findById(userId)
+        YearMonth.of(year, month);
+        User user = userRepository.findForUpdate(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
-        Timesheet timesheet = timesheetRepository.findByUserIdAndYearAndMonth(userId, year, month)
+        Timesheet timesheet = timesheetRepository.findPeriodForUpdate(userId, year, month)
                 .orElseGet(() -> {
                     Timesheet newTimesheet = Timesheet.builder()
                             .user(user)
@@ -73,12 +74,11 @@ public class TimesheetService {
                     return saved;
                 });
 
-        applyApprovedVacationZeros(timesheet);
         return toDTO(timesheet);
     }
 
     public TimesheetDTO getTimesheetById(Long timesheetId, Long requestingUserId, boolean isAdmin) {
-        Timesheet timesheet = timesheetRepository.findById(timesheetId)
+        Timesheet timesheet = timesheetRepository.findForUpdate(timesheetId)
                 .orElseThrow(() -> new IllegalArgumentException("Timesheet not found"));
 
         if (!isAdmin && !timesheet.getUser().getId().equals(requestingUserId)
@@ -86,126 +86,50 @@ public class TimesheetService {
             throw new IllegalArgumentException("User cannot view another user's timesheet");
         }
 
-        applyApprovedVacationZeros(timesheet);
         return toDTO(timesheet);
     }
 
     public TimesheetDTO submitTimesheet(Long timesheetId, Long userId) {
-        Timesheet timesheet = timesheetRepository.findById(timesheetId)
+        Timesheet timesheet = timesheetRepository.findForUpdate(timesheetId)
                 .orElseThrow(() -> new IllegalArgumentException("Timesheet not found"));
-
-        // Verify ownership
-        if (!timesheet.getUser().getId().equals(userId)) {
-            throw new IllegalArgumentException("User cannot submit another user's timesheet");
+        if (!timesheet.getUser().getId().equals(userId)) throw new IllegalArgumentException("Not your timesheet");
+        requireCanSubmit(timesheet.getUser());
+        Set<Long> projects = getEntryProjectIds(timesheet);
+        if (projects.isEmpty() || timesheet.getTimeEntries().stream().anyMatch(e -> e.getProject() == null)) {
+            throw new IllegalArgumentException("Every entry must have a project");
         }
-
-        if (!timesheet.isEditable()) {
-            throw new IllegalArgumentException("Timesheet cannot be submitted from its current status");
+        boolean submitted = false;
+        for (Long projectId : projects) {
+            var existing = projectSubmissionRepository.findByTimesheetIdAndProjectId(timesheetId, projectId);
+            if (existing.isEmpty() || existing.get().isEditable()) {
+                submitProjectTimesheet(timesheetId, projectId, userId);
+                submitted = true;
+            }
         }
-
-        if (timesheet.getTotalHours() == null || timesheet.getTotalHours().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalArgumentException("Timesheet cannot be empty");
-        }
-
-        Set<Long> projectIds = getEntryProjectIds(timesheet);
-        if (projectIds.isEmpty()) {
-            throw new IllegalArgumentException("Timesheet entries must have project codes before submission");
-        }
-        if (timesheet.getTimeEntries().stream().anyMatch(entry -> entry.getProject() == null)) {
-            throw new IllegalArgumentException("Every time entry must have a project code");
-        }
-        if (projectIds.size() == 1) {
-            Long projectId = projectIds.iterator().next();
-            timesheet.setPrimaryProject(projectRepository.findById(projectId).orElse(null));
-        }
-
-        timesheet.setStatus(TimesheetStatus.SUBMITTED);
-        timesheet.setSubmittedAt(java.time.LocalDateTime.now());
-        timesheet.setRejectedAt(null);
-        timesheet.setRejectedBy(null);
-        timesheet.setRejectionReason(null);
-        Timesheet saved = timesheetRepository.save(timesheet);
-
-        auditService.logAction(userId, "TIMESHEET_SUBMITTED", "Timesheet", timesheetId,
-                "Year: " + saved.getYear() + ", Month: " + saved.getMonth());
-
-        notifyReviewersOfSubmission(saved);
-
-        return toDTO(saved);
+        if (!submitted) throw new IllegalArgumentException("No editable project timesheets to submit");
+        return toDTO(timesheet);
     }
 
     public TimesheetDTO approveTimesheet(Long timesheetId, Long approvingUserId) {
-        User approvingUser = userRepository.findById(approvingUserId)
-                .orElseThrow(() -> new IllegalArgumentException("Approving user not found"));
-
-        Timesheet timesheet = timesheetRepository.findById(timesheetId)
-                .orElseThrow(() -> new IllegalArgumentException("Timesheet not found"));
-
-        if (timesheet.getUser().getId().equals(approvingUserId)) {
-            throw new IllegalArgumentException("Users cannot approve their own timesheets");
-        }
-        requireTimesheetReviewer(timesheet, approvingUser);
-
-        if (!timesheet.getStatus().equals(TimesheetStatus.SUBMITTED)
-                && !timesheet.getStatus().equals(TimesheetStatus.CHANGE_REQUESTED)) {
-            throw new IllegalArgumentException("Only submitted timesheets or change requests can be approved");
-        }
-
-        timesheet.setStatus(TimesheetStatus.APPROVED);
-        timesheet.setApprovedAt(java.time.LocalDateTime.now());
-        timesheet.setApprovedBy(approvingUser);
-        timesheet.setApprovedHourlyRate(resolveEffectiveBillRate(timesheet));
-        Timesheet saved = timesheetRepository.save(timesheet);
-
-        auditService.logAction(approvingUserId, "TIMESHEET_APPROVED", "Timesheet", timesheetId,
-                "Employee: " + saved.getUser().getFullName());
-
-        // Notify employee
-        notificationService.createNotification(saved.getUser().getId(),
-                "TIMESHEET_APPROVED",
-                "Timesheet Approved",
-                "Your " + saved.getMonth() + "/" + saved.getYear() + " timesheet has been approved.",
-                timesheetId,
-                "Timesheet");
-
-        return toDTO(saved);
+        return reviewMonthlyProjects(timesheetId, approvingUserId, null, true);
     }
 
-    public TimesheetDTO rejectTimesheet(Long timesheetId, String rejectionReason, Long rejectingUserId) {
-        User rejectingUser = userRepository.findById(rejectingUserId)
-                .orElseThrow(() -> new IllegalArgumentException("Rejecting user not found"));
+    public TimesheetDTO rejectTimesheet(Long timesheetId, String reason, Long rejectingUserId) {
+        return reviewMonthlyProjects(timesheetId, rejectingUserId, reason, false);
+    }
 
-        Timesheet timesheet = timesheetRepository.findById(timesheetId)
+    private TimesheetDTO reviewMonthlyProjects(Long timesheetId, Long reviewerId, String reason, boolean approve) {
+        Timesheet timesheet = timesheetRepository.findForUpdate(timesheetId)
                 .orElseThrow(() -> new IllegalArgumentException("Timesheet not found"));
-
-        if (timesheet.getUser().getId().equals(rejectingUserId)) {
-            throw new IllegalArgumentException("Users cannot reject their own timesheets");
+        var pending = projectSubmissionRepository.findByTimesheetId(timesheetId).stream()
+                .filter(submission -> submission.getStatus() == TimesheetStatus.SUBMITTED
+                        || submission.getStatus() == TimesheetStatus.CHANGE_REQUESTED).toList();
+        if (pending.isEmpty()) throw new IllegalArgumentException("No submitted project timesheets to review");
+        for (var submission : pending) {
+            if (approve) approveProjectSubmission(submission.getId(), reviewerId);
+            else rejectProjectSubmission(submission.getId(), reason, reviewerId);
         }
-        requireTimesheetReviewer(timesheet, rejectingUser);
-
-        if (!timesheet.getStatus().equals(TimesheetStatus.SUBMITTED)
-                && !timesheet.getStatus().equals(TimesheetStatus.CHANGE_REQUESTED)) {
-            throw new IllegalArgumentException("Only submitted timesheets or change requests can be rejected");
-        }
-
-        timesheet.setStatus(TimesheetStatus.REJECTED);
-        timesheet.setRejectedAt(java.time.LocalDateTime.now());
-        timesheet.setRejectedBy(rejectingUser);
-        timesheet.setRejectionReason(rejectionReason);
-        Timesheet saved = timesheetRepository.save(timesheet);
-
-        auditService.logAction(rejectingUserId, "TIMESHEET_REJECTED", "Timesheet", timesheetId,
-                "Reason: " + rejectionReason);
-
-        // Notify employee
-        notificationService.createNotification(saved.getUser().getId(),
-                "TIMESHEET_REJECTED",
-                "Timesheet Rejected",
-                "Your " + saved.getMonth() + "/" + saved.getYear() + " timesheet was rejected. Reason: " + rejectionReason,
-                timesheetId,
-                "Timesheet");
-
-        return toDTO(saved);
+        return toDTO(timesheet);
     }
 
     public TimesheetDTO reopenTimesheet(Long timesheetId, String reason, Long reopeningUserId) {
@@ -216,13 +140,30 @@ public class TimesheetService {
             throw new IllegalArgumentException("Only Super Admin can reopen timesheets");
         }
 
-        Timesheet timesheet = timesheetRepository.findById(timesheetId)
+        Timesheet timesheet = timesheetRepository.findForUpdate(timesheetId)
                 .orElseThrow(() -> new IllegalArgumentException("Timesheet not found"));
 
         if (!timesheet.getStatus().equals(TimesheetStatus.APPROVED) && !timesheet.getStatus().equals(TimesheetStatus.LOCKED)) {
             throw new IllegalArgumentException("Only approved or locked timesheets can be reopened");
         }
 
+        if (reason == null || reason.isBlank()) throw new IllegalArgumentException("Reopening reason is required");
+        for (var submission : projectSubmissionRepository.findByTimesheetId(timesheetId)) {
+            submission.setStatus(TimesheetStatus.DRAFT);
+            submission.setSubmittedAt(null);
+            submission.setApprovedAt(null);
+            submission.setApprovedBy(null);
+            submission.setApprovedBillRate(null);
+            submission.setRejectedAt(null);
+            submission.setRejectedBy(null);
+            submission.setRejectionReason(null);
+            projectSubmissionRepository.save(submission);
+        }
+        timesheet.setApprovedHourlyRate(null);
+        timesheet.setSubmittedAt(null);
+        timesheet.setRejectedAt(null);
+        timesheet.setRejectedBy(null);
+        timesheet.setRejectionReason(null);
         timesheet.setStatus(TimesheetStatus.DRAFT);
         timesheet.setApprovedAt(null);
         timesheet.setApprovedBy(null);
@@ -244,7 +185,7 @@ public class TimesheetService {
 
     public TimeEntryDTO addTimeEntry(Long timesheetId, LocalDate entryDate, BigDecimal hours, String notes,
                                      Long projectId, List<TimeEntrySessionDTO> sessions, Long userId) {
-        Timesheet timesheet = timesheetRepository.findById(timesheetId)
+        Timesheet timesheet = timesheetRepository.findForUpdate(timesheetId)
                 .orElseThrow(() -> new IllegalArgumentException("Timesheet not found"));
 
         if (!timesheet.getUser().getId().equals(userId)) {
@@ -253,7 +194,7 @@ public class TimesheetService {
 
         var project = requireAssignedProject(projectId, userId);
         TimesheetProjectSubmission submission = getOrCreateProjectSubmission(timesheet, project);
-        if (!submission.isEditable()) {
+        if (timesheet.getStatus() == TimesheetStatus.APPROVED || timesheet.isLocked() || !submission.isEditable()) {
             throw new IllegalArgumentException("Project timesheet is not editable");
         }
 
@@ -274,6 +215,7 @@ public class TimesheetService {
                         .timesheet(timesheet)
                         .entryDate(entryDate)
                         .build());
+        validateEntry(timesheet, project, entry.getEntryDate(), entry.getId(), hours, sessions);
         ensureWithinProjectHourPlan(timesheet, project, entry.getId(), hours);
         entry.setHours(hours);
         entry.setNotes(notes);
@@ -285,6 +227,7 @@ public class TimesheetService {
         timesheet.calculateTotalHours();
         timesheetRepository.save(timesheet);
         syncProjectSubmissionTotals(submission);
+        updateMonthlyStatus(timesheet);
 
         auditService.logAction(userId, "TIMESHEET_EDITED", "Timesheet", timesheetId,
                 "Added entry for " + entryDate + " with " + hours + " hours");
@@ -294,7 +237,7 @@ public class TimesheetService {
 
     public TimeEntryDTO updateTimeEntry(Long timesheetId, Long entryId, BigDecimal hours, String notes,
                                         Long projectId, List<TimeEntrySessionDTO> sessions, Long userId) {
-        Timesheet timesheet = timesheetRepository.findById(timesheetId)
+        Timesheet timesheet = timesheetRepository.findForUpdate(timesheetId)
                 .orElseThrow(() -> new IllegalArgumentException("Timesheet not found"));
 
         if (!timesheet.getUser().getId().equals(userId)) {
@@ -322,9 +265,10 @@ public class TimesheetService {
         Project project = requireAssignedProject(projectId, userId);
         TimesheetProjectSubmission existingSubmission = getOrCreateProjectSubmission(timesheet, entry.getProject() != null ? entry.getProject() : project);
         TimesheetProjectSubmission targetSubmission = getOrCreateProjectSubmission(timesheet, project);
-        if (!existingSubmission.isEditable() || !targetSubmission.isEditable()) {
+        if (timesheet.getStatus() == TimesheetStatus.APPROVED || timesheet.isLocked() || !existingSubmission.isEditable() || !targetSubmission.isEditable()) {
             throw new IllegalArgumentException("Project timesheet is not editable");
         }
+        validateEntry(timesheet, project, entry.getEntryDate(), entry.getId(), hours, sessions);
         ensureWithinProjectHourPlan(timesheet, project, entry.getId(), hours);
 
         entry.setHours(hours);
@@ -336,6 +280,7 @@ public class TimesheetService {
         timesheetRepository.save(timesheet);
         syncProjectSubmissionTotals(existingSubmission);
         syncProjectSubmissionTotals(targetSubmission);
+        updateMonthlyStatus(timesheet);
 
         auditService.logAction(userId, "TIMESHEET_EDITED", "Timesheet", timesheetId,
                 "Updated entry " + entryId);
@@ -344,7 +289,7 @@ public class TimesheetService {
     }
 
     public void deleteTimeEntry(Long timesheetId, Long entryId, Long userId) {
-        Timesheet timesheet = timesheetRepository.findById(timesheetId)
+        Timesheet timesheet = timesheetRepository.findForUpdate(timesheetId)
                 .orElseThrow(() -> new IllegalArgumentException("Timesheet not found"));
 
         if (!timesheet.getUser().getId().equals(userId)) {
@@ -362,7 +307,7 @@ public class TimesheetService {
             throw new IllegalArgumentException("Time entry does not have a project code");
         }
         TimesheetProjectSubmission submission = getOrCreateProjectSubmission(timesheet, entry.getProject());
-        if (!submission.isEditable()) {
+        if (timesheet.getStatus() == TimesheetStatus.APPROVED || timesheet.isLocked() || !submission.isEditable()) {
             throw new IllegalArgumentException("Project timesheet is not editable");
         }
 
@@ -371,6 +316,7 @@ public class TimesheetService {
         timesheet.calculateTotalHours();
         timesheetRepository.save(timesheet);
         syncProjectSubmissionTotals(submission);
+        updateMonthlyStatus(timesheet);
 
         auditService.logAction(userId, "TIMESHEET_EDITED", "Timesheet", timesheetId,
                 "Deleted entry " + entryId);
@@ -383,7 +329,7 @@ public class TimesheetService {
     }
 
     public List<TimesheetDTO> getPendingTimesheets(User reviewer) {
-        if (reviewer == null || (!reviewer.isSuperAdmin() && !reviewer.isAdmin() && !reviewer.isProjectManager())) {
+        if (reviewer == null || (!reviewer.isSuperAdmin() && !reviewer.isAdmin() && !projectService.canReviewProjects(reviewer.getId()))) {
             throw new IllegalArgumentException("Reviewer permission required");
         }
         List<Timesheet> submitted = timesheetRepository.findByStatus(TimesheetStatus.SUBMITTED);
@@ -408,7 +354,7 @@ public class TimesheetService {
     }
 
     public TimesheetProjectSubmissionDTO getProjectSubmission(Long timesheetId, Long projectId, User requestingUser) {
-        Timesheet timesheet = timesheetRepository.findById(timesheetId)
+        Timesheet timesheet = timesheetRepository.findForUpdate(timesheetId)
                 .orElseThrow(() -> new IllegalArgumentException("Timesheet not found"));
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new IllegalArgumentException("Project not found"));
@@ -417,19 +363,22 @@ public class TimesheetService {
             throw new IllegalArgumentException("User cannot view this project timesheet");
         }
 
-        return toProjectSubmissionDTO(getOrCreateProjectSubmission(timesheet, project));
+        return toProjectSubmissionDTO(projectSubmissionRepository.findByTimesheetIdAndProjectId(timesheetId, projectId)
+                .orElseGet(() -> TimesheetProjectSubmission.builder().timesheet(timesheet).project(project)
+                        .status(TimesheetStatus.DRAFT).totalHours(BigDecimal.ZERO).build()));
     }
 
     public TimesheetProjectSubmissionDTO submitProjectTimesheet(Long timesheetId, Long projectId, Long userId) {
-        Timesheet timesheet = timesheetRepository.findById(timesheetId)
+        Timesheet timesheet = timesheetRepository.findForUpdate(timesheetId)
                 .orElseThrow(() -> new IllegalArgumentException("Timesheet not found"));
         if (!timesheet.getUser().getId().equals(userId)) {
             throw new IllegalArgumentException("User cannot submit another user's timesheet");
         }
+        requireCanSubmit(timesheet.getUser());
 
         Project project = requireAssignedProject(projectId, userId);
         TimesheetProjectSubmission submission = getOrCreateProjectSubmission(timesheet, project);
-        if (!submission.isEditable()) {
+        if (timesheet.getStatus() == TimesheetStatus.APPROVED || timesheet.isLocked() || !submission.isEditable()) {
             throw new IllegalArgumentException("Project timesheet cannot be submitted from its current status");
         }
 
@@ -442,6 +391,7 @@ public class TimesheetService {
             throw new IllegalArgumentException("Project timesheet cannot be empty");
         }
 
+        submission.setApprovedBillRate(null);
         submission.setStatus(TimesheetStatus.SUBMITTED);
         submission.setSubmittedAt(java.time.LocalDateTime.now());
         submission.setApprovedAt(null);
@@ -462,6 +412,9 @@ public class TimesheetService {
     public TimesheetProjectSubmissionDTO approveProjectSubmission(Long submissionId, Long approvingUserId) {
         User approvingUser = userRepository.findById(approvingUserId)
                 .orElseThrow(() -> new IllegalArgumentException("Approving user not found"));
+        Long parentId = projectSubmissionRepository.findTimesheetId(submissionId)
+                .orElseThrow(() -> new IllegalArgumentException("Project timesheet not found"));
+        timesheetRepository.findForUpdate(parentId).orElseThrow(() -> new IllegalArgumentException("Timesheet not found"));
         TimesheetProjectSubmission submission = projectSubmissionRepository.findById(submissionId)
                 .orElseThrow(() -> new IllegalArgumentException("Project timesheet not found"));
 
@@ -475,6 +428,7 @@ public class TimesheetService {
         }
 
         syncProjectSubmissionTotals(submission);
+        submission.setApprovedBillRate(resolveProjectBillRate(submission.getProject(), submission.getTimesheet().getUser()));
         submission.setStatus(TimesheetStatus.APPROVED);
         submission.setApprovedAt(java.time.LocalDateTime.now());
         submission.setApprovedBy(approvingUser);
@@ -499,6 +453,9 @@ public class TimesheetService {
     public TimesheetProjectSubmissionDTO rejectProjectSubmission(Long submissionId, String rejectionReason, Long rejectingUserId) {
         User rejectingUser = userRepository.findById(rejectingUserId)
                 .orElseThrow(() -> new IllegalArgumentException("Rejecting user not found"));
+        Long parentId = projectSubmissionRepository.findTimesheetId(submissionId)
+                .orElseThrow(() -> new IllegalArgumentException("Project timesheet not found"));
+        timesheetRepository.findForUpdate(parentId).orElseThrow(() -> new IllegalArgumentException("Timesheet not found"));
         TimesheetProjectSubmission submission = projectSubmissionRepository.findById(submissionId)
                 .orElseThrow(() -> new IllegalArgumentException("Project timesheet not found"));
 
@@ -511,6 +468,8 @@ public class TimesheetService {
             throw new IllegalArgumentException("Only submitted project timesheets can be rejected");
         }
 
+        if (rejectionReason == null || rejectionReason.isBlank()) throw new IllegalArgumentException("Rejection reason is required");
+        submission.setApprovedBillRate(null);
         submission.setStatus(TimesheetStatus.REJECTED);
         submission.setRejectedAt(java.time.LocalDateTime.now());
         submission.setRejectedBy(rejectingUser);
@@ -595,7 +554,7 @@ public class TimesheetService {
         if (reviewer.isSuperAdmin() || reviewer.isAdmin()) {
             return;
         }
-        if (reviewer.isProjectManager() && canReviewTimesheet(timesheet, reviewer.getId())) {
+        if (canReviewTimesheet(timesheet, reviewer.getId())) {
             return;
         }
         throw new IllegalArgumentException("Reviewer cannot approve timesheets for these projects");
@@ -654,7 +613,13 @@ public class TimesheetService {
         if (submitterManagesProject) {
             return projectService.canApproveProjectManagerHours(projectId, reviewer.getId());
         }
-        return reviewer.isProjectManager() && projectService.managesProject(projectId, reviewer.getId());
+        return projectService.managesProject(projectId, reviewer.getId());
+    }
+
+    private void requireCanSubmit(User user) {
+        if (user.isSuperAdmin()) {
+            throw new org.springframework.security.access.AccessDeniedException("SuperAdmin cannot submit timesheets");
+        }
     }
 
     private TimesheetProjectSubmission getOrCreateProjectSubmission(Timesheet timesheet, Project project) {
@@ -702,7 +667,8 @@ public class TimesheetService {
     }
 
     private void updateMonthlyStatus(Timesheet timesheet) {
-        List<TimesheetProjectSubmission> submissions = projectSubmissionRepository.findByTimesheetId(timesheet.getId());
+        List<TimesheetProjectSubmission> submissions = projectSubmissionRepository.findByTimesheetId(timesheet.getId()).stream()
+                .filter(submission -> submission.getTotalHours() != null && submission.getTotalHours().signum() > 0).toList();
         if (submissions.isEmpty()) {
             timesheet.setStatus(TimesheetStatus.DRAFT);
         } else if (submissions.stream().anyMatch(submission -> TimesheetStatus.REJECTED.equals(submission.getStatus()))) {
@@ -720,7 +686,7 @@ public class TimesheetService {
                 .filter(java.util.Objects::nonNull)
                 .max(java.time.LocalDateTime::compareTo)
                 .orElse(null));
-        timesheet.setApprovedAt(submissions.stream()
+        timesheet.setApprovedAt(timesheet.getStatus() != TimesheetStatus.APPROVED ? null : submissions.stream()
                 .map(TimesheetProjectSubmission::getApprovedAt)
                 .filter(java.util.Objects::nonNull)
                 .max(java.time.LocalDateTime::compareTo)
@@ -749,6 +715,52 @@ public class TimesheetService {
         return projectRepository.findById(projectId)
                 .filter(project -> ProjectStatus.ACTIVE.equals(project.getStatus()))
                 .orElseThrow(() -> new IllegalArgumentException("Project not found"));
+    }
+
+    private void validateEntry(Timesheet timesheet, Project project, LocalDate date, Long entryId,
+                               BigDecimal hours, List<TimeEntrySessionDTO> sessions) {
+        if (date == null || !YearMonth.from(date).equals(YearMonth.of(timesheet.getYear(), timesheet.getMonth()))) {
+            throw new IllegalArgumentException("Entry date must be inside the timesheet month");
+        }
+        var assignment = projectAssignmentRepository.findByProjectIdAndUserId(project.getId(), timesheet.getUser().getId())
+                .orElseThrow(() -> new IllegalArgumentException("Project assignment not found"));
+        if ((assignment.getStartDate() != null && date.isBefore(assignment.getStartDate()))
+                || (assignment.getEndDate() != null && date.isAfter(assignment.getEndDate()))) {
+            throw new IllegalArgumentException("Entry date must be within the project assignment dates");
+        }
+        BigDecimal otherHours = timesheet.getTimeEntries().stream()
+                .filter(e -> date.equals(e.getEntryDate()) && !java.util.Objects.equals(entryId, e.getId()))
+                .map(TimeEntry::getHours).reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (otherHours.add(hours).compareTo(new BigDecimal("24")) > 0) {
+            throw new IllegalArgumentException("Total hours across all projects cannot exceed 24 per day");
+        }
+        if (sessions == null || sessions.isEmpty()) return;
+        long seconds = 0;
+        var ordered = new java.util.ArrayList<>(sessions);
+        for (var session : ordered) {
+            if (session == null || session.getLoginTime() == null || session.getLogoutTime() == null
+                    || !session.getLogoutTime().isAfter(session.getLoginTime())) {
+                throw new IllegalArgumentException("Each session requires login and logout times in order");
+            }
+            seconds += java.time.Duration.between(session.getLoginTime(), session.getLogoutTime()).getSeconds();
+        }
+        ordered.sort(Comparator.comparing(TimeEntrySessionDTO::getLoginTime));
+        for (int i = 1; i < ordered.size(); i++) {
+            if (ordered.get(i).getLoginTime().isBefore(ordered.get(i - 1).getLogoutTime())) {
+                throw new IllegalArgumentException("Time sessions cannot overlap");
+            }
+        }
+        for (var other : timesheet.getTimeEntries()) {
+            if (!date.equals(other.getEntryDate()) || java.util.Objects.equals(entryId, other.getId())) continue;
+            for (var existing : other.getSessions()) for (var session : ordered) {
+                if (session.getLoginTime().isBefore(existing.getLogoutTime())
+                        && existing.getLoginTime().isBefore(session.getLogoutTime())) {
+                    throw new IllegalArgumentException("Time sessions cannot overlap across projects");
+                }
+            }
+        }
+        BigDecimal duration = BigDecimal.valueOf(seconds).divide(new BigDecimal("3600"), 2, java.math.RoundingMode.HALF_UP);
+        if (duration.compareTo(hours) != 0) throw new IllegalArgumentException("Hours must match session duration");
     }
 
     private void applySessions(TimeEntry entry, List<TimeEntrySessionDTO> sessionDTOs) {
@@ -792,29 +804,6 @@ public class TimesheetService {
         return timesheet.getBillRate() != null ? timesheet.getBillRate() : BigDecimal.ZERO;
     }
 
-    private void applyApprovedVacationZeros(Timesheet timesheet) {
-        Set<LocalDate> vacationDates = getApprovedVacationDates(timesheet);
-        if (vacationDates.isEmpty() || timesheet.getTimeEntries() == null) {
-            return;
-        }
-
-        boolean changed = false;
-        for (TimeEntry entry : timesheet.getTimeEntries()) {
-            if (vacationDates.contains(entry.getEntryDate())
-                    && entry.getHours() != null
-                    && entry.getHours().compareTo(BigDecimal.ZERO) != 0) {
-                entry.setHours(BigDecimal.ZERO);
-                timeEntryRepository.save(entry);
-                changed = true;
-            }
-        }
-
-        if (changed) {
-            timesheet.calculateTotalHours();
-            timesheetRepository.save(timesheet);
-        }
-    }
-
     private boolean isApprovedVacationDay(Timesheet timesheet, LocalDate date) {
         return getApprovedVacationDates(timesheet).contains(date);
     }
@@ -837,6 +826,9 @@ public class TimesheetService {
     private Set<VacationDayDTO> getVacationDaysForMonth(Timesheet timesheet) {
         YearMonth yearMonth = YearMonth.of(timesheet.getYear(), timesheet.getMonth());
         return getVacationRequestsForMonth(timesheet).stream()
+                .filter(vacation -> VacationStatus.SUBMITTED.equals(vacation.getStatus())
+                        || VacationStatus.APPROVED.equals(vacation.getStatus())
+                        || VacationStatus.LOCKED.equals(vacation.getStatus()))
                 .flatMap(vacation -> vacation.getStartDate().datesUntil(vacation.getEndDate().plusDays(1))
                         .filter(date -> !date.isBefore(yearMonth.atDay(1)) && !date.isAfter(yearMonth.atEndOfMonth()))
                         .map(date -> VacationDayDTO.builder()
@@ -851,15 +843,23 @@ public class TimesheetService {
 
     private TimesheetProjectSubmissionDTO toProjectSubmissionDTO(TimesheetProjectSubmission submission) {
         Timesheet timesheet = submission.getTimesheet();
-        Long projectId = submission.getProject().getId();
-        BigDecimal plannedHours = resolvePlannedHours(timesheet, submission.getProject());
+        Project project = submission.getProject();
+        Long projectId = project.getId();
+        BigDecimal plannedHours = resolvePlannedHours(timesheet, project);
         BigDecimal totalHours = submission.getTotalHours() != null ? submission.getTotalHours() : BigDecimal.ZERO;
+        boolean submitterManagesProject = project.getProjectManager() != null
+                && project.getProjectManager().getId().equals(timesheet.getUser().getId());
+        User routedApprover = submitterManagesProject ? project.getProjectManagerHoursApprover() : project.getProjectManager();
         return TimesheetProjectSubmissionDTO.builder()
                 .id(submission.getId())
                 .timesheetId(timesheet.getId())
                 .projectId(projectId)
-                .projectCode(submission.getProject().getCode())
-                .projectName(submission.getProject().getName())
+                .projectCode(project.getCode())
+                .projectName(project.getName())
+                .projectManagerName(project.getProjectManager() != null ? project.getProjectManager().getFullName() : null)
+                .projectManagerHoursApproverName(project.getProjectManagerHoursApprover() != null ? project.getProjectManagerHoursApprover().getFullName() : null)
+                .routedApproverName(routedApprover != null ? routedApprover.getFullName() : null)
+                .routedApproverId(routedApprover != null ? routedApprover.getId() : null)
                 .userId(timesheet.getUser().getId())
                 .userName(timesheet.getUser().getFullName())
                 .userJobTitle(timesheet.getUser().getJobTitle())
@@ -869,7 +869,7 @@ public class TimesheetService {
                 .totalHours(totalHours)
                 .plannedHours(plannedHours)
                 .remainingHours(plannedHours.subtract(totalHours).max(BigDecimal.ZERO))
-                .billRate(resolveProjectBillRate(submission.getProject(), timesheet.getUser()))
+                .billRate(submission.isPdfExportEligible() ? submission.getApprovedBillRate() : resolveProjectBillRate(project, timesheet.getUser()))
                 .submittedAt(submission.getSubmittedAt())
                 .approvedAt(submission.getApprovedAt())
                 .approvedByName(submission.getApprovedBy() != null ? submission.getApprovedBy().getFullName() : null)

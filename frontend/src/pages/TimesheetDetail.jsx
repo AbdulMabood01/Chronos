@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import ScreenTitle from '../components/ScreenTitle';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { timesheetAPI, reportsAPI, projectAPI } from '../api';
@@ -17,6 +18,7 @@ import {
 } from 'date-fns';
 import { LoadingIndicator } from '../components/Hourglass';
 import '../styles.css';
+import Icon from '../components/Icon';
 
 const MIN_TIMESHEET_MONTH = new Date(2025, 0, 1);
 
@@ -109,7 +111,12 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
   const [rejectReason, setRejectReason] = useState('');
   const [assignedProjects, setAssignedProjects] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState('');
-  const [projectSubmission, setProjectSubmission] = useState(null);
+  const [projectSubmissionState, setProjectSubmission] = useState(null);
+  const projectSubmissionRequest = useRef(0);
+  const projectSubmission = String(projectSubmissionState?.timesheetId) === String(timesheet?.id)
+    && String(projectSubmissionState?.projectId) === String(selectedProjectId)
+    ? projectSubmissionState : null;
+  const [projectSubmissionLoading, setProjectSubmissionLoading] = useState(false);
   const [timeDialogDay, setTimeDialogDay] = useState(null);
   const [timeDrafts, setTimeDrafts] = useState([]);
   const requestedProjectId = useMemo(() => new URLSearchParams(location.search).get('projectId') || '', [location.search]);
@@ -187,10 +194,8 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
   const applyTimesheet = useCallback((ts) => {
     setTimesheet(ts);
     setSelectedPeriod({ year: ts.year, month: ts.month });
-    setProjectSubmission(null);
-    buildCalendar(ts);
     setError('');
-  }, [buildCalendar]);
+  }, []);
 
   const loadTimesheetById = useCallback(async (timesheetId) => {
     try {
@@ -262,7 +267,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
   const timesheetMonthStart = timesheet ? new Date(timesheet.year, timesheet.month - 1, 1) : null;
   const isPastMonth = timesheetMonthStart ? isBefore(timesheetMonthStart, currentMonthStart) : false;
   const isReadOnlyPastMonth = lockPastMonths && isPastMonth;
-  const isReviewerRole = ['PROJECT_MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user?.role);
+  const isReviewerRole = user?.canReviewProjects || ['ADMIN', 'SUPER_ADMIN'].includes(user?.role);
   const isAdminReview = isReviewerRole && timesheet?.userId !== user?.id;
   const isOwner = timesheet?.userId === user?.id;
   const timesheetProjectOptions = useMemo(() => {
@@ -278,18 +283,24 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
     });
     return Array.from(projects.values()).sort((left, right) => String(left.code).localeCompare(String(right.code)));
   }, [timesheet]);
-  const projectOptions = isOwner ? assignedProjects : timesheetProjectOptions;
+  const projectOptions = useMemo(() => {
+    const projects = new Map(timesheetProjectOptions.map(project => [String(project.id), project]));
+    if (isOwner) assignedProjects.forEach(project => projects.set(String(project.id), project));
+    return Array.from(projects.values()).sort((a, b) => String(a.code).localeCompare(String(b.code)));
+  }, [assignedProjects, isOwner, timesheetProjectOptions]);
   const selectedProject = projectOptions.find((project) => String(project.id) === String(selectedProjectId));
   const autoEditableStatuses = ['DRAFT', 'REJECTED'];
   const editButtonStatuses = [];
   const isEditable = timesheet
     && isOwner
+    && user?.role !== 'SUPER_ADMIN'
     && !isAdminReview
     && !isReadOnlyPastMonth
     && projectSubmission
     && (autoEditableStatuses.includes(projectSubmission.status) || (editMode && editButtonStatuses.includes(projectSubmission.status)));
   const canStartEdit = false;
-  const canApprove = isReviewerRole && !isReadOnlyPastMonth && ['SUBMITTED', 'CHANGE_REQUESTED'].includes(projectSubmission?.status) && !isOwner;
+  const canApprove = (user?.role === 'SUPER_ADMIN' || projectSubmission?.routedApproverId === user?.id)
+    && !isReadOnlyPastMonth && ['SUBMITTED', 'CHANGE_REQUESTED'].includes(projectSubmission?.status) && !isOwner;
   const canReject = canApprove;
   const canReopen = user?.role === 'SUPER_ADMIN' && !isReadOnlyPastMonth && (timesheet?.status === 'APPROVED' || timesheet?.status === 'LOCKED');
   const totalHours = useMemo(() => days.reduce((sum, day) => sum + (parseFloat(day.hours) || 0), 0), [days]);
@@ -299,6 +310,11 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
   const numericBillRate = Number(projectSubmission?.billRate ?? selectedAssignment?.billRate ?? 0);
   const grossPay = totalHours * numericBillRate;
   const selectedStatus = projectSubmission?.status || 'DRAFT';
+  const approvingManagerName = projectSubmission?.routedApproverName
+    || (String(projectSubmission?.userId || timesheet?.userId || '') === String(selectedProject?.projectManagerId || '')
+      ? selectedProject?.projectManagerHoursApproverName
+      : selectedProject?.projectManagerName)
+    || '-';
   const selectedRejectionReason = projectSubmission?.rejectionReason;
   const selectedApprovedAt = projectSubmission?.approvedAt;
   const selectedApprovedByName = projectSubmission?.approvedByName;
@@ -321,24 +337,37 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
   }, [projectOptions, requestedProjectId, selectedProjectId]);
 
   const loadProjectSubmission = useCallback(async () => {
+    const request = ++projectSubmissionRequest.current;
     if (!timesheet?.id || !selectedProjectId) {
       setProjectSubmission(null);
+      setProjectSubmissionLoading(false);
       return null;
     }
     try {
       setProjectSubmission(null);
+      setProjectSubmissionLoading(true);
       const response = await timesheetAPI.getProjectSubmission(timesheet.id, selectedProjectId);
-      setProjectSubmission(response.data);
+      if (request === projectSubmissionRequest.current) setProjectSubmission(response.data);
       return response.data;
     } catch (err) {
-      setProjectSubmission(null);
-      setError('Failed to load project timesheet status');
+      if (request === projectSubmissionRequest.current) {
+        setProjectSubmission(null);
+        setError('Failed to load project timesheet status. Use Refresh status to try again.');
+      }
       return null;
+    } finally {
+      if (request === projectSubmissionRequest.current) setProjectSubmissionLoading(false);
     }
-  }, [selectedProjectId, timesheet?.id]);
+  }, [selectedProjectId, timesheet]);
 
   useEffect(() => {
     loadProjectSubmission();
+    const refreshOnFocus = () => loadProjectSubmission();
+    window.addEventListener('focus', refreshOnFocus);
+    return () => {
+      ++projectSubmissionRequest.current;
+      window.removeEventListener('focus', refreshOnFocus);
+    };
   }, [loadProjectSubmission]);
 
   const getDayClassName = (day) => {
@@ -412,7 +441,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
     try {
       if (hours > 0) {
         if (day.entryId) {
-          await timesheetAPI.updateTimeEntry(timesheet.id, day.entryId, buildEntryPayload(day, hours));
+          await timesheetAPI.updateTimeEntry(timesheet.id, day.entryId, buildEntryPayload({ ...day, sessions: [] }, hours));
         } else {
           await timesheetAPI.addTimeEntry(timesheet.id, buildEntryPayload(day, hours));
         }
@@ -558,6 +587,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
     try {
       await timesheetAPI.reopenTimesheet(timesheet.id, reason);
       await loadTimesheetById(timesheet.id);
+      await loadProjectSubmission();
     } catch (err) {
       setError('Failed to reopen timesheet');
     }
@@ -574,7 +604,13 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
       const projectCode = (selectedProject?.code || 'project').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
       downloadBlob(response.data, `${safeName},${projectCode},${format(new Date(timesheet.year, timesheet.month - 1, 1), 'MMMM')},${timesheet.year}.pdf`);
     } catch (err) {
-      setError('Failed to export timesheet');
+      let message = err.response?.data?.message;
+      if (err.response?.data instanceof Blob) {
+        try {
+          message = JSON.parse(await err.response.data.text()).message;
+        } catch { /* A proxy may return an HTML error instead of JSON. */ }
+      }
+      setError(message || 'Failed to export timesheet. Please try again.');
     }
   };
 
@@ -601,7 +637,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
     <div className="page-container">
       <div className="header-bar timesheet-page-header">
         <div>
-          <h1>Timesheet</h1>
+          <ScreenTitle title="Timesheet" icon="clock" eyebrow="TIME & ATTENDANCE" />
           <p className="page-subtitle">
             {selectedProject ? `${selectedProject.code} - ${selectedProject.name || 'Project'}` : format(new Date(timesheet.year, timesheet.month - 1, 1), 'MMMM yyyy')}
           </p>
@@ -652,7 +688,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
         </select>
       </div>
 
-      {isOwner && assignedProjects.length === 0 ? (
+      {isOwner && projectOptions.length === 0 ? (
         <div className="empty-state">
           <p>No project has been assigned to you yet.</p>
         </div>
@@ -663,6 +699,10 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
         <div className="summary-tile">
           <span>Status</span>
           <strong className={`status-badge status-${selectedStatus.toLowerCase()}`}>{selectedStatus}</strong>
+        </div>
+        <div className="summary-tile approver-summary-tile">
+          <span>Approving Manager</span>
+          <strong>{approvingManagerName}</strong>
         </div>
         <div className="summary-tile">
           <span>Project Bill Rate</span>
@@ -682,27 +722,15 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
         </div>
       </div>
 
-      <div className="timesheet-header">
-        <div className="info-row">
-          <span><strong>Employee:</strong> {timesheet.userName}</span>
-          <span><strong>Billable Period:</strong> {format(new Date(timesheet.year, timesheet.month - 1, 1), 'MMMM yyyy')}</span>
-          <span><strong>Project:</strong> {selectedProject ? `${selectedProject.code} - ${selectedProject.name || ''}` : '-'}</span>
-          <span><strong>Approved Vacation Days:</strong> {days.filter((day) => day.isApprovedVacation).length}</span>
+      {selectedApprovedAt && (
+        <p className="login-note">Approved on {format(new Date(selectedApprovedAt), 'MMM dd, yyyy')} by {selectedApprovedByName || 'approver'}.</p>
+      )}
+
+      {selectedRejectionReason && (
+        <div className="error-message">
+          <strong>Rejection Reason:</strong> {selectedRejectionReason}
         </div>
-
-        {selectedApprovedAt && (
-          <div className="info-row">
-            <span><strong>Approved:</strong> {format(new Date(selectedApprovedAt), 'MMM dd, yyyy')}</span>
-            <span><strong>By:</strong> {selectedApprovedByName}</span>
-          </div>
-        )}
-
-        {selectedRejectionReason && (
-          <div className="error-message">
-            <strong>Rejection Reason:</strong> {selectedRejectionReason}
-          </div>
-        )}
-      </div>
+      )}
 
       <div className="card timesheet-calendar-card">
         <div className="timesheet-card-heading">
@@ -716,7 +744,10 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
             </div>
           </div>
           <div className="compact-actions">
-            <button className="button button-secondary" onClick={handleExport} type="button" disabled={!projectSubmission?.pdfExportEligible}>
+            <button className="button button-secondary" onClick={loadProjectSubmission} type="button" disabled={projectSubmissionLoading || !selectedProjectId}>
+              Refresh status
+            </button>
+            <button className="button button-secondary" onClick={handleExport} type="button" disabled={projectSubmissionLoading || !projectSubmission?.id || !projectSubmission?.pdfExportEligible}>
               Export PDF
             </button>
           </div>
@@ -757,7 +788,13 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
         {selectedStatus === 'CHANGE_REQUESTED' && (
           <p className="login-note">Changes are waiting for admin approval before this timesheet is final again.</p>
         )}
-        {!isEditable && !isReadOnlyPastMonth && selectedStatus !== 'CHANGE_REQUESTED' && (
+        {projectSubmissionLoading && selectedProjectId && (
+          <p className="login-note">Loading project timesheet status...</p>
+        )}
+        {!projectSubmissionLoading && !projectSubmission && selectedProjectId && (
+          <p className="login-note">Project timesheet status could not be loaded. Select Refresh status to try again.</p>
+        )}
+        {!projectSubmissionLoading && projectSubmission && !isEditable && !isReadOnlyPastMonth && selectedStatus !== 'CHANGE_REQUESTED' && (
           <p className="login-note">This project timesheet is {selectedStatus.toLowerCase()} and frozen for editing.</p>
         )}
         <div className="calendar-grid timesheet-calendar-grid">
@@ -775,7 +812,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
             return (
               <div key={day.dateStr} className={getDayClassName(day)}>
                 <div className="calendar-day-topline">
-                  <span className="calendar-day-number">{format(day.date, 'd')}</span>
+                  <span className="calendar-day-number">{format(day.date, 'd')}<span className="day-weekday-label">{format(day.date, 'EEE')}</span></span>
                   {day.vacationDay && <span className="day-status-pill">{day.vacationDay.status}</span>}
                 </div>
                 {day.vacationDay && <div className="day-status-label">{vacationLabel}</div>}
@@ -788,6 +825,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
                       max={Math.min(24, originalHours + remainingHours)}
                       step="0.5"
                       className="calendar-day-input"
+                      aria-label={`Hours for ${day.dateStr}`}
                       value={day.hours}
                       disabled={!isDayEditable}
                       onChange={(e) => handleHoursChange(index, e.target.value)}
@@ -801,7 +839,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
                       title="Login / logout time"
                       aria-label={`Add login and logout time for ${day.dateStr}`}
                     >
-                      ◷
+                      <Icon name="clock" size={16}/>
                     </button>
                   </div>
                 </label>

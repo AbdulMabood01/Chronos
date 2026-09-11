@@ -21,6 +21,9 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 public class VacationRequest {
+    @Version
+    private long version;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

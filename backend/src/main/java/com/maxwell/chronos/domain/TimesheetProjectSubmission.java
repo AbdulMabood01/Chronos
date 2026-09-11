@@ -41,6 +41,9 @@ public class TimesheetProjectSubmission {
     @Column(name = "total_hours")
     private BigDecimal totalHours;
 
+    @Column(name = "approved_bill_rate", precision = 10, scale = 2)
+    private BigDecimal approvedBillRate;
+
     @Column(name = "submitted_at")
     private LocalDateTime submittedAt;
 

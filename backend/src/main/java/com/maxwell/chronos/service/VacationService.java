@@ -6,6 +6,7 @@ import com.maxwell.chronos.domain.VacationRequest;
 import com.maxwell.chronos.dto.VacationRequestDTO;
 import com.maxwell.chronos.enums.VacationStatus;
 import com.maxwell.chronos.enums.VacationType;
+import com.maxwell.chronos.repository.ProjectAssignmentRepository;
 import com.maxwell.chronos.repository.TimesheetRepository;
 import com.maxwell.chronos.repository.UserRepository;
 import com.maxwell.chronos.repository.VacationRequestRepository;
@@ -17,7 +18,9 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -28,6 +31,8 @@ public class VacationService {
     private final VacationRequestRepository vacationRequestRepository;
     private final UserRepository userRepository;
     private final TimesheetRepository timesheetRepository;
+    private final com.maxwell.chronos.repository.TimesheetProjectSubmissionRepository projectSubmissionRepository;
+    private final ProjectAssignmentRepository projectAssignmentRepository;
     private final AuditService auditService;
     private final NotificationService notificationService;
 
@@ -118,6 +123,9 @@ public class VacationService {
         if (!vacation.getUser().getId().equals(userId)) {
             throw new IllegalArgumentException("User cannot submit another user's vacation request");
         }
+        if (vacation.getUser().isSuperAdmin()) {
+            throw new org.springframework.security.access.AccessDeniedException("SuperAdmin cannot submit vacation requests");
+        }
 
         if (!vacation.isEditable()) {
             throw new IllegalArgumentException("Vacation request cannot be submitted from its current status");
@@ -130,7 +138,6 @@ public class VacationService {
         auditService.logAction(userId, "VACATION_SUBMITTED", "VacationRequest", vacationId,
                 "From " + saved.getStartDate() + " to " + saved.getEndDate());
 
-        // Notify super admins
         notifyAdminsOfVacationSubmission(saved);
 
         return toDTO(saved);
@@ -140,17 +147,15 @@ public class VacationService {
         User approvingUser = userRepository.findById(approvingUserId)
                 .orElseThrow(() -> new IllegalArgumentException("Approving user not found"));
 
-        if (!approvingUser.isSuperAdmin()) {
-            throw new IllegalArgumentException("Only Super Admin can approve vacation requests");
-        }
-
         VacationRequest vacation = vacationRequestRepository.findById(vacationId)
                 .orElseThrow(() -> new IllegalArgumentException("Vacation request not found"));
+        requireVacationReviewer(vacation, approvingUser);
 
         if (!vacation.getStatus().equals(VacationStatus.SUBMITTED)) {
             throw new IllegalArgumentException("Only submitted vacation requests can be approved");
         }
 
+        userRepository.findForUpdate(vacation.getUser().getId()).orElseThrow();
         vacation.setStatus(VacationStatus.APPROVED);
         vacation.setApprovedAt(java.time.LocalDateTime.now());
         vacation.setApprovedBy(approvingUser);
@@ -175,12 +180,9 @@ public class VacationService {
         User rejectingUser = userRepository.findById(rejectingUserId)
                 .orElseThrow(() -> new IllegalArgumentException("Rejecting user not found"));
 
-        if (!rejectingUser.isSuperAdmin()) {
-            throw new IllegalArgumentException("Only Super Admin can reject vacation requests");
-        }
-
         VacationRequest vacation = vacationRequestRepository.findById(vacationId)
                 .orElseThrow(() -> new IllegalArgumentException("Vacation request not found"));
+        requireVacationReviewer(vacation, rejectingUser);
 
         if (!vacation.getStatus().equals(VacationStatus.SUBMITTED)) {
             throw new IllegalArgumentException("Only submitted vacation requests can be rejected");
@@ -218,6 +220,16 @@ public class VacationService {
                 .collect(Collectors.toList());
     }
 
+    public List<VacationRequestDTO> getPendingVacationRequests(User reviewer) {
+        if (reviewer == null) {
+            throw new IllegalArgumentException("Vacation reviewer permission required");
+        }
+        return vacationRequestRepository.findByStatus(VacationStatus.SUBMITTED).stream()
+                .filter(vacation -> canReviewVacation(vacation, reviewer))
+                .map(this::toDTO)
+                .collect(Collectors.toList());
+    }
+
     public List<VacationRequestDTO> getVacationRequestsByStatus(VacationStatus status) {
         return vacationRequestRepository.findByStatus(status).stream()
                 .map(this::toDTO)
@@ -248,13 +260,13 @@ public class VacationService {
         Set<YearMonth> affectedMonths = vacation.getStartDate()
                 .datesUntil(vacation.getEndDate().plusDays(1))
                 .map(YearMonth::from)
-                .collect(Collectors.toSet());
+                .collect(Collectors.toCollection(java.util.TreeSet::new));
         Set<LocalDate> vacationDates = vacation.getStartDate()
                 .datesUntil(vacation.getEndDate().plusDays(1))
                 .collect(Collectors.toSet());
 
         for (YearMonth month : affectedMonths) {
-            timesheetRepository.findByUserIdAndYearAndMonth(vacation.getUser().getId(), month.getYear(), month.getMonthValue())
+            timesheetRepository.findPeriodForUpdate(vacation.getUser().getId(), month.getYear(), month.getMonthValue())
                     .ifPresent(timesheet -> zeroMatchingEntries(timesheet, vacationDates));
         }
     }
@@ -266,7 +278,13 @@ public class VacationService {
                 if (vacationDates.contains(entry.getEntryDate())
                         && entry.getHours() != null
                         && entry.getHours().compareTo(BigDecimal.ZERO) != 0) {
+                    var submission = entry.getProject() == null ? null : projectSubmissionRepository
+                            .findByTimesheetIdAndProjectId(timesheet.getId(), entry.getProject().getId()).orElse(null);
+                    if (!timesheet.isEditable() || (submission != null && !submission.isEditable())) {
+                        throw new IllegalArgumentException("Vacation conflicts with submitted or finalized hours; reopen the timesheet first");
+                    }
                     entry.setHours(BigDecimal.ZERO);
+                    entry.getSessions().clear();
                     changed = true;
                 }
             }
@@ -275,19 +293,67 @@ public class VacationService {
         if (changed) {
             timesheet.calculateTotalHours();
             timesheetRepository.save(timesheet);
+            for (var submission : projectSubmissionRepository.findByTimesheetId(timesheet.getId())) {
+                submission.setTotalHours(timesheet.getTimeEntries().stream()
+                        .filter(e -> e.getProject() != null && e.getProject().getId().equals(submission.getProject().getId()))
+                        .map(e -> e.getHours()).reduce(BigDecimal.ZERO, BigDecimal::add));
+                projectSubmissionRepository.save(submission);
+            }
+            auditService.logAction(timesheet.getUser().getId(), "TIMESHEET_EDITED", "Timesheet", timesheet.getId(),
+                    "Cleared draft hours and sessions for approved vacation dates");
         }
     }
 
     private void notifyAdminsOfVacationSubmission(VacationRequest vacation) {
-        List<User> admins = userRepository.findByRole(com.maxwell.chronos.enums.UserRole.SUPER_ADMIN);
-        for (User admin : admins) {
-            notificationService.createNotification(admin.getId(),
+        List<User> reviewers = findVacationReviewers(vacation);
+        if (reviewers.isEmpty()) {
+            reviewers = userRepository.findByRole(com.maxwell.chronos.enums.UserRole.SUPER_ADMIN);
+        }
+        for (User reviewer : reviewers) {
+            notificationService.createNotification(reviewer.getId(),
                     "VACATION_SUBMITTED",
                     "Vacation Request Submitted",
                     vacation.getUser().getFullName() + " submitted a vacation request from " + vacation.getStartDate() + " to " + vacation.getEndDate(),
                     vacation.getId(),
                     "VacationRequest");
         }
+    }
+
+    private void requireVacationReviewer(VacationRequest vacation, User reviewer) {
+        if (!canReviewVacation(vacation, reviewer)) {
+            throw new IllegalArgumentException("Reviewer cannot approve this vacation request");
+        }
+    }
+
+    private boolean canReviewVacation(VacationRequest vacation, User reviewer) {
+        if (vacation == null || reviewer == null || vacation.getUser().getId().equals(reviewer.getId())) {
+            return false;
+        }
+        if (reviewer.isSuperAdmin()) {
+            return true;
+        }
+        return findVacationReviewers(vacation).stream()
+                .anyMatch(candidate -> candidate.getId().equals(reviewer.getId()));
+    }
+
+    private List<User> findVacationReviewers(VacationRequest vacation) {
+        List<User> reviewers = new ArrayList<>();
+        projectAssignmentRepository.findByUserIdAndIsActiveTrue(vacation.getUser().getId()).stream()
+                .map(assignment -> assignment.getProject())
+                .filter(Objects::nonNull)
+                .forEach(project -> {
+                    User reviewer = project.getProjectManager() != null
+                            && project.getProjectManager().getId().equals(vacation.getUser().getId())
+                            ? project.getProjectManagerHoursApprover()
+                            : project.getProjectManager();
+                    if (reviewer != null
+                            && Boolean.TRUE.equals(reviewer.getIsActive())
+                            && !reviewer.getId().equals(vacation.getUser().getId())
+                            && reviewers.stream().noneMatch(existing -> existing.getId().equals(reviewer.getId()))) {
+                        reviewers.add(reviewer);
+                    }
+                });
+        return reviewers;
     }
 
     private VacationRequestDTO toDTO(VacationRequest vacation) {

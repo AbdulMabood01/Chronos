@@ -22,5 +22,6 @@ public class AuthResponse {
     private String profileImageUrl;
     private Boolean profileCompleted;
     private String role;
+    private boolean canReviewProjects;
     private Boolean isActive;
 }

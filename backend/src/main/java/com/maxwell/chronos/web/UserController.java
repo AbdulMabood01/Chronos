@@ -20,7 +20,11 @@ public class UserController {
     private final UserService userService;
 
     @GetMapping("/{id}")
-    public ResponseEntity<UserDTO> getUser(@PathVariable Long id) {
+    public ResponseEntity<UserDTO> getUser(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
+        var requester = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
+        if (requester == null || (!requester.isSuperAdmin() && !requester.getId().equals(id))) {
+            return ResponseEntity.status(403).build();
+        }
         UserDTO user = userService.findById(id);
         if (user == null) {
             return ResponseEntity.notFound().build();
@@ -29,8 +33,8 @@ public class UserController {
     }
 
     @GetMapping
-    public ResponseEntity<List<UserDTO>> getAllActiveUsers() {
-        List<UserDTO> users = userService.getAllActiveUsers();
+    public ResponseEntity<List<com.maxwell.chronos.dto.EmployeeDirectoryDTO>> getAllActiveUsers() {
+        var users = userService.getEmployeeDirectory();
         return ResponseEntity.ok(users);
     }
 
@@ -99,7 +103,7 @@ public class UserController {
         try {
             userService.changeRole(id, role, currentUser.getId());
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().build();
+            throw e;
         }
         UserDTO updatedUser = userService.findById(id);
         return ResponseEntity.ok(updatedUser);

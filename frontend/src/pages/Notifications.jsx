@@ -1,8 +1,25 @@
+import ScreenTitle, { RecordSummary } from '../components/ScreenTitle';
 import React, { useState, useEffect } from 'react';
 import { notificationAPI } from '../api';
 import { format } from 'date-fns';
 import { LoadingIndicator } from '../components/Hourglass';
 import '../styles.css';
+import Icon from '../components/Icon';
+
+function notificationIcon(notification) {
+  const haystack = [
+    notification.notificationType,
+    notification.entityType,
+    notification.title,
+    notification.message,
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  if (haystack.includes('vacation') || haystack.includes('time off') || haystack.includes('leave')) return 'calendar';
+  if (haystack.includes('timesheet') || haystack.includes('time sheet') || haystack.includes('hours')) return 'clock';
+  if (haystack.includes('project')) return 'briefcase';
+  if (haystack.includes('letter') || haystack.includes('employment')) return 'file';
+  return notification.isRead ? 'file' : 'bell';
+}
 
 export default function Notifications() {
   const [notifications, setNotifications] = useState([]);
@@ -17,11 +34,8 @@ export default function Notifications() {
     try {
       const response = await notificationAPI.getNotifications();
       const rows = response.data || [];
-      const hasUnread = rows.some((notification) => !notification.isRead);
-      if (hasUnread) {
-        await notificationAPI.markAllAsRead();
-      }
-      setNotifications(rows.map((notification) => ({ ...notification, isRead: true })));
+      setNotifications(rows);
+      window.dispatchEvent(new Event("chronos:notifications-changed"));
       setError('');
     } catch (err) {
       setError('Failed to load notifications');
@@ -58,7 +72,7 @@ export default function Notifications() {
   return (
     <div className="page-container">
       <div className="header-bar">
-        <h1>Notifications</h1>
+        <ScreenTitle title="Notifications" icon="bell" eyebrow="YOUR INBOX" />
         {unreadCount > 0 && (
           <button className="button button-secondary" onClick={handleMarkAllAsRead}>
             Mark All as Read
@@ -66,46 +80,20 @@ export default function Notifications() {
         )}
       </div>
 
-      {error && <div className="error-message">{error}</div>}
+      <RecordSummary items={[{ label: "All messages", value: notifications.length, icon: "file" }, { label: "Unread updates", value: unreadCount, icon: "bell" }]} />
+      {error && <div className="error-message" role="alert">{error}</div>}
 
       {notifications.length === 0 ? (
         <div className="empty-state">
           <p>No notifications yet.</p>
         </div>
       ) : (
-        <div className="table-container">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Title</th>
-                <th>Message</th>
-                <th>Received</th>
-                <th>Status</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {notifications.map((n) => (
-                <tr key={n.id}>
-                  <td>{n.title}</td>
-                  <td>{n.message}</td>
-                  <td>{format(new Date(n.createdAt), 'MMM dd, yyyy HH:mm')}</td>
-                  <td>
-                    <span className={`status-badge ${n.isRead ? 'status-approved' : 'status-submitted'}`}>
-                      {n.isRead ? 'Read' : 'Unread'}
-                    </span>
-                  </td>
-                  <td>
-                    {!n.isRead && (
-                      <button className="button button-small" onClick={() => handleMarkAsRead(n.id)}>
-                        Mark Read
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="inbox-list">
+          {notifications.map(n => <article className={'inbox-item' + (n.isRead ? '' : ' unread')} key={n.id}>
+            <span className="inbox-item-icon"><Icon name={notificationIcon(n)} size={21}/></span>
+            <div className="inbox-item-content"><div className="inbox-item-heading"><h2>{n.title}</h2><span className={'status-badge ' + (n.isRead ? 'status-draft' : 'status-submitted')}>{n.isRead ? 'Read' : 'Unread'}</span></div><p>{n.message}</p><time dateTime={n.createdAt}>{format(new Date(n.createdAt), 'MMM d, yyyy • h:mm a')}</time></div>
+            {!n.isRead && <button className="button button-small button-secondary" onClick={() => handleMarkAsRead(n.id)}>Mark read</button>}
+          </article>)}
         </div>
       )}
     </div>

@@ -32,12 +32,28 @@ public class ReportController {
             return ResponseEntity.status(403).build();
         }
 
-        byte[] excel = reportService.exportTimesheets(year, month, parseUserIds(userIds));
+        byte[] reports = reportService.exportTimesheets(year, month, parseUserIds(userIds));
         String filename = "timesheets-" + year + "-" + month + ".zip";
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType("application/zip"))
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(filename).build().toString())
-                .body(excel);
+                .body(reports);
+    }
+
+    @GetMapping("/project-timesheets/export")
+    public ResponseEntity<byte[]> exportProjectTimesheets(@RequestParam String submissionIds,
+                                                          @AuthenticationPrincipal Jwt jwt) {
+        var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
+        if (user == null || (!user.isSuperAdmin() && !user.isAdmin())) {
+            return ResponseEntity.status(403).build();
+        }
+
+        byte[] reports = reportService.exportProjectTimesheets(parseUserIds(submissionIds));
+        String filename = "project-timesheets.zip";
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("application/zip"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(filename).build().toString())
+                .body(reports);
     }
 
     @GetMapping("/vacation/export")
@@ -71,7 +87,7 @@ public class ReportController {
                     .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(filename).build().toString())
                     .body(excel);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(403).build();
+            throw e;
         }
     }
 
@@ -102,7 +118,7 @@ public class ReportController {
                     .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(filename).build().toString())
                     .body(pdf);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(403).build();
+            throw e;
         }
     }
 
@@ -122,7 +138,7 @@ public class ReportController {
                     .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(filename).build().toString())
                     .body(pdf);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(403).build();
+            throw e;
         }
     }
 

@@ -62,7 +62,7 @@ public class ProjectController {
         try {
             return ResponseEntity.ok(projectService.saveProject(null, request, user));
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().build();
+            throw e;
         }
     }
 
@@ -74,7 +74,7 @@ public class ProjectController {
         try {
             return ResponseEntity.ok(projectService.saveProject(projectId, request, user));
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().build();
+            throw e;
         }
     }
 
@@ -88,7 +88,7 @@ public class ProjectController {
         try {
             return ResponseEntity.ok(projectService.assignEmployee(projectId, userId, startDate, endDate, billRate, user));
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().build();
+            throw e;
         }
     }
 
@@ -99,7 +99,7 @@ public class ProjectController {
         try {
             return ResponseEntity.ok(projectService.removeEmployee(projectId, userId, user));
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().build();
+            throw e;
         }
     }
 
@@ -114,7 +114,7 @@ public class ProjectController {
         try {
             return ResponseEntity.ok(projectService.updateAssignmentDates(projectId, userId, startDate, endDate, billRate, user));
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().build();
+            throw e;
         }
     }
 
@@ -132,7 +132,7 @@ public class ProjectController {
             }
             return ResponseEntity.ok(projectService.updatePlannedHours(projectId, userId, plannedHours, user));
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().build();
+            throw e;
         }
     }
 }

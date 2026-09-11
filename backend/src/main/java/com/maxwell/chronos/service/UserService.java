@@ -96,6 +96,13 @@ public class UserService {
         return saved;
     }
 
+    public List<com.maxwell.chronos.dto.EmployeeDirectoryDTO> getEmployeeDirectory() {
+        return userRepository.findByIsActiveTrue().stream().map(user ->
+                new com.maxwell.chronos.dto.EmployeeDirectoryDTO(user.getId(), user.getEmployeeId(),
+                    user.getFirstName(), user.getLastName(), user.getEmail(), user.getJobTitle(),
+                    user.getRole(), user.getIsActive())).toList();
+    }
+
     public List<UserDTO> getAllActiveUsers() {
         return userRepository.findByIsActiveTrue().stream()
                 .map(this::toDTO)
@@ -173,6 +180,10 @@ public class UserService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
+        if (user.isSuperAdmin() && clean(request.getSsnLast4()) != null) {
+            throw new org.springframework.security.access.AccessDeniedException("SSN is not available for SuperAdmin profiles");
+        }
+
         String firstName = clean(request.getFirstName());
         String lastName = clean(request.getLastName());
 
@@ -184,7 +195,9 @@ public class UserService {
         }
         user.setJobTitle(clean(request.getJobTitle()));
         user.setDateOfBirth(request.getDateOfBirth());
-        user.setSsnLast4(clean(request.getSsnLast4()));
+        if (!user.isSuperAdmin()) {
+            user.setSsnLast4(clean(request.getSsnLast4()));
+        }
         user.setProfileImageUrl(clean(request.getProfileImageUrl()));
         user.setProfileCompleted(true);
 
@@ -229,7 +242,7 @@ public class UserService {
                 .lastName(user.getLastName())
                 .jobTitle(user.getJobTitle())
                 .dateOfBirth(user.getDateOfBirth())
-                .ssnLast4(user.getSsnLast4())
+                .ssnLast4(user.isSuperAdmin() ? null : user.getSsnLast4())
                 .profileImageUrl(user.getProfileImageUrl())
                 .profileCompleted(Boolean.TRUE.equals(user.getProfileCompleted()))
                 .email(user.getEmail())

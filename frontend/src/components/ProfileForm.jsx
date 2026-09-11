@@ -99,7 +99,7 @@ export default function ProfileForm({ user, onSave, submitLabel = 'Save Profile'
       return;
     }
 
-    const ssnLast4 = formData.ssnLast4.trim();
+    const ssnLast4 = user?.role === 'SUPER_ADMIN' ? '' : formData.ssnLast4.trim();
     if (ssnLast4 && !/^\d{4}$/.test(ssnLast4)) {
       setError('SSN last 4 must be blank or exactly 4 digits.');
       return;
@@ -113,7 +113,7 @@ export default function ProfileForm({ user, onSave, submitLabel = 'Save Profile'
         lastName: formData.lastName,
         jobTitle: formData.jobTitle,
         dateOfBirth: formData.dateOfBirth || null,
-        ssnLast4,
+        ...(user?.role !== 'SUPER_ADMIN' ? { ssnLast4 } : {}),
         profileImageUrl: formData.profileImageUrl || null,
       });
     } catch (err) {
@@ -203,7 +203,7 @@ export default function ProfileForm({ user, onSave, submitLabel = 'Save Profile'
             required
           />
         </div>
-        <div className="form-group">
+        {user?.role !== 'SUPER_ADMIN' && <div className="form-group">
           <label htmlFor="profile-ssn-last4">4 Digits of SSN</label>
           <input
             id="profile-ssn-last4"
@@ -213,7 +213,7 @@ export default function ProfileForm({ user, onSave, submitLabel = 'Save Profile'
             maxLength="4"
             autoComplete="off"
           />
-        </div>
+        </div>}
       </div>
 
       <div className="action-bar compact-actions">

@@ -1,6 +1,7 @@
+import ScreenTitle from '../components/ScreenTitle';
+import { formatDate } from '../utils/dates';
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { format } from 'date-fns';
 import { useAuth } from '../AuthContext';
 import { letterRequestAPI } from '../api';
 import { LoadingIndicator } from '../components/Hourglass';
@@ -15,9 +16,6 @@ const LETTER_TYPES = {
 
 const EMPLOYER_INFORMATION_TITLE = 'Employer Information';
 
-function formatDate(value) {
-  return value ? format(new Date(value), 'MMM dd, yyyy') : '-';
-}
 
 function openPdfBlob(response) {
   const blob = new Blob([response.data], { type: 'application/pdf' });
@@ -134,7 +132,7 @@ export default function LetterRequestReview() {
     <div className="page-container letter-review-page">
       <div className="header-bar">
         <div>
-          <h1>Review Letter</h1>
+          <ScreenTitle title="Review Letter" icon="file" eyebrow="DOCUMENT REVIEW" />
           <p className="page-subtitle">{LETTER_TYPES[request.requestType]} for {request.requestedFullName || request.userName}</p>
         </div>
         <Link className="button button-secondary" to="/admin">Back</Link>

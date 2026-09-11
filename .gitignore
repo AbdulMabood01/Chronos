@@ -28,3 +28,7 @@ postgres-pw.txt
 # Local runtime data
 .postgres/
 backend/calendar_test.json
+
+# Browser test artifacts
+frontend/test-results/
+frontend/playwright-report/

@@ -45,32 +45,31 @@ export default function Login() {
   };
 
   return (
-    <div className="page-container login-container">
+    <div className="login-experience"><section className="login-story"><span className="login-wordmark">CHRONOS <span>BY MAXWELL</span></span><div><span className="hero-kicker">A BETTER RHYTHM FOR YOUR WORKDAY</span><h1>Your time.<br/>Well managed.</h1><p>One home for your hours, time off,<br/>and everything that keeps work moving.</p><div className="login-story-rule"/><span className="login-story-caption">More clarity. Less administration.</span></div><small>Maxwell Network Inc. &middot; Employee workspace</small></section><div className="login-container">
       <div className="login-card">
-        <BrandLogo />
+        <BrandLogo /><span className="eyebrow">WELCOME TO CHRONOS</span><h1>Make yourself at home.</h1><p className="signin-subtitle">Sign in to your employee workspace.</p>
 
-        <form onSubmit={handleDevLogin}>
+        {import.meta.env.DEV && <form onSubmit={handleDevLogin}>
           <div className="form-group">
-            <label>Dev Login (email)</label>
+            <label htmlFor="dev-email">Work email &middot; development sign-in</label>
             <input
-              type="email"
+              id="dev-email" autoComplete="email" type="email"
               value={devEmail}
               onChange={(e) => setDevEmail(e.target.value)}
               placeholder="you@maxwellnetwork.org"
               required
             />
           </div>
-          {error && <p className="error-message">{error}</p>}
           <button type="submit" disabled={loading} className="button button-primary">
             {loading ? <LoadingIndicator label="Signing in..." /> : 'Dev Sign In'}
           </button>
-        </form>
+        </form>}
 
         <form onSubmit={handleLogin} style={{ marginTop: '2rem' }}>
           <div className="form-group">
-            <label>OAuth Token</label>
+            <label htmlFor="access-token">Company access token</label>
             <input
-              type="password"
+              id="access-token" required type="password"
               value={token}
               onChange={(e) => setToken(e.target.value)}
               placeholder="Enter your authentication token"
@@ -81,10 +80,11 @@ export default function Login() {
           </button>
         </form>
 
+        {error && <p className="error-message" role="alert">{error}</p>}
         <p className="login-note">
-          In production, this will use Microsoft Entra ID / OAuth2 for seamless company authentication.
+          Sign in using an access token issued for this application by your company.
         </p>
       </div>
-    </div>
+    </div></div>
   );
 }

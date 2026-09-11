@@ -1,3 +1,4 @@
+import ScreenTitle, { RecordSearch } from '../components/ScreenTitle';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../AuthContext';
 import { userAPI } from '../api';
@@ -9,6 +10,8 @@ export default function UserManagement() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [search, setSearch] = useState('');
+  const visibleRecords = users.filter(record => [record.firstName,record.lastName,record.email,record.employeeId,record.role].join(' ').toLowerCase().includes(search.toLowerCase()));
   const canManageUsers = user?.role === 'SUPER_ADMIN';
   const canManageRoles = user?.role === 'SUPER_ADMIN';
 
@@ -82,12 +85,14 @@ export default function UserManagement() {
     <div className="page-container admin-page">
       <div className="header-bar">
         <div>
-          <h1>User Management</h1>
+          <ScreenTitle title="User Management" icon="users" eyebrow="PEOPLE & ACCESS" />
           <p className="page-subtitle">Manage access, roles, and employment status.</p>
         </div>
       </div>
 
-      {error && <div className="error-message">{error}</div>}
+      <RecordSearch value={search} onChange={setSearch} placeholder="Search people by name, email or role" label="Search people by name, email or role" />
+      {search && <p className="filter-count">{visibleRecords.length} matching records</p>}
+      {error && <div className="error-message" role="alert">{error}</div>}
 
       <div className="admin-stats user-stats">
         <div>
@@ -115,7 +120,7 @@ export default function UserManagement() {
             </tr>
           </thead>
           <tbody>
-            {users.map((targetUser) => (
+            {visibleRecords.map((targetUser) => (
               <tr key={targetUser.id}>
                 <td>
                   <strong>{targetUser.firstName} {targetUser.lastName}</strong>
@@ -129,7 +134,6 @@ export default function UserManagement() {
                       disabled={targetUser.id === user.id}
                     >
                       <option value="EMPLOYEE">Employee</option>
-                      <option value="PROJECT_MANAGER">Project Manager</option>
                       <option value="ADMIN">Admin</option>
                       <option value="SUPER_ADMIN">Super Admin</option>
                     </select>

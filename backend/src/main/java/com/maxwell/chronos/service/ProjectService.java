@@ -14,7 +14,6 @@ import com.maxwell.chronos.domain.Timesheet;
 import com.maxwell.chronos.domain.TimesheetProjectSubmission;
 import com.maxwell.chronos.enums.ProjectStatus;
 import com.maxwell.chronos.enums.TimesheetStatus;
-import com.maxwell.chronos.enums.UserRole;
 import com.maxwell.chronos.repository.ProjectAssignmentRepository;
 import com.maxwell.chronos.repository.ProjectHourPlanRepository;
 import com.maxwell.chronos.repository.ProjectRepository;
@@ -52,7 +51,9 @@ public class ProjectService {
     private final AuditService auditService;
 
     public List<ProjectDTO> getProjects(User requester) {
-        requireProjectAdmin(requester);
+        if (requester == null || (!requester.isSuperAdmin() && !requester.isAdmin())) {
+            throw new org.springframework.security.access.AccessDeniedException("Project view permission required");
+        }
         return projectRepository.findAll().stream()
                 .sorted(Comparator.comparing(Project::getCode, String.CASE_INSENSITIVE_ORDER))
                 .map(this::toDTO)
@@ -116,10 +117,6 @@ public class ProjectService {
             User manager = userRepository.findById(request.getProjectManagerId())
                     .orElseThrow(() -> new IllegalArgumentException("Project manager not found"));
             project.setProjectManager(manager);
-            if (UserRole.EMPLOYEE.equals(manager.getRole())) {
-                manager.setRole(UserRole.PROJECT_MANAGER);
-                userRepository.save(manager);
-            }
         } else {
             project.setProjectManager(null);
         }
@@ -128,10 +125,6 @@ public class ProjectService {
             User approver = userRepository.findById(request.getProjectManagerHoursApproverId())
                     .orElseThrow(() -> new IllegalArgumentException("Project manager hours approver not found"));
             project.setProjectManagerHoursApprover(approver);
-            if (UserRole.EMPLOYEE.equals(approver.getRole())) {
-                approver.setRole(UserRole.PROJECT_MANAGER);
-                userRepository.save(approver);
-            }
         } else {
             project.setProjectManagerHoursApprover(null);
         }
@@ -243,11 +236,11 @@ public class ProjectService {
 
     public List<ProjectHoursDashboardDTO> getProjectHoursDashboard(int year, int month, User requester) {
         validatePeriod(year, month);
-        if (requester == null || (!requester.isSuperAdmin() && !requester.isAdmin() && !requester.isProjectManager())) {
+        if (requester == null || (!requester.isSuperAdmin() && !requester.isAdmin() && !canReviewProjects(requester.getId()))) {
             throw new IllegalArgumentException("Project dashboard permission required");
         }
 
-        List<Project> projects = requester.isProjectManager() && !requester.isAdmin() && !requester.isSuperAdmin()
+        List<Project> projects = !requester.isAdmin() && !requester.isSuperAdmin()
                 ? projectRepository.findByProjectManagerIdAndStatus(requester.getId(), ProjectStatus.ACTIVE)
                 : projectRepository.findAll();
         List<Timesheet> timesheets = timesheetRepository.findByYearAndMonth(year, month);
@@ -284,6 +277,10 @@ public class ProjectService {
                 .orElse(false);
     }
 
+    public boolean canReviewProjects(Long userId) {
+        return projectRepository.existsByProjectManagerIdOrProjectManagerHoursApproverId(userId, userId);
+    }
+
     public boolean canApproveProjectManagerHours(Long projectId, Long approverId) {
         return projectRepository.findById(projectId)
                 .map(project -> project.getProjectManagerHoursApprover() != null
@@ -293,21 +290,21 @@ public class ProjectService {
 
     private void requireProjectAdmin(User user) {
         if (user == null || !user.canManageProjects()) {
-            throw new IllegalArgumentException("Admin permission required");
+            throw new org.springframework.security.access.AccessDeniedException("Admin permission required");
         }
     }
 
     private void requireCanPlanProject(Long projectId, User requester) {
-        if (requester == null) {
-            throw new IllegalArgumentException("Project planning permission required");
+        if (requester == null || requester.isSuperAdmin()) {
+            throw new org.springframework.security.access.AccessDeniedException("Project planning permission required");
         }
-        if (requester.isSuperAdmin() || requester.isAdmin()) {
+        if (requester.isAdmin()) {
             return;
         }
-        if (requester.isProjectManager() && managesProject(projectId, requester.getId())) {
+        if (managesProject(projectId, requester.getId())) {
             return;
         }
-        throw new IllegalArgumentException("Project planning permission required");
+        throw new org.springframework.security.access.AccessDeniedException("Project planning permission required");
     }
 
     private void validatePeriod(Integer year, Integer month) {

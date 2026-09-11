@@ -16,7 +16,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class AuthController {
     private final UserService userService;
-    private final DevJwtService devJwtService;
+    private final com.maxwell.chronos.service.ProjectService projectService;
 
     private AuthResponse toAuthResponse(com.maxwell.chronos.domain.User user) {
         return AuthResponse.builder()
@@ -26,26 +26,13 @@ public class AuthController {
                 .lastName(user.getLastName())
                 .jobTitle(user.getJobTitle())
                 .dateOfBirth(user.getDateOfBirth())
-                .ssnLast4(user.getSsnLast4())
+                .ssnLast4(user.isSuperAdmin() ? null : user.getSsnLast4())
                 .profileImageUrl(user.getProfileImageUrl())
                 .profileCompleted(Boolean.TRUE.equals(user.getProfileCompleted()))
                 .role(user.getRole().toString())
+                .canReviewProjects(projectService.canReviewProjects(user.getId()))
                 .isActive(user.getIsActive())
                 .build();
-    }
-
-    // Local-development-only login: issues a locally-signed token for the given email, bypassing Entra ID.
-    @PostMapping("/dev-login")
-    public ResponseEntity<Map<String, String>> devLogin(@RequestParam String email,
-                                                          @RequestParam(defaultValue = "Dev") String firstName,
-                                                          @RequestParam(defaultValue = "User") String lastName) {
-        var user = userService.findOrCreateByEmailForDev(email, firstName, lastName);
-        if (!user.getIsActive()) {
-            return ResponseEntity.status(403).build();
-        }
-
-        String token = devJwtService.generateToken(user.getEntraId(), user.getEmail(), user.getFirstName(), user.getLastName());
-        return ResponseEntity.ok(Map.of("token", token));
     }
 
     @PostMapping("/login")

@@ -28,27 +28,22 @@ public class SecurityConfig {
     private String jwtSigningKey;
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http, JwtDecoder decoder, com.maxwell.chronos.repository.UserRepository users) throws Exception {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(authz -> authz
-                        .requestMatchers("/auth/**").permitAll()
+                        .requestMatchers("/auth/dev-login").permitAll()
                         .requestMatchers("/health", "/actuator/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2
-                        .jwt(jwt -> jwt.decoder(jwtDecoder()))
+                        .jwt(jwt -> jwt.decoder(decoder))
                 )
+                .sessionManagement(session -> session.sessionCreationPolicy(org.springframework.security.config.http.SessionCreationPolicy.STATELESS))
+                .addFilterAfter(new com.maxwell.chronos.security.ActiveUserFilter(users), org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter.class)
                 .csrf(csrf -> csrf.disable());
 
         return http.build();
-    }
-
-    // Local-development decoder validating locally-signed dev tokens (see DevJwtService).
-    // TODO: replace with the real Microsoft Entra ID JWKS decoder before production deployment.
-    @Bean
-    public JwtDecoder jwtDecoder() {
-        return NimbusJwtDecoder.withSecretKey(DevJwtKeys.deriveKey(jwtSigningKey)).build();
     }
 
     @Bean

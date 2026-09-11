@@ -10,19 +10,9 @@ import com.maxwell.chronos.enums.VacationStatus;
 import com.maxwell.chronos.repository.LetterRequestRepository;
 import com.maxwell.chronos.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.pdmodel.PDPage;
-import org.apache.pdfbox.pdmodel.PDPageContentStream;
-import org.apache.pdfbox.pdmodel.common.PDRectangle;
-import org.apache.pdfbox.pdmodel.font.PDType1Font;
-import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.UncheckedIOException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -173,7 +163,8 @@ public class LetterRequestService {
             throw new IllegalArgumentException("Letter is not approved yet");
         }
 
-        return buildSimplePdf(buildLetterText(request));
+        return LetterPdf.render(displayType(request.getRequestType()), "LTR-" + request.getId(),
+                VacationStatus.APPROVED.equals(request.getStatus()), buildLetterText(request));
     }
 
     @Transactional(readOnly = true)
@@ -220,8 +211,8 @@ public class LetterRequestService {
     private User requireAdmin(Long adminId) {
         User admin = userRepository.findById(adminId)
                 .orElseThrow(() -> new IllegalArgumentException("Admin user not found"));
-        if (!admin.isSuperAdmin() && !admin.isAdmin()) {
-            throw new IllegalArgumentException("Only Admins can approve letter requests");
+        if (!admin.isSuperAdmin()) {
+            throw new IllegalArgumentException("Only Super Admin can approve letter requests");
         }
         return admin;
     }
@@ -237,7 +228,6 @@ public class LetterRequestService {
 
     private void notifyAdmins(LetterRequest request) {
         List<User> admins = new ArrayList<>();
-        admins.addAll(userRepository.findByRole(UserRole.ADMIN));
         admins.addAll(userRepository.findByRole(UserRole.SUPER_ADMIN));
         for (User admin : admins) {
             notificationService.createNotification(admin.getId(),
@@ -334,277 +324,6 @@ public class LetterRequestService {
         sections.add("");
         sections.add(COMPANY_FOOTER.strip());
         return String.join("\n", sections);
-    }
-
-    private byte[] buildSimplePdf(String text) {
-        try (PDDocument document = new PDDocument();
-             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            PDPage page = new PDPage(PDRectangle.LETTER);
-            document.addPage(page);
-            drawLetterhead(document, page);
-            writeLetterContent(document, page, text);
-            document.save(out);
-            return out.toByteArray();
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-    }
-
-    private void drawLetterhead(PDDocument document, PDPage page) throws IOException {
-        PDRectangle mediaBox = page.getMediaBox();
-        try (PDPageContentStream content = new PDPageContentStream(document, page)) {
-            content.setNonStrokingColor(255, 255, 255);
-            content.addRect(0, 0, mediaBox.getWidth(), mediaBox.getHeight());
-            content.fill();
-
-            drawHeaderBrand(document, content, mediaBox);
-
-            content.setStrokingColor(212, 222, 233);
-            content.setLineWidth(0.8f);
-            content.moveTo(72, mediaBox.getHeight() - 122);
-            content.lineTo(mediaBox.getWidth() - 72, mediaBox.getHeight() - 122);
-            content.stroke();
-
-            content.setStrokingColor(212, 222, 233);
-            content.setLineWidth(0.8f);
-            content.moveTo(72, 122);
-            content.lineTo(mediaBox.getWidth() - 72, 122);
-            content.stroke();
-        }
-    }
-
-    private void drawHeaderBrand(PDDocument document, PDPageContentStream content, PDRectangle mediaBox) throws IOException {
-        String companyName = "Maxwell Network Inc";
-        float centerX = mediaBox.getWidth() / 2;
-        float companyY = mediaBox.getHeight() - 82;
-        float logoY = mediaBox.getHeight() - 84;
-        float logoHeight = 58;
-        float companyFontSize = 20;
-        try (InputStream logoStream = getClass().getResourceAsStream("/Logo.png")) {
-            if (logoStream != null) {
-                PDImageXObject logo = PDImageXObject.createFromByteArray(document, logoStream.readAllBytes(), "Logo.png");
-                float logoWidth = logoHeight * logo.getWidth() / logo.getHeight();
-                float textWidth = textWidth(companyName, PDType1Font.HELVETICA_BOLD, companyFontSize);
-                float logoX = centerX - (textWidth / 2) - logoWidth - 43;
-                content.drawImage(logo, logoX, logoY, logoWidth, logoHeight);
-            }
-        }
-
-        content.setNonStrokingColor(0, 51, 88);
-        drawCenteredText(content, centerX, companyY, companyName, PDType1Font.HELVETICA_BOLD, companyFontSize);
-        content.setNonStrokingColor(34, 41, 47);
-    }
-
-    private void writeLetterContent(PDDocument document, PDPage page, String text) throws IOException {
-        PDRectangle mediaBox = page.getMediaBox();
-        float marginX = 72;
-        float y = mediaBox.getHeight() - 146;
-        float maxWidth = mediaBox.getWidth() - 144;
-        float bodyBottom = 308;
-
-        try (PDPageContentStream content = new PDPageContentStream(document, page, PDPageContentStream.AppendMode.APPEND, true, true)) {
-            content.setNonStrokingColor(34, 41, 47);
-            String[] sections = text.split("\\R\\R");
-            String employerSection = "";
-            String footerSection = "";
-            int employerSectionIndex = -1;
-            int footerSectionIndex = -1;
-
-            for (int index = 0; index < sections.length; index++) {
-                String section = sections[index].trim();
-                if (section.startsWith("Employer Information")) {
-                    employerSection = section;
-                    employerSectionIndex = index;
-                } else if (section.startsWith("tech.maxwellnetwork.org")) {
-                    footerSection = section;
-                    footerSectionIndex = index;
-                }
-            }
-
-            int bodySectionCount = employerSectionIndex >= 0 ? employerSectionIndex : sections.length;
-            if (footerSectionIndex >= 0 && footerSectionIndex < bodySectionCount) {
-                bodySectionCount = footerSectionIndex;
-            }
-
-            for (int index = 0; index < sections.length; index++) {
-                if (index >= bodySectionCount) {
-                    break;
-                }
-                String section = sections[index].trim();
-                if (section.isBlank()) {
-                    y -= 8;
-                    continue;
-                }
-
-                if (index == 0) {
-                    String[] headerLines = section.split("\\R");
-                    if (headerLines.length > 1) {
-                        drawRightAlignedText(content, mediaBox.getWidth() - marginX, y, headerLines[1], PDType1Font.HELVETICA, 10.5f);
-                        y -= 34;
-                    }
-                    continue;
-                }
-
-                boolean subject = section.startsWith("Subject:");
-                boolean salutation = section.toLowerCase().startsWith("to whomsoever");
-                boolean signature = section.startsWith("Best Regards,");
-                if (signature) {
-                    drawSignatureBlock(content, marginX, Math.max(y, 326));
-                    y = 306;
-                    continue;
-                }
-                PDType1Font font = subject || salutation || signature ? PDType1Font.HELVETICA_BOLD : PDType1Font.HELVETICA;
-                float fontSize = subject || salutation ? 11.5f : 10.7f;
-                float leading = subject || signature ? 15 : 14.5f;
-                String[] paragraphLines = section.split("\\R");
-                for (int paragraphIndex = 0; paragraphIndex < paragraphLines.length; paragraphIndex++) {
-                    String paragraphLine = paragraphLines[paragraphIndex];
-                    for (String line : wrapLine(paragraphLine, font, fontSize, maxWidth)) {
-                        if (y < bodyBottom) {
-                            break;
-                        }
-                        if (salutation) {
-                            drawCenteredText(content, mediaBox.getWidth() / 2, y, line, font, fontSize);
-                        } else {
-                            drawText(content, marginX, y, line, font, fontSize);
-                        }
-                        y -= leading;
-                    }
-                }
-                y -= subject ? 13 : 9;
-            }
-
-            drawEmployerInformation(content, marginX, 240, maxWidth, employerSection);
-            drawCompanyFooter(content, mediaBox.getWidth() / 2, footerSection);
-        }
-    }
-
-    private void drawText(PDPageContentStream content, float x, float y, String text, PDType1Font font, float fontSize) throws IOException {
-        content.beginText();
-        content.setFont(font, fontSize);
-        content.newLineAtOffset(x, y);
-        content.showText(sanitizePdfText(text));
-        content.endText();
-    }
-
-    private void drawRightAlignedText(PDPageContentStream content, float rightX, float y, String text, PDType1Font font, float fontSize) throws IOException {
-        float x = rightX - textWidth(text, font, fontSize);
-        drawText(content, x, y, text, font, fontSize);
-    }
-
-    private void drawCenteredText(PDPageContentStream content, float centerX, float y, String text, PDType1Font font, float fontSize) throws IOException {
-        float x = centerX - (textWidth(text, font, fontSize) / 2);
-        drawText(content, x, y, text, font, fontSize);
-    }
-
-    private void drawSignatureLine(PDPageContentStream content, float x, float y) throws IOException {
-        content.setStrokingColor(116, 132, 148);
-        content.setLineWidth(0.6f);
-        content.moveTo(x, y);
-        content.lineTo(x + 190, y);
-        content.stroke();
-        content.setNonStrokingColor(34, 41, 47);
-    }
-
-    private void drawSignatureBlock(PDPageContentStream content, float x, float y) throws IOException {
-        drawText(content, x, y, "Best Regards,", PDType1Font.HELVETICA_BOLD, 10.7f);
-        drawSignatureLine(content, x, y - 42);
-        drawText(content, x, y - 58, "Syed Hussain", PDType1Font.HELVETICA, 10.7f);
-        drawText(content, x, y - 73, "Manager", PDType1Font.HELVETICA, 10.2f);
-    }
-
-    private void drawFooterRule(PDPageContentStream content, float x, float y, float width) throws IOException {
-        content.setStrokingColor(190, 202, 215);
-        content.setLineWidth(0.8f);
-        content.moveTo(x, y);
-        content.lineTo(x + width, y);
-        content.stroke();
-        content.setNonStrokingColor(34, 41, 47);
-    }
-
-    private void drawEmployerInformation(PDPageContentStream content, float marginX, float topY, float maxWidth, String employerSection) throws IOException {
-        if (employerSection == null || employerSection.isBlank()) {
-            return;
-        }
-
-        float y = topY;
-        content.setNonStrokingColor(236, 244, 255);
-        content.addRect(marginX - 12, y - 126, maxWidth + 24, 148);
-        content.fill();
-
-        content.setStrokingColor(0, 102, 204);
-        content.setLineWidth(1.1f);
-        content.moveTo(marginX, y);
-        content.lineTo(marginX + maxWidth, y);
-        content.stroke();
-
-        String[] lines = employerSection.split("\\R");
-        drawText(content, marginX + 16, y - 12, lines[0], PDType1Font.HELVETICA_BOLD, 11.2f);
-        y -= 36;
-
-        content.setNonStrokingColor(72, 84, 96);
-        float labelRightX = marginX + 212;
-        float valueX = marginX + 238;
-        for (int index = 1; index < lines.length; index++) {
-            String[] parts = lines[index].split(":", 2);
-            String label = parts[0] + ":";
-            String value = parts.length > 1 ? parts[1].trim() : "";
-            drawRightAlignedText(content, labelRightX, y, label, PDType1Font.HELVETICA_BOLD, 9.8f);
-            drawText(content, valueX, y, value, PDType1Font.HELVETICA, 9.8f);
-            y -= 18.5f;
-        }
-        content.setNonStrokingColor(34, 41, 47);
-    }
-
-    private void drawCompanyFooter(PDPageContentStream content, float centerX, String footerSection) throws IOException {
-        if (footerSection == null || footerSection.isBlank()) {
-            return;
-        }
-
-        String[] lines = footerSection.split("\\R");
-        float y = 50;
-        content.setNonStrokingColor(0, 102, 204);
-        drawCenteredText(content, centerX, y, lines[0], PDType1Font.HELVETICA_BOLD, 8.8f);
-        y -= 13;
-
-        content.setNonStrokingColor(72, 84, 96);
-        if (lines.length > 1) {
-            drawCenteredText(content, centerX, y, lines[1], PDType1Font.HELVETICA, 8.2f);
-        }
-        content.setNonStrokingColor(34, 41, 47);
-    }
-
-    private List<String> wrapLine(String text, PDType1Font font, float fontSize, float maxWidth) throws IOException {
-        List<String> lines = new ArrayList<>();
-        StringBuilder line = new StringBuilder();
-        for (String word : text.split("\\s+")) {
-            String candidate = line.isEmpty() ? word : line + " " + word;
-            if (!line.isEmpty() && textWidth(candidate, font, fontSize) > maxWidth) {
-                lines.add(line.toString());
-                line = new StringBuilder(word);
-            } else {
-                line = new StringBuilder(candidate);
-            }
-        }
-        if (!line.isEmpty()) {
-            lines.add(line.toString());
-        }
-        return lines;
-    }
-
-    private float textWidth(String text, PDType1Font font, float fontSize) throws IOException {
-        return font.getStringWidth(sanitizePdfText(text)) / 1000 * fontSize;
-    }
-
-    private String sanitizePdfText(String value) {
-        return value.replace('\u2019', '\'')
-                .replace('\u2018', '\'')
-                .replace('\u201c', '"')
-                .replace('\u201d', '"')
-                .replace('\u2013', '-')
-                .replace('\u2014', '-')
-                .replace('\u00a0', ' ')
-                .replaceAll("[^\\x20-\\x7E]", "");
     }
 
     private String displayType(LetterRequestType type) {

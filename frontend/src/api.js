@@ -153,6 +153,10 @@ export const reportsAPI = {
     params: { year, month, ...(userIds.length ? { userIds: userIds.join(',') } : {}) },
     responseType: 'blob',
   }),
+  exportProjectTimesheets: (submissionIds = []) => apiClient.get('/reports/project-timesheets/export', {
+    params: { submissionIds: submissionIds.join(',') },
+    responseType: 'blob',
+  }),
   exportSingleTimesheet: (timesheetId) => apiClient.get(`/reports/timesheets/${timesheetId}/export`, {
     responseType: 'blob',
   }),

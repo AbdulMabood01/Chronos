@@ -1,6 +1,8 @@
+import ScreenTitle, { RecordSummary } from '../components/ScreenTitle';
+import { formatDate } from '../utils/dates';
 import React, { useEffect, useMemo, useState } from 'react';
 import { vacationAPI } from '../api';
-import { differenceInCalendarDays, format } from 'date-fns';
+import { differenceInCalendarDays, parseISO } from 'date-fns';
 import { LoadingIndicator } from '../components/Hourglass';
 import '../styles.css';
 
@@ -11,9 +13,6 @@ const emptyForm = {
   notes: '',
 };
 
-function formatDate(value) {
-  return value ? format(new Date(value), 'MMM dd, yyyy') : '-';
-}
 
 export default function VacationRequests() {
   const [requests, setRequests] = useState([]);
@@ -29,7 +28,7 @@ export default function VacationRequests() {
 
   const requestedDays = useMemo(() => {
     if (!formData.startDate || !formData.endDate) return 0;
-    return Math.max(0, differenceInCalendarDays(new Date(formData.endDate), new Date(formData.startDate)) + 1);
+    return Math.max(0, differenceInCalendarDays(parseISO(formData.endDate), parseISO(formData.startDate)) + 1);
   }, [formData.endDate, formData.startDate]);
 
   const loadRequests = async () => {
@@ -139,7 +138,7 @@ export default function VacationRequests() {
     <div className="page-container vacation-page">
       <div className="header-bar">
         <div>
-          <h1>Vacation Requests</h1>
+          <ScreenTitle title="Vacation Requests" icon="calendar" eyebrow="TIME TO RECHARGE" />
           <p className="page-subtitle">Create, edit, and resubmit time-off requests.</p>
         </div>
         <button className="button button-secondary" onClick={startNewRequest} type="button">
@@ -147,7 +146,8 @@ export default function VacationRequests() {
         </button>
       </div>
 
-      {error && <div className="error-message">{error}</div>}
+      <RecordSummary items={[{ label: 'Total requests', value: requests.length, icon: 'calendar' }, { label: 'Awaiting approval', value: requests.filter(r => r.status === 'SUBMITTED').length, icon: 'clock' }, { label: 'Approved days', value: approvedDays.toFixed(1), icon: 'check' }]} />
+      {error && <div className="error-message" role="alert">{error}</div>}
 
       <div className="vacation-layout">
         <form className="card vacation-editor" onSubmit={handleSave}>
@@ -161,8 +161,8 @@ export default function VacationRequests() {
 
           <div className="form-row">
             <div className="form-group">
-              <label>Start Date</label>
-              <input
+              <label htmlFor="vacationrequests-field-1">Start Date</label>
+              <input id="vacationrequests-field-1"
                 type="date"
                 value={formData.startDate}
                 onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
@@ -170,8 +170,8 @@ export default function VacationRequests() {
               />
             </div>
             <div className="form-group">
-              <label>End Date</label>
-              <input
+              <label htmlFor="vacationrequests-field-2">End Date</label>
+              <input id="vacationrequests-field-2"
                 type="date"
                 value={formData.endDate}
                 onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
@@ -182,8 +182,8 @@ export default function VacationRequests() {
 
           <div className="form-row">
             <div className="form-group">
-              <label>Type</label>
-              <select
+              <label htmlFor="vacationrequests-field-3">Type</label>
+              <select id="vacationrequests-field-3"
                 value={formData.vacationType}
                 onChange={(e) => setFormData({ ...formData, vacationType: e.target.value })}
               >
@@ -194,14 +194,14 @@ export default function VacationRequests() {
               </select>
             </div>
             <div className="form-group">
-              <label>Status</label>
-              <input value={editingRequest ? editingRequest.status : 'DRAFT'} disabled />
+              <label htmlFor="vacationrequests-field-4">Status</label>
+              <input id="vacationrequests-field-4" value={editingRequest ? editingRequest.status : 'DRAFT'} disabled />
             </div>
           </div>
 
           <div className="form-group">
-            <label>Notes</label>
-            <textarea
+            <label htmlFor="vacationrequests-field-5">Notes</label>
+            <textarea id="vacationrequests-field-5"
               value={formData.notes}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
               placeholder="Add schedule details or context for approvers"

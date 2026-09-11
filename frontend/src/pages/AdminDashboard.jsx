@@ -1,14 +1,12 @@
+import ScreenTitle from '../components/ScreenTitle';
+import { formatDate } from '../utils/dates';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { letterRequestAPI, timesheetAPI, vacationAPI } from '../api';
-import { format } from 'date-fns';
 import { LoadingIndicator } from '../components/Hourglass';
 import '../styles.css';
 
-function formatDate(value) {
-  return value ? format(new Date(value), 'MMM dd, yyyy') : '-';
-}
 
 function formatLetterType(value) {
   return {
@@ -28,24 +26,31 @@ export default function AdminDashboard() {
   const [error, setError] = useState('');
   const [rejectingTask, setRejectingTask] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
-  const isReviewer = ['PROJECT_MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user?.role);
+  const isReviewer = user?.canReviewProjects || ['ADMIN', 'SUPER_ADMIN'].includes(user?.role);
+  const canReviewLetters = user?.role === 'SUPER_ADMIN';
 
   useEffect(() => {
     if (!isReviewer) return;
     loadPendingItems();
-  }, [isReviewer]);
+  }, [isReviewer, canReviewLetters]);
 
   const loadPendingItems = async () => {
     try {
-      const [timesheetRes, vacationRes, letterRes] = await Promise.allSettled([
+      const requests = [
         timesheetAPI.getPendingProjectSubmissions(),
         vacationAPI.getPendingRequests(),
-        letterRequestAPI.getPendingRequests(),
-      ]);
-      setPendingTimesheets(timesheetRes.status === 'fulfilled' ? timesheetRes.value.data || [] : []);
-      setPendingVacations(vacationRes.status === 'fulfilled' ? vacationRes.value.data || [] : []);
-      setPendingLetters(letterRes.status === 'fulfilled' ? letterRes.value.data || [] : []);
-      setError(letterRes.status === 'rejected' ? 'Letter requests could not be loaded. Other pending tasks are still shown.' : '');
+      ];
+      if (canReviewLetters) {
+        requests.push(letterRequestAPI.getPendingRequests());
+      }
+      const [timesheetRes, vacationRes, letterRes] = await Promise.allSettled(requests);
+      if (timesheetRes.status === 'fulfilled') setPendingTimesheets(timesheetRes.value.data || []);
+      if (vacationRes.status === 'fulfilled') setPendingVacations(vacationRes.value.data || []);
+      if (canReviewLetters && letterRes?.status === 'fulfilled') setPendingLetters(letterRes.value.data || []);
+      if (!canReviewLetters) setPendingLetters([]);
+      const failed = [[timesheetRes, 'timesheets'], [vacationRes, 'vacation requests'], [letterRes, 'letters']]
+        .filter(([result]) => result?.status === 'rejected').map(([, label]) => label);
+      setError(failed.length ? 'Could not refresh ' + failed.join(', ') + '. Previously loaded items may be out of date. Please retry.' : '');
     } catch (err) {
       setError('Failed to load pending tasks');
       console.error(err);
@@ -156,7 +161,7 @@ export default function AdminDashboard() {
     <div className="page-container admin-page">
       <div className="admin-hero">
         <div>
-          <h1>Admin Dashboard</h1>
+          <ScreenTitle title="Admin Dashboard" icon="check" eyebrow="REVIEW & APPROVE" />
           <p className="page-subtitle">Approvals, changes, and operational work that needs attention.</p>
         </div>
         <div className="admin-stats">
@@ -175,19 +180,19 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {error && <div className="error-message">{error}</div>}
+      {error && <div className="error-message">{error} <button type="button" onClick={loadPendingItems}>Retry</button></div>}
 
       <section className="admin-panel">
         <div className="panel-heading">
           <div>
             <h2>Pending Tasks</h2>
-            <p>{pendingTasks.length === 0 ? 'Everything is clear.' : 'Review each item and take action.'}</p>
+            <p>{error ? 'Some queues could not be refreshed.' : pendingTasks.length === 0 ? 'Everything is clear.' : 'Review each item and take action.'}</p>
           </div>
         </div>
 
         {pendingTasks.length === 0 ? (
           <div className="empty-state">
-            <p>No pending tasks.</p>
+            <p>{error ? 'Pending tasks could not be confirmed.' : 'No pending tasks.'}</p>
           </div>
         ) : (
           <div className="task-list">

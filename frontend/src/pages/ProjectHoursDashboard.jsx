@@ -1,3 +1,4 @@
+import ScreenTitle from '../components/ScreenTitle';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format, startOfMonth, subMonths } from 'date-fns';
@@ -32,7 +33,8 @@ export default function ProjectHoursDashboard() {
   const [plannedHourDrafts, setPlannedHourDrafts] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const canView = ['PROJECT_MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(user?.role);
+  const canView = user?.canReviewProjects || ['ADMIN', 'SUPER_ADMIN'].includes(user?.role);
+  const canPlan = canView && user?.role !== 'SUPER_ADMIN';
 
   const selectedOption = options.find((option) => option.value === selectedPeriod) || options[0];
 
@@ -70,6 +72,7 @@ export default function ProjectHoursDashboard() {
   }), { planned: 0, logged: 0, submitted: 0, approved: 0, rejected: 0 }), [projects]);
 
   const updatePlannedHours = async (projectId, userId, value) => {
+    if (!canPlan) return;
     const parsed = String(value ?? '').trim();
     if (parsed !== '' && (Number.isNaN(Number(parsed)) || Number(parsed) < 0)) {
       setError('Planned hours must be a positive number');
@@ -92,7 +95,7 @@ export default function ProjectHoursDashboard() {
     <div className="page-container admin-page">
       <div className="header-bar">
         <div>
-          <h1>Project Hours</h1>
+          <ScreenTitle title="Project Hours" icon="chart" eyebrow="CAPACITY & DELIVERY" />
           <p className="page-subtitle">Planned, logged, submitted, and approved hours by project.</p>
         </div>
         <div className="month-select-row">
@@ -162,6 +165,7 @@ export default function ProjectHoursDashboard() {
                         <td>
                           <input
                             className="table-hours-input"
+                            disabled={!canPlan}
                             type="number"
                             min="0"
                             step="0.5"

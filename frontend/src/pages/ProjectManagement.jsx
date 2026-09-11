@@ -1,16 +1,19 @@
+import ScreenTitle from '../components/ScreenTitle';
+import Icon from '../components/Icon';
 import React, { useEffect, useMemo, useState } from 'react';
 import { format, startOfMonth, subMonths } from 'date-fns';
 import { projectAPI, userAPI } from '../api';
 import { useAuth } from '../AuthContext';
 import { LoadingIndicator } from '../components/Hourglass';
 import '../styles.css';
+import './ProjectManagement.css';
 
 const projectStatuses = ['DRAFT', 'ACTIVE', 'ON_HOLD', 'COMPLETED', 'ARCHIVED'];
 const projectTabs = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'team', label: 'Team' },
-  { id: 'hours', label: 'Hours' },
-  { id: 'settings', label: 'Project Details' },
+  { id: 'overview', label: 'Overview', icon: 'grid' },
+  { id: 'team', label: 'Team', icon: 'users' },
+  { id: 'hours', label: 'Hours', icon: 'clock' },
+  { id: 'settings', label: 'Project Details', icon: 'settings' },
 ];
 
 const emptyForm = {
@@ -18,7 +21,6 @@ const emptyForm = {
   name: '',
   description: '',
   status: 'ACTIVE',
-  totalAllocatedHours: '',
   projectManagerId: '',
   projectManagerHoursApproverId: '',
   isActive: true,
@@ -39,6 +41,11 @@ function monthOptions() {
 
 function hours(value) {
   return Number(value || 0).toFixed(2);
+}
+
+function percent(value, total) {
+  if (!total) return 0;
+  return Math.max(0, Math.min(100, (Number(value || 0) / total) * 100));
 }
 
 function dateText(value) {
@@ -84,7 +91,8 @@ export default function ProjectManagement() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const canManage = ['ADMIN', 'SUPER_ADMIN'].includes(user?.role);
+  const canView = ['ADMIN', 'SUPER_ADMIN'].includes(user?.role);
+  const canManage = user?.role === 'ADMIN';
   const selectedOption = options.find((option) => option.value === selectedPeriod) || options[0];
   const activeUsers = useMemo(() => users.filter((item) => item.isActive), [users]);
   const selectedProject = isCreatingProject ? null : projects.find((project) => project.id === selectedProjectId) || null;
@@ -93,15 +101,15 @@ export default function ProjectManagement() {
   const historicalAssignments = (selectedProject?.assignments || []).filter((assignment) => !assignment.isActive);
 
   useEffect(() => {
-    if (!canManage) return;
+    if (!canView) return;
     loadData();
-  }, [canManage, selectedPeriod]);
+  }, [canView, selectedPeriod]);
 
-  const seedDrafts = (loadedProjects, loadedDashboard) => {
+  const seedDrafts = (loadedProjects) => {
     const hourDrafts = {};
-    loadedDashboard.forEach((project) => {
-      (project.employees || []).forEach((employee) => {
-        hourDrafts[`${project.projectId}:${employee.userId}`] = employee.plannedHours ?? '';
+    loadedProjects.forEach((project) => {
+      (project.assignments || []).forEach((resource) => {
+        hourDrafts[`${project.id}:${resource.userId}`] = resource.plannedHours ?? '';
       });
     });
     const dateDrafts = {};
@@ -123,7 +131,7 @@ export default function ProjectManagement() {
     try {
       const [projectRes, userRes, dashboardRes] = await Promise.all([
         projectAPI.getProjects(),
-        userAPI.getAllUsersAsAdmin(),
+        userAPI.getAllUsers(),
         projectAPI.getHoursDashboard(selectedOption.year, selectedOption.month),
       ]);
       const loadedProjects = projectRes.data || [];
@@ -131,7 +139,7 @@ export default function ProjectManagement() {
       setProjects(loadedProjects);
       setUsers(userRes.data || []);
       setDashboardProjects(loadedDashboard);
-      seedDrafts(loadedProjects, loadedDashboard);
+      seedDrafts(loadedProjects);
       if (selectedProjectId && !loadedProjects.some((project) => project.id === selectedProjectId)) {
         setSelectedProjectId(null);
         setProjectSearch('');
@@ -158,7 +166,6 @@ export default function ProjectManagement() {
       name: project?.name || '',
       description: project?.description || '',
       status: project?.status || (project?.isActive ? 'ACTIVE' : 'ARCHIVED'),
-      totalAllocatedHours: project?.totalAllocatedHours ?? '',
       projectManagerId: project?.projectManagerId || '',
       projectManagerHoursApproverId: project?.projectManagerHoursApproverId || '',
       isActive: project?.isActive ?? true,
@@ -177,6 +184,19 @@ export default function ProjectManagement() {
     setForm(emptyForm);
   };
 
+  const cancelProjectEdit = () => {
+    if (selectedProject) {
+      selectProject(selectedProject);
+    } else {
+      setIsCreatingProject(false);
+      setSelectedProjectId(null);
+      setProjectSearch('');
+      setForm(emptyForm);
+      setActiveTab('overview');
+    }
+    setError('');
+  };
+
   const filteredProjects = projects.filter((project) => {
     if (projectFilter === 'ACTIVE' && project.status !== 'ACTIVE') return false;
     if (projectFilter === 'DRAFT' && project.status !== 'DRAFT') return false;
@@ -188,17 +208,15 @@ export default function ProjectManagement() {
     if (projectFilter === 'no-team' && (project.assignments || []).some((assignment) => assignment.isActive)) return false;
     if (projectFilter === 'over-plan') {
       const dashboard = dashboardProjects.find((item) => item.projectId === project.id);
-      const budget = Number(project.totalAllocatedHours || dashboard?.plannedHours || 0);
+      const budget = (project.assignments || []).reduce((total, resource) => total + Number(resource.plannedHours || 0), 0);
       if (!budget || Number(dashboard?.totalLoggedHours || 0) <= budget) return false;
     }
     return true;
   });
   const searchText = projectSearch.trim().toLowerCase();
-  const projectSuggestions = searchText
-    ? filteredProjects
-        .filter((project) => `${project.name} ${project.code}`.toLowerCase().includes(searchText))
-        .slice(0, 8)
-    : [];
+  const visibleProjects = filteredProjects.filter((project) =>
+    !searchText || `${project.name} ${project.code}`.toLowerCase().includes(searchText)
+  );
 
   const handleProjectSearch = (value) => {
     setProjectSearch(value);
@@ -210,6 +228,7 @@ export default function ProjectManagement() {
 
   const saveProject = async (event) => {
     event.preventDefault();
+    if (!canManage) return;
     if (!form.projectManagerId || !form.projectManagerHoursApproverId) {
       setError('Project Manager and PM Hours Approver are required');
       return;
@@ -218,15 +237,9 @@ export default function ProjectManagement() {
       setError('Project Manager cannot approve their own hours');
       return;
     }
-    const allocated = String(form.totalAllocatedHours ?? '').trim();
-    if (allocated !== '' && (Number.isNaN(Number(allocated)) || Number(allocated) < 0)) {
-      setError('Total allocated hours must be zero or more');
-      return;
-    }
     const payload = {
       ...form,
       isActive: form.status === 'ACTIVE',
-      totalAllocatedHours: allocated === '' ? null : Number(allocated),
       projectManagerId: Number(form.projectManagerId),
       projectManagerHoursApproverId: Number(form.projectManagerHoursApproverId),
     };
@@ -244,6 +257,7 @@ export default function ProjectManagement() {
   };
 
   const assignEmployee = async () => {
+    if (!canManage) return;
     if (!selectedProject?.id || !assignDraft) return;
     if (!assignStartDate || !assignEndDate || assignBillRate === '') {
       setError('Start date, end date, and bill rate are required to assign an employee');
@@ -279,6 +293,7 @@ export default function ProjectManagement() {
   };
 
   const updateAssignmentDates = async (assignment) => {
+    if (!canManage) return;
     const key = `${selectedProject.id}:${assignment.userId}`;
     const draft = assignmentDateDrafts[key] || {};
     if (!draft.startDate || !draft.endDate || draft.billRate === '') {
@@ -303,6 +318,7 @@ export default function ProjectManagement() {
   };
 
   const endAssignment = async (userId) => {
+    if (!canManage) return;
     if (!selectedProject?.id) return;
     try {
       await projectAPI.removeEmployee(selectedProject.id, userId);
@@ -313,13 +329,14 @@ export default function ProjectManagement() {
   };
 
   const updatePlannedHours = async (projectId, userId, value) => {
+    if (!canManage) return;
     const parsed = String(value ?? '').trim();
     if (parsed !== '' && (Number.isNaN(Number(parsed)) || Number(parsed) < 0)) {
       setError('Planned hours must be a positive number');
       return;
     }
     try {
-      await projectAPI.updatePlannedHours(projectId, userId, parsed, selectedOption.year, selectedOption.month);
+      await projectAPI.updatePlannedHours(projectId, userId, parsed);
       await loadData();
       setError('');
     } catch (err) {
@@ -329,15 +346,24 @@ export default function ProjectManagement() {
 
   const totals = selectedDashboard || {};
   const warnings = selectedProject ? setupWarnings(selectedProject) : [];
-  const planned = Number(totals.plannedHours || 0);
-  const budget = Number(selectedProject?.totalAllocatedHours || planned || 0);
+
   const logged = Number(totals.totalLoggedHours || 0);
+  const submitted = Number(totals.submittedHours || 0);
   const approved = Number(totals.approvedHours || 0);
+  const resources = selectedProject?.assignments || [];
+  const projectHours = resources.reduce((total, resource) => total + Number(resource.plannedHours || 0), 0);
+  const allocationColors = ['#278569', '#518eae', '#bf861f', '#cf5267', '#8b6ab1', '#578443'];
+  let allocationEnd = 0;
+  const allocationSegments = resources.filter((resource) => Number(resource.plannedHours) > 0).map((resource, index) => {
+    const start = allocationEnd;
+    allocationEnd += percent(resource.plannedHours, projectHours) * 3.6;
+    return `${allocationColors[index % allocationColors.length]} ${start}deg ${allocationEnd}deg`;
+  });
   const unassignedUsers = activeUsers.filter((item) =>
     !(selectedProject?.assignments || []).some((assignment) => assignment.userId === item.id && assignment.isActive)
   );
 
-  if (!canManage) {
+  if (!canView) {
     return <div className="page-container"><div className="error-message">You do not have permission to access this page.</div></div>;
   }
 
@@ -349,37 +375,19 @@ export default function ProjectManagement() {
     <div className="page-container admin-page projects-workspace-page">
       <div className="header-bar project-command-header">
         <div>
-          <h1>Project Control</h1>
-          <p className="page-subtitle">Setup, staffing, hours, approvals.</p>
+          <ScreenTitle title="Project Control" icon="briefcase" eyebrow="PROJECT OPERATIONS" />
+          <p className="page-subtitle">Keep your projects, people, and delivery plans in focus.</p>
         </div>
-        <button className="button button-secondary" type="button" onClick={startNewProject}>New Project</button>
+        {canManage && <button className="button button-primary" type="button" onClick={startNewProject}><span aria-hidden="true">+</span> New Project</button>}
       </div>
 
-      {error && <div className="error-message">{error}</div>}
+      {error && <div className="error-message" role="alert">{error}</div>}
 
       <section className="admin-panel project-selector-panel">
         <div className="project-search-field">
           <label htmlFor="project-search">Project Name</label>
-          <input id="project-search" placeholder="Type project name" value={projectSearch} onChange={(event) => handleProjectSearch(event.target.value)} />
-          {projectSuggestions.length > 0 && !isCreatingProject && (
-            <div className="project-suggestion-list">
-              {projectSuggestions.map((project) => (
-                <button key={project.id} type="button" onClick={() => selectProject(project)}>
-                  <strong>{project.name}</strong>
-                  <span>{project.code} · {labelize(project.status)}</span>
-                </button>
-              ))}
-            </div>
-          )}
-          {searchText && projectSuggestions.length === 0 && !isCreatingProject && (
-            <div className="project-suggestion-empty">No matching projects in this filter.</div>
-          )}
-        </div>
-        <div className="month-select-row">
-          <label htmlFor="project-plan-month">Month</label>
-          <select id="project-plan-month" value={selectedPeriod} onChange={(event) => setSelectedPeriod(event.target.value)}>
-            {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </select>
+          <div className="pc-search-input"><Icon name="search" size={18} /><input id="project-search" placeholder="Search by project name or code" autoComplete="off" value={projectSearch} onChange={(event) => handleProjectSearch(event.target.value)} />{projectSearch && <button className="pc-clear-search" type="button" aria-label="Clear project selection" onClick={() => selectProject(null)}><Icon name="close" size={16} /></button>}</div>
+
         </div>
         <div className="month-select-row">
           <label htmlFor="project-filter">Filter</label>
@@ -405,19 +413,37 @@ export default function ProjectManagement() {
             <option value="over-plan">Over plan</option>
           </select>
         </div>
+        <div className="month-select-row">
+          <label htmlFor="project-period">Reporting month</label>
+          <select id="project-period" value={selectedPeriod} onChange={(event) => setSelectedPeriod(event.target.value)}>
+            {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </div>
       </section>
 
       {!selectedProject && !isCreatingProject ? (
-        <section className="admin-panel project-empty-panel">
-          <h2>Select a project</h2>
-          <p>Type a project name above, then choose one from the suggestions. Use the status filter to view completed or archived projects.</p>
+        <section className="admin-panel pc-project-library">
+          <div className="project-section-heading"><div><span>YOUR WORKSPACE</span><h2>Select a project</h2></div><p>{visibleProjects.length} project{visibleProjects.length === 1 ? '' : 's'}</p></div>
+          <p className="pc-muted">Open a project to review progress, manage its team, and plan hours.</p>
+          <div className="pc-project-grid">
+            {visibleProjects.map((project) => (
+              <button className="pc-project-card" key={project.id} type="button" onClick={() => selectProject(project)}>
+                <span className="pc-card-top"><span className="pc-project-code">{project.code}</span><span className={statusClass(project.status)}>{labelize(project.status)}</span></span>
+                <strong>{project.name}</strong>
+                <span className="pc-muted">{project.projectManagerName || 'Project manager not assigned'}</span>
+                <span className="pc-card-footer"><span><Icon name="users" size={16} /> {(project.assignments || []).filter((item) => item.isActive).length} members</span><Icon name="arrow" size={18} /></span>
+              </button>
+            ))}
+          </div>
+          {!visibleProjects.length && <div className="pc-empty"><Icon name="briefcase" size={32} /><h3>No projects found</h3><p>Try another name or change the status filter.</p></div>}
         </section>
       ) : (
-      <form className="admin-panel form project-identity-panel" onSubmit={saveProject}>
+      <form className="admin-panel form project-identity-panel" onSubmit={(event) => { if (canManage) saveProject(event); else event.preventDefault(); }}>
         <div className="panel-heading">
           <div>
-            <h2>{selectedProject ? `${selectedProject.code} - ${selectedProject.name}` : 'New Project'}</h2>
-            <p>{selectedProject ? 'Routing and controls' : 'PM and approver required'}</p>
+            <span className="pc-project-code">{selectedProject?.code || 'NEW WORKSPACE'}</span>
+            <h2>{selectedProject ? selectedProject.name : 'New Project'}</h2>
+            <p>{selectedProject ? selectedProject.description || 'Manage delivery, staffing, and approvals in one place.' : 'Start with the essentials. Add your team after creating the project.'}</p>
           </div>
           <span className={statusClass(selectedProject?.status || form.status)}>{labelize(selectedProject?.status || form.status)}</span>
         </div>
@@ -429,34 +455,77 @@ export default function ProjectManagement() {
               disabled={isCreatingProject && tab.id !== 'settings'}
               key={tab.id}
               type="button"
+              aria-pressed={activeTab === tab.id}
+              aria-controls="project-tab-content"
               onClick={() => setActiveTab(tab.id)}
             >
-              {tab.label}
+              <Icon name={tab.icon} size={17} />{tab.label}
             </button>
           ))}
         </div>
 
+        <fieldset id="project-tab-content" disabled={!canManage} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
         {activeTab === 'overview' && selectedProject && (
           <>
-            <div className="project-health-strip">
-              <div><span>Budget</span><strong>{hours(budget)}</strong></div>
-              <div><span>Planned</span><strong>{hours(planned)}</strong></div>
-              <div><span>Logged</span><strong>{hours(logged)}</strong></div>
-              <div><span>Approved</span><strong>{hours(approved)}</strong></div>
-              <div><span>Alerts</span><strong>{warnings.length}</strong></div>
+            <div className="project-section-heading pc-overview-heading"><div><span>PROJECT SNAPSHOT</span><h3>Every hour, accounted for</h3></div><p>{selectedOption.label}</p></div>
+            <div className="project-mini-metrics pc-overview-metrics">
+              <div><Icon name="calendar" size={18} /><span>Total project hours</span><strong>{projectHours == null ? 'Not set' : hours(projectHours)} {projectHours != null && <small>hrs</small>}</strong></div>
+              <div><Icon name="clock" size={18} /><span>Logged hours</span><strong>{hours(logged)} <small>hrs</small></strong></div>
+              <div><Icon name="check" size={18} /><span>Approved hours</span><strong>{hours(approved)} <small>hrs</small></strong></div>
+              <div><Icon name="users" size={18} /><span>Active members</span><strong>{activeAssignments.length} <small>people</small></strong></div>
             </div>
-            <div className="project-routing-grid">
-              <div><span>Employee approvals</span><strong>{selectedProject.projectManagerName || '-'}</strong></div>
-              <div><span>PM hours approval</span><strong>{selectedProject.projectManagerHoursApproverName || '-'}</strong></div>
-              <div><span>Team</span><strong>{activeAssignments.length} active / {historicalAssignments.length} ended</strong></div>
-              <div><span>Setup</span><strong>{warnings.length ? warnings.join(', ') : 'Ready'}</strong></div>
+            <div className="project-overview-hero">
+              <div className="project-donut-card">
+                <div className="project-donut-left">
+                  <div className="project-status-donut" role="img" aria-label={`Total project hours: ${hours(projectHours)}, summed across all project resources`} style={{ background: `radial-gradient(circle at center, var(--surface-color) 0 56%, transparent 57%), conic-gradient(${allocationSegments.length ? allocationSegments.join(', ') : 'var(--border-color) 0deg 360deg'})` }}>
+                    <span>{hours(projectHours)}</span>
+                    <small>total project hours</small>
+                  </div>
+                  <div className="project-chart-legend">
+                    {resources.filter((resource) => Number(resource.plannedHours) > 0).map((resource, index) => <span key={resource.id || resource.userId}><i style={{ background: allocationColors[index % allocationColors.length] }} />{resource.userName}<strong>{hours(resource.plannedHours)}</strong></span>)}
+                    {projectHours === 0 && <span>No resource hours assigned yet.</span>}
+                  </div>
+                </div>
+                <aside className="project-insight-panel" aria-label="Project overview details">
+                  <div className="project-insight-header">
+                    <span>PROJECT HEALTH</span>
+                    <strong>{warnings.length ? `${warnings.length} setup alert${warnings.length === 1 ? '' : 's'}` : 'Ready to run'}</strong>
+                  </div>
+                  <div className="project-insight-grid">
+                    <div><span>Project Manager</span><strong>{selectedProject.projectManagerName || '-'}</strong></div>
+                    <div><span>PM Hours Approver</span><strong>{selectedProject.projectManagerHoursApproverName || '-'}</strong></div>
+                    <div><span>Active Team</span><strong>{activeAssignments.length}</strong></div>
+                    <div><span>Ended Assignments</span><strong>{historicalAssignments.length}</strong></div>
+                    <div><span>Total project hours</span><strong>{hours(projectHours)} hrs</strong></div>
+                    <div><span>Resources with assigned hours</span><strong>{resources.filter((resource) => Number(resource.plannedHours) > 0).length}</strong></div>
+                  </div>
+                  <div className={warnings.length ? 'project-alert-card warning' : 'project-alert-card'}>
+                    <span>{warnings.length ? 'Needs attention' : 'Setup status'}</span>
+                    <strong>{warnings.length ? warnings.join(', ') : 'No setup issues found'}</strong>
+                  </div>
+                </aside>
+              </div>
+            </div>
+            <div className="pc-plan-progress">
+              <div><strong>Project hours used ({selectedOption.label})</strong><span>{Number(projectHours) > 0 ? `${Math.round(logged / projectHours * 100)}% of ${hours(projectHours)} total project hrs` : projectHours == null ? 'Total project hours not set' : '0.00 total project hrs'}</span></div>
+              <div className="pc-progress-track" role="meter" aria-label="Selected month usage of total project hours" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent(logged, Number(projectHours))} aria-valuetext={`${hours(logged)} hours logged in ${selectedOption.label}; total project hours: ${projectHours == null ? 'not set' : hours(projectHours)}`}><span style={{ width: `${percent(logged, Number(projectHours))}%` }} /></div>
+              <p>{hours(logged)} hrs logged in {selectedOption.label}. Total project hours are the sum of hours assigned to all project resources.</p>
             </div>
           </>
         )}
 
         {activeTab === 'team' && selectedProject && (
-          <>
-            <div className="assign-employee-panel">
+          <div className="project-tab-surface">
+            <div className="project-section-heading">
+              <div>
+                <span>TEAM SETUP</span>
+                <h3>Project members and billing windows</h3>
+              </div>
+              <p>{activeAssignments.length} active member{activeAssignments.length === 1 ? '' : 's'}</p>
+            </div>
+            <div className="pc-team-summary"><span><Icon name="users" size={18} /><strong>{activeAssignments.length}</strong> active members</span><span><strong>{historicalAssignments.length}</strong> ended assignments</span><span>PM: <strong>{selectedProject.projectManagerName || 'Not assigned'}</strong></span></div>
+            {canManage && <div className="pc-assignment-heading"><h4>Add a team member</h4><p>Set their assignment window and hourly bill rate.</p></div>}
+            {canManage && <div className="assign-employee-panel">
               <label className="compact-input-field">
                 <span>Employee</span>
                 <select
@@ -485,10 +554,10 @@ export default function ProjectManagement() {
                 <input required type="number" min="0" step="0.01" value={assignBillRate} onChange={(event) => setAssignBillRate(event.target.value)} placeholder="0.00" />
               </label>
               <button className="button button-small" type="button" onClick={assignEmployee} disabled={!assignDraft || !assignStartDate || !assignEndDate || assignBillRate === ''}>Assign</button>
-            </div>
+            </div>}
             <div className="table-container">
-              <table className="data-table">
-                <thead><tr><th>Employee</th><th>Designation</th><th>Start</th><th>End</th><th>Bill Rate</th><th>Status</th><th>Action</th></tr></thead>
+              <table className="data-table project-control-table">
+                <thead><tr><th>Employee</th><th>Designation</th><th>Start</th><th>End</th><th>Bill Rate</th><th>Status</th></tr></thead>
                 <tbody>
                   {(selectedProject.assignments || []).map((assignment) => {
                     const key = `${selectedProject.id}:${assignment.userId}`;
@@ -497,30 +566,38 @@ export default function ProjectManagement() {
                       <tr key={assignment.id || assignment.userId}>
                         <td><strong>{assignment.userName}</strong><div className="table-subtext">{assignment.email}</div></td>
                         <td>{assignment.jobTitle || '-'}</td>
-                        <td><input className="table-date-input" type="date" value={draft.startDate || ''} onChange={(event) => updateAssignmentDraft(assignment, 'startDate', event.target.value)} /></td>
-                        <td><input className="table-date-input" type="date" value={draft.endDate || ''} onChange={(event) => updateAssignmentDraft(assignment, 'endDate', event.target.value)} /></td>
-                        <td><input className="table-rate-input" type="number" min="0" step="0.01" value={draft.billRate ?? ''} onChange={(event) => updateAssignmentDraft(assignment, 'billRate', event.target.value)} /></td>
+                        <td><input className="table-date-input" aria-label={`Start date for ${assignment.userName}`} type="date" value={draft.startDate || ''} onChange={(event) => updateAssignmentDraft(assignment, 'startDate', event.target.value)} onBlur={() => updateAssignmentDates(assignment)} /></td>
+                        <td><input className="table-date-input" aria-label={`End date for ${assignment.userName}`} type="date" value={draft.endDate || ''} onChange={(event) => updateAssignmentDraft(assignment, 'endDate', event.target.value)} onBlur={() => updateAssignmentDates(assignment)} /></td>
+                        <td><input className="table-rate-input" aria-label={`Bill rate for ${assignment.userName}`} type="number" min="0" step="0.01" value={draft.billRate ?? ''} onChange={(event) => updateAssignmentDraft(assignment, 'billRate', event.target.value)} onBlur={() => updateAssignmentDates(assignment)} /></td>
                         <td><span className={assignment.isActive ? 'status-badge status-approved' : 'status-badge status-locked'}>{assignment.isActive ? 'Active' : 'Ended'}</span></td>
-                        <td>
-                          <div className="row-actions">
-                            <button className="button button-small button-secondary" type="button" onClick={() => updateAssignmentDates(assignment)}>Save</button>
-                            {assignment.isActive && <button className="button button-small button-secondary" type="button" onClick={() => endAssignment(assignment.userId)}>End</button>}
-                          </div>
-                        </td>
                       </tr>
                     );
                   })}
-                  {(selectedProject.assignments || []).length === 0 && <tr><td colSpan="7" className="text-center">No team assignments yet.</td></tr>}
+                  {(selectedProject.assignments || []).length === 0 && <tr><td colSpan="6" className="text-center">No team assignments yet.</td></tr>}
                 </tbody>
               </table>
             </div>
-          </>
+          </div>
         )}
 
         {activeTab === 'hours' && selectedProject && (
-          <div className="table-container">
-            <table className="data-table">
-              <thead><tr><th>Employee</th><th>Dates</th><th>Plan</th><th>Logged</th><th>Submitted</th><th>Approved</th><th>Status</th><th>Action</th></tr></thead>
+          <div className="project-tab-surface">
+            <div className="project-section-heading">
+              <div>
+                <span>HOURS CONTROL</span>
+                <h3>Project hours and approval status</h3>
+              </div>
+              <p>{selectedOption.label}</p>
+            </div>
+            <div className="project-mini-metrics">
+              <div><span>Total project hours</span><strong>{projectHours == null ? 'Not set' : hours(projectHours)}</strong></div>
+              <div><span>Logged</span><strong>{hours(logged)}</strong></div>
+              <div><span>Submitted</span><strong>{hours(submitted)}</strong></div>
+              <div><span>Approved</span><strong>{hours(approved)}</strong></div>
+            </div>
+            <div className="table-container">
+            <table className="data-table project-control-table">
+              <thead><tr><th>Employee</th><th>Dates</th><th>Assigned Project Hours</th><th>Logged</th><th>Submitted</th><th>Approved</th><th>Status</th></tr></thead>
               <tbody>
                 {(selectedDashboard?.employees || []).map((employee) => {
                   const draftKey = `${selectedProject.id}:${employee.userId}`;
@@ -544,64 +621,73 @@ export default function ProjectManagement() {
                       <td>{hours(employee.submittedHours)}</td>
                       <td>{hours(employee.approvedHours)}</td>
                       <td><span className={statusClass(employee.status)}>{labelize(employee.status || 'DRAFT')}</span></td>
-                      <td>{employee.timesheetId && <a className="button button-small button-secondary" href={`/timesheet/${employee.timesheetId}?projectId=${selectedProject.id}`}>Open</a>}</td>
                     </tr>
                   );
                 })}
-                {(selectedDashboard?.employees || []).length === 0 && <tr><td colSpan="8" className="text-center">No hours for {selectedOption.label}.</td></tr>}
+                {(selectedDashboard?.employees || []).length === 0 && <tr><td colSpan="7" className="text-center">No hours for {selectedOption.label}.</td></tr>}
               </tbody>
             </table>
+            </div>
           </div>
         )}
 
         {activeTab === 'settings' && (
-          <>
+          <div className="project-tab-surface project-details-surface">
+            <div className="project-section-heading">
+              <div>
+                <span>PROJECT DETAILS</span>
+                <h3>{selectedProject ? 'Edit project identity and routing' : 'Create a new project workspace'}</h3>
+              </div>
+              <p>{selectedProject ? 'Changes save when you submit' : 'Manager and approver are required'}</p>
+            </div>
+            <div className="pc-form-section-title"><Icon name="briefcase" size={19} /><div><h4>Project essentials</h4><p>Define the project identity and status. Total hours are calculated from resource assignments.</p></div></div>
             <div className="form-row">
               <div className="form-group">
-                <label>Project Code</label>
-                <input value={form.code} onChange={(event) => setForm({ ...form, code: event.target.value })} required />
+                <label htmlFor="projectmanagement-field-1">Project Code</label>
+                <input id="projectmanagement-field-1" value={form.code} onChange={(event) => setForm({ ...form, code: event.target.value })} required />
               </div>
               <div className="form-group">
-                <label>Project Name</label>
-                <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required />
+                <label htmlFor="projectmanagement-field-2">Project Name</label>
+                <input id="projectmanagement-field-2" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required />
               </div>
               <div className="form-group">
-                <label>Status</label>
-                <select required value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value, isActive: event.target.value === 'ACTIVE' })}>
+                <label htmlFor="projectmanagement-field-3">Status</label>
+                <select id="projectmanagement-field-3" required value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value, isActive: event.target.value === 'ACTIVE' })}>
                   {projectStatuses.map((status) => <option key={status} value={status}>{labelize(status)}</option>)}
                 </select>
               </div>
-              <div className="form-group">
-                <label>Total Allocated Hours</label>
-                <input type="number" min="0" step="0.5" value={form.totalAllocatedHours} onChange={(event) => setForm({ ...form, totalAllocatedHours: event.target.value })} />
-              </div>
+
             </div>
-            <div className="form-row">
+            <div className="pc-form-section-title"><Icon name="users" size={19} /><div><h4>Ownership & approval routing</h4><p>Choose a project manager and a different person to approve their hours.</p></div></div>
+            <div className="form-row pc-routing-row">
               <div className="form-group">
-                <label>Project Manager</label>
-                <select required value={form.projectManagerId} onChange={(event) => setForm({ ...form, projectManagerId: event.target.value })}>
+                <label htmlFor="projectmanagement-field-5">Project Manager</label>
+                <select id="projectmanagement-field-5" required value={form.projectManagerId} onChange={(event) => setForm({ ...form, projectManagerId: event.target.value })}>
                   <option value="">Select PM</option>
                   {activeUsers.map((item) => <option key={item.id} value={item.id}>{item.firstName} {item.lastName}</option>)}
                 </select>
               </div>
               <div className="form-group">
-                <label>PM Hours Approver</label>
-                <select required value={form.projectManagerHoursApproverId} onChange={(event) => setForm({ ...form, projectManagerHoursApproverId: event.target.value })}>
+                <label htmlFor="projectmanagement-field-6">PM Hours Approver</label>
+                <select id="projectmanagement-field-6" required value={form.projectManagerHoursApproverId} onChange={(event) => setForm({ ...form, projectManagerHoursApproverId: event.target.value })}>
                   <option value="">Select approver</option>
                   {activeUsers.map((item) => <option key={item.id} value={item.id}>{item.firstName} {item.lastName}</option>)}
                 </select>
               </div>
             </div>
+            <div className="pc-form-section-title"><Icon name="file" size={19} /><div><h4>Additional context</h4><p>Give the team a short description of the project and its purpose.</p></div></div>
             <div className="form-group">
-              <label>Description</label>
-              <textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
+              <label htmlFor="projectmanagement-field-7">Description</label>
+              <textarea id="projectmanagement-field-7" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
             </div>
-            <div className="compact-actions">
+            {canManage && <div className="compact-actions">
               <button className="button button-primary" type="submit">{selectedProject ? 'Save Project' : 'Create Project'}</button>
-            </div>
-          </>
+              <button className="button button-secondary" type="button" onClick={cancelProjectEdit}>Cancel</button>
+            </div>}
+          </div>
         )}
 
+        </fieldset>
       </form>
       )}
     </div>

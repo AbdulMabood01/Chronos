@@ -10,6 +10,7 @@ import java.util.Optional;
 
 @Repository
 public interface ProjectRepository extends JpaRepository<Project, Long> {
+    boolean existsByProjectManagerIdOrProjectManagerHoursApproverId(Long managerId, Long approverId);
     Optional<Project> findByCodeIgnoreCase(String code);
     List<Project> findByIsActiveTrueOrderByCodeAsc();
     List<Project> findByProjectManagerIdAndIsActiveTrue(Long managerId);

@@ -103,12 +103,8 @@ public class User {
         return UserRole.ADMIN.equals(this.role);
     }
 
-    public boolean isProjectManager() {
-        return UserRole.PROJECT_MANAGER.equals(this.role);
-    }
-
     public boolean canManageProjects() {
-        return isSuperAdmin() || isAdmin();
+        return isAdmin();
     }
 
     public String getFullName() {

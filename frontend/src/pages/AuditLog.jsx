@@ -1,3 +1,4 @@
+import ScreenTitle, { RecordSearch } from '../components/ScreenTitle';
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../AuthContext';
 import { auditAPI } from '../api';
@@ -10,6 +11,8 @@ export default function AuditLog() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [search, setSearch] = useState('');
+  const visibleRecords = logs.filter(record => [record.userName,record.action,record.entityType,record.details].join(' ').toLowerCase().includes(search.toLowerCase()));
 
   useEffect(() => {
     if (user?.role !== 'SUPER_ADMIN') {
@@ -45,9 +48,11 @@ export default function AuditLog() {
 
   return (
     <div className="page-container">
-      <h1>Audit Log</h1>
+      <ScreenTitle title="Audit Log" icon="file" eyebrow="ACTIVITY & ACCOUNTABILITY" />
 
-      {error && <div className="error-message">{error}</div>}
+      <RecordSearch value={search} onChange={setSearch} placeholder="Search activity, people or details" label="Search activity, people or details" />
+      {search && <p className="filter-count">{visibleRecords.length} matching records</p>}
+      {error && <div className="error-message" role="alert">{error}</div>}
 
       {logs.length === 0 ? (
         <div className="empty-state">

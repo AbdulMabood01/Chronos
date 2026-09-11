@@ -55,7 +55,8 @@ public class TimesheetReminderService {
     }
 
     private void remindIfNeeded(User user, YearMonth period, LocalDate today, boolean initialReminderDay) {
-        Timesheet timesheet = timesheetRepository.findByUserIdAndYearAndMonth(user.getId(), period.getYear(), period.getMonthValue())
+        userRepository.findForUpdate(user.getId()).orElseThrow();
+        Timesheet timesheet = timesheetRepository.findPeriodForUpdate(user.getId(), period.getYear(), period.getMonthValue())
                 .orElseGet(() -> timesheetRepository.save(Timesheet.builder()
                         .user(user)
                         .year(period.getYear())

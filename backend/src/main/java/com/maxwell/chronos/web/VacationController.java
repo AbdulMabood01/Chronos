@@ -40,8 +40,8 @@ public class VacationController {
             VacationType vacationType = VacationType.valueOf(type);
             VacationRequestDTO request = vacationService.createVacationRequest(user.getId(), start, end, vacationType, notes);
             return ResponseEntity.ok(request);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().build();
+        } catch (IllegalArgumentException e) {
+            throw e;
         }
     }
 
@@ -67,7 +67,7 @@ public class VacationController {
             VacationRequestDTO request = vacationService.updateVacationRequest(vacationId, start, end, vacationType, notes, user.getId());
             return ResponseEntity.ok(request);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().build();
+            throw e;
         }
     }
 
@@ -86,7 +86,7 @@ public class VacationController {
             VacationRequestDTO request = vacationService.submitVacationRequest(vacationId, user.getId());
             return ResponseEntity.ok(request);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().build();
+            throw e;
         }
     }
 
@@ -105,7 +105,7 @@ public class VacationController {
             vacationService.deleteVacationRequest(vacationId, user.getId());
             return ResponseEntity.noContent().build();
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().build();
+            throw e;
         }
     }
 
@@ -114,12 +114,16 @@ public class VacationController {
         String email = jwt.getClaimAsString("preferred_username");
         var user = userService.findUserEntityByEmail(email);
 
-        if (user == null || !user.isSuperAdmin()) {
+        if (user == null) {
             return ResponseEntity.status(403).build();
         }
 
-        List<VacationRequestDTO> requests = vacationService.getPendingVacationRequests();
-        return ResponseEntity.ok(requests);
+        try {
+            List<VacationRequestDTO> requests = vacationService.getPendingVacationRequests(user);
+            return ResponseEntity.ok(requests);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(403).build();
+        }
     }
 
     @GetMapping("/my")

@@ -40,7 +40,7 @@ public class ApprovalsController {
             TimesheetDTO timesheet = timesheetService.approveTimesheet(timesheetId, user.getId());
             return ResponseEntity.ok(timesheet);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().build();
+            throw e;
         }
     }
 
@@ -62,7 +62,7 @@ public class ApprovalsController {
             TimesheetDTO timesheet = timesheetService.rejectTimesheet(timesheetId, rejectionReason, user.getId());
             return ResponseEntity.ok(timesheet);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().build();
+            throw e;
         }
     }
 
@@ -73,7 +73,7 @@ public class ApprovalsController {
         String email = jwt.getClaimAsString("preferred_username");
         var user = userService.findUserEntityByEmail(email);
 
-        if (user == null || !user.isSuperAdmin()) {
+        if (user == null) {
             return ResponseEntity.status(403).build();
         }
 
@@ -81,7 +81,7 @@ public class ApprovalsController {
             VacationRequestDTO vacation = vacationService.approveVacationRequest(vacationId, user.getId());
             return ResponseEntity.ok(vacation);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().build();
+            throw e;
         }
     }
 
@@ -94,7 +94,7 @@ public class ApprovalsController {
         String email = jwt.getClaimAsString("preferred_username");
         var user = userService.findUserEntityByEmail(email);
 
-        if (user == null || !user.isSuperAdmin()) {
+        if (user == null) {
             return ResponseEntity.status(403).build();
         }
 
@@ -103,7 +103,7 @@ public class ApprovalsController {
             VacationRequestDTO vacation = vacationService.rejectVacationRequest(vacationId, rejectionReason, user.getId());
             return ResponseEntity.ok(vacation);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().build();
+            throw e;
         }
     }
 
@@ -122,7 +122,7 @@ public class ApprovalsController {
             TimesheetProjectSubmissionDTO submission = timesheetService.approveProjectSubmission(submissionId, user.getId());
             return ResponseEntity.ok(submission);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().build();
+            throw e;
         }
     }
 
@@ -144,7 +144,7 @@ public class ApprovalsController {
             TimesheetProjectSubmissionDTO submission = timesheetService.rejectProjectSubmission(submissionId, rejectionReason, user.getId());
             return ResponseEntity.ok(submission);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().build();
+            throw e;
         }
     }
 
@@ -155,7 +155,7 @@ public class ApprovalsController {
         String email = jwt.getClaimAsString("preferred_username");
         var user = userService.findUserEntityByEmail(email);
 
-        if (user == null || (!user.isSuperAdmin() && !user.isAdmin())) {
+        if (user == null || !user.isSuperAdmin()) {
             return ResponseEntity.status(403).build();
         }
 
@@ -163,7 +163,7 @@ public class ApprovalsController {
             LetterRequestDTO request = letterRequestService.approveLetterRequest(requestId, user.getId());
             return ResponseEntity.ok(request);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().build();
+            throw e;
         }
     }
 
@@ -176,7 +176,7 @@ public class ApprovalsController {
         String email = jwt.getClaimAsString("preferred_username");
         var user = userService.findUserEntityByEmail(email);
 
-        if (user == null || (!user.isSuperAdmin() && !user.isAdmin())) {
+        if (user == null || !user.isSuperAdmin()) {
             return ResponseEntity.status(403).build();
         }
 
@@ -185,7 +185,7 @@ public class ApprovalsController {
             LetterRequestDTO request = letterRequestService.rejectLetterRequest(requestId, rejectionReason, user.getId());
             return ResponseEntity.ok(request);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().build();
+            throw e;
         }
     }
 }

@@ -1,6 +1,7 @@
+import ScreenTitle, { RecordSummary } from '../components/ScreenTitle';
+import { formatDate } from '../utils/dates';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { format } from 'date-fns';
 import { useAuth } from '../AuthContext';
 import { letterRequestAPI } from '../api';
 import { LoadingIndicator } from '../components/Hourglass';
@@ -45,9 +46,6 @@ const emptyForm = {
   notes: '',
 };
 
-function formatDate(value) {
-  return value ? format(new Date(value), 'MMM dd, yyyy') : '-';
-}
 
 function downloadBlob(response, fallbackName) {
   const blob = new Blob([response.data], { type: 'application/pdf' });
@@ -205,12 +203,13 @@ export default function EmployeeRequests() {
     <div className="page-container requests-page">
       <div className="header-bar">
         <div>
-          <h1>Requests</h1>
+          <ScreenTitle title="Requests" icon="file" eyebrow="EMPLOYEE SERVICES" />
           <p className="page-subtitle">Submit employee letters for admin approval and download approved PDFs.</p>
         </div>
       </div>
 
-      {error && <div className="error-message">{error}</div>}
+      <RecordSummary items={[{ label: 'Letter requests', value: requests.length, icon: 'file' }, { label: 'In review', value: requests.filter(r => r.status === 'SUBMITTED').length, icon: 'clock' }, { label: 'Ready to download', value: requests.filter(r => r.status === 'APPROVED').length, icon: 'check' }]} />
+      {error && <div className="error-message" role="alert">{error}</div>}
 
       <div className="requests-layout">
         <form className="card request-editor" onSubmit={handleSubmit}>
@@ -221,9 +220,10 @@ export default function EmployeeRequests() {
             </div>
           </div>
 
-          <div className="request-type-tabs" role="tablist" aria-label="Letter request type">
+          <div className="request-type-tabs" role="group" aria-label="Letter request type">
             {Object.entries(REQUEST_TYPES).map(([value, config]) => (
               <button
+                aria-pressed={formData.requestType === value}
                 className={`request-type-tab ${formData.requestType === value ? 'active' : ''}`}
                 key={value}
                 onClick={() => handleTypeChange(value)}
@@ -236,8 +236,8 @@ export default function EmployeeRequests() {
 
           <div className="form-row">
             <div className="form-group">
-              <label>Full Name</label>
-              <input
+              <label htmlFor="employeerequests-field-1">Full Name</label>
+              <input id="employeerequests-field-1"
                 value={formData.requestedFullName}
                 onChange={(e) => updateField('requestedFullName', e.target.value)}
                 placeholder="Full legal name"
@@ -245,8 +245,8 @@ export default function EmployeeRequests() {
               />
             </div>
             <div className="form-group">
-              <label>Title</label>
-              <input
+              <label htmlFor="employeerequests-field-2">Title</label>
+              <input id="employeerequests-field-2"
                 value={formData.requestedJobTitle}
                 onChange={(e) => updateField('requestedJobTitle', e.target.value)}
                 placeholder="Job title"
@@ -257,8 +257,8 @@ export default function EmployeeRequests() {
 
           <div className="form-row">
             <div className="form-group">
-              <label>Job Start Date</label>
-              <input
+              <label htmlFor="employeerequests-field-3">Job Start Date</label>
+              <input id="employeerequests-field-3"
                 type="date"
                 value={formData.employmentStartDate}
                 onChange={(e) => updateField('employmentStartDate', e.target.value)}
@@ -270,8 +270,8 @@ export default function EmployeeRequests() {
           {formData.requestType === 'TRAVEL' && (
             <div className="form-row">
               <div className="form-group">
-                <label>Travel Destination</label>
-                <input
+                <label htmlFor="employeerequests-field-4">Travel Destination</label>
+                <input id="employeerequests-field-4"
                   value={formData.destinationCountry}
                   onChange={(e) => updateField('destinationCountry', e.target.value)}
                   placeholder="Optional city or country"
@@ -283,8 +283,8 @@ export default function EmployeeRequests() {
           {formData.requestType === 'TRAVEL' && (
             <div className="form-row">
               <div className="form-group">
-                <label>Travel Start Date</label>
-                <input
+                <label htmlFor="employeerequests-field-5">Travel Start Date</label>
+                <input id="employeerequests-field-5"
                   type="date"
                   value={formData.travelStartDate}
                   onChange={(e) => updateField('travelStartDate', e.target.value)}
@@ -292,8 +292,8 @@ export default function EmployeeRequests() {
                 />
               </div>
               <div className="form-group">
-                <label>Travel End Date</label>
-                <input
+                <label htmlFor="employeerequests-field-6">Travel End Date</label>
+                <input id="employeerequests-field-6"
                   type="date"
                   value={formData.travelEndDate}
                   onChange={(e) => updateField('travelEndDate', e.target.value)}
@@ -306,8 +306,8 @@ export default function EmployeeRequests() {
           {formData.requestType === 'VACATION' && (
             <div className="form-row">
               <div className="form-group">
-                <label>Vacation Start Date</label>
-                <input
+                <label htmlFor="employeerequests-field-7">Vacation Start Date</label>
+                <input id="employeerequests-field-7"
                   type="date"
                   value={formData.vacationStartDate}
                   onChange={(e) => updateField('vacationStartDate', e.target.value)}
@@ -315,8 +315,8 @@ export default function EmployeeRequests() {
                 />
               </div>
               <div className="form-group">
-                <label>Vacation End Date</label>
-                <input
+                <label htmlFor="employeerequests-field-8">Vacation End Date</label>
+                <input id="employeerequests-field-8"
                   type="date"
                   value={formData.vacationEndDate}
                   onChange={(e) => updateField('vacationEndDate', e.target.value)}
@@ -327,8 +327,8 @@ export default function EmployeeRequests() {
           )}
 
           <div className="form-group">
-            <label>Additional Information</label>
-            <textarea
+            <label htmlFor="employeerequests-field-9">Additional Information</label>
+            <textarea id="employeerequests-field-9"
               value={formData.notes}
               onChange={(e) => updateField('notes', e.target.value)}
               placeholder="Any details admin should include or verify"
