@@ -7,7 +7,14 @@ import TimesheetDetail from './TimesheetDetail';
 import { timesheetAPI, projectAPI, reportsAPI } from '../api';
 vi.mock('../AuthContext', () => ({ useAuth: () => ({ user: employee }) }));
 vi.mock('../api', () => ({
-  timesheetAPI: { getTimesheetById: vi.fn(), getProjectSubmission: vi.fn(), getMyTimesheets: vi.fn() },
+  timesheetAPI: {
+    getTimesheetById: vi.fn(),
+    getProjectSubmission: vi.fn(),
+    getMyTimesheets: vi.fn(),
+    addTimeEntry: vi.fn(),
+    updateTimeEntry: vi.fn(),
+    deleteTimeEntry: vi.fn(),
+  },
   projectAPI: { getAssignedProjects: vi.fn() },
   reportsAPI: { exportProjectTimesheetPdf: vi.fn() },
 }));
@@ -27,6 +34,9 @@ beforeEach(() => {
   employee.canReviewProjects = false;
   timesheetAPI.getTimesheetById.mockResolvedValue({ data: sheet });
   timesheetAPI.getProjectSubmission.mockResolvedValue({ data: approval });
+  timesheetAPI.addTimeEntry.mockResolvedValue({ data: {} });
+  timesheetAPI.updateTimeEntry.mockResolvedValue({ data: {} });
+  timesheetAPI.deleteTimeEntry.mockResolvedValue({});
   projectAPI.getAssignedProjects.mockResolvedValue({ data: [{ id: 4, code: 'ATLAS', name: 'Atlas' }] });
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
@@ -92,4 +102,95 @@ describe('employee PDF export', () => {
     expect(screen.getByRole('button', { name: 'Export PDF' }).disabled).toBe(true);
     expect(reportsAPI.exportProjectTimesheetPdf).not.toHaveBeenCalled();
   });
+});
+
+it('shows an offboarding notice and prevents further entry', async () => {
+  projectAPI.getAssignedProjects.mockResolvedValue({ data: [{ id: 4, code: 'ATLAS', assignments: [{ userId: 1, isActive: false, startDate: '2026-08-01', endDate: '2026-08-31', plannedHours: 8 }] }] });
+  timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, status: 'DRAFT', plannedHours: 8 } });
+  open(false);
+  expect(await screen.findByText('You have been offboarded from this project.')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Submit for Approval' })).toBeNull();
+});
+it('renders approved hours as text without calendar clocks', async () => {
+  open(false);
+  await waitFor(() => expect(screen.getByLabelText('Hours for 2026-08-03').tagName).toBe('DIV'));
+  expect(screen.queryByRole('button', { name: /Add login and logout/ })).toBeNull();
+  expect(screen.getByLabelText('Hours for 2026-08-03').textContent).toBe('8.00hrs');
+});
+
+it('prioritizes completed project messaging over offboarding', async () => {
+  projectAPI.getAssignedProjects.mockResolvedValue({ data: [{ id: 4, code: 'ATLAS', name: 'Atlas', status: 'COMPLETED', assignments: [{ userId: 1, isActive: false, startDate: '2026-08-01', endDate: '2026-08-31' }] }] });
+  open(false);
+  expect(await screen.findByText('This project has been completed.')).toBeTruthy();
+  expect(screen.getByText('Atlas - Completed')).toBeTruthy();
+  expect(screen.queryByText('You have been offboarded from this project.')).toBeNull();
+});
+
+it('shows on-hold messaging even when the project and assignment are inactive', async () => {
+  projectAPI.getAssignedProjects.mockResolvedValue({ data: [{ id: 4, code: 'ATLAS', name: 'Atlas', status: 'ON_HOLD', isActive: false, assignments: [{ userId: 1, isActive: false, startDate: '2026-08-01', endDate: '2026-08-31' }] }] });
+  open(false);
+  expect(await screen.findByText('This project is currently on hold.')).toBeTruthy();
+  expect(screen.getByText('Atlas - On Hold')).toBeTruthy();
+  expect(screen.queryByText('This project has ended.')).toBeNull();
+  expect(screen.queryByText('You have been offboarded from this project.')).toBeNull();
+  expect(screen.getByText('Hour entry is paused while this project is on hold. Your timesheet history remains available to view.')).toBeTruthy();
+});
+
+it('saves typed hour edits as manual hours without stale clock sessions', async () => {
+  const draftSheet = {
+    ...sheet,
+    year: 2026,
+    month: 9,
+    status: 'DRAFT',
+    timeEntries: [{
+      id: 8,
+      projectId: 4,
+      projectCode: 'ATLAS',
+      projectName: 'Atlas',
+      entryDate: '2026-09-03',
+      hours: 8,
+      sessions: [{ loginTime: '09:00', logoutTime: '17:00' }],
+    }],
+  };
+  timesheetAPI.getTimesheetById.mockResolvedValue({ data: draftSheet });
+  timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, status: 'DRAFT', plannedHours: 160 } });
+  projectAPI.getAssignedProjects.mockResolvedValue({
+    data: [{ id: 4, code: 'ATLAS', name: 'Atlas', assignments: [{ userId: 1, isActive: true, startDate: '2026-09-01', plannedHours: 160 }] }],
+  });
+  open(false);
+
+  const input = await screen.findByLabelText('Hours for 2026-09-03');
+  fireEvent.change(input, { target: { value: '7' } });
+  fireEvent.blur(input);
+
+  await waitFor(() => expect(timesheetAPI.updateTimeEntry).toHaveBeenCalled());
+  expect(timesheetAPI.updateTimeEntry.mock.calls[0][2]).toMatchObject({
+    entryDate: '2026-09-03',
+    hours: '7',
+    projectId: 4,
+    sessions: [],
+  });
+});
+
+it('shows backend validation messages when hour saves fail', async () => {
+  const draftSheet = {
+    ...sheet,
+    year: 2026,
+    month: 9,
+    status: 'DRAFT',
+    timeEntries: [{ id: 8, projectId: 4, projectCode: 'ATLAS', projectName: 'Atlas', entryDate: '2026-09-03', hours: 8 }],
+  };
+  timesheetAPI.getTimesheetById.mockResolvedValue({ data: draftSheet });
+  timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, status: 'DRAFT', plannedHours: 160 } });
+  timesheetAPI.updateTimeEntry.mockRejectedValue({ response: { data: { message: 'Entry date must be within the project assignment dates' } } });
+  projectAPI.getAssignedProjects.mockResolvedValue({
+    data: [{ id: 4, code: 'ATLAS', name: 'Atlas', assignments: [{ userId: 1, isActive: true, startDate: '2026-09-01', plannedHours: 160 }] }],
+  });
+  open(false);
+
+  const input = await screen.findByLabelText('Hours for 2026-09-03');
+  fireEvent.change(input, { target: { value: '7' } });
+  fireEvent.blur(input);
+
+  expect(await screen.findByText('Entry date must be within the project assignment dates')).toBeTruthy();
 });

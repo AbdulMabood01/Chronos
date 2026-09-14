@@ -1,6 +1,7 @@
+import ValidationMessage from '../components/ValidationMessage';
 import ScreenTitle from '../components/ScreenTitle';
 import Icon from '../components/Icon';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { format, startOfMonth, subMonths } from 'date-fns';
 import { projectAPI, userAPI } from '../api';
 import { useAuth } from '../AuthContext';
@@ -86,6 +87,25 @@ export default function ProjectManagement() {
   const [assignStartDate, setAssignStartDate] = useState('');
   const [assignEndDate, setAssignEndDate] = useState('');
   const [assignBillRate, setAssignBillRate] = useState('');
+  const [assignHours, setAssignHours] = useState('');
+  const [replacementManagerId, setReplacementManagerId] = useState('');
+  const [offboarding, setOffboarding] = useState(null);
+  const offboardingDialog = useRef(null);
+
+  useEffect(() => {
+    if (!offboarding) return;
+    const dialog = offboardingDialog.current;
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    dialog?.showModal?.();
+    document.body.style.overflow = 'hidden';
+    return () => {
+      dialog?.close?.();
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus?.();
+    };
+  }, [offboarding]);
+  const [savingAssignment, setSavingAssignment] = useState(false);
   const [assignmentDateDrafts, setAssignmentDateDrafts] = useState({});
   const [plannedHourDrafts, setPlannedHourDrafts] = useState({});
   const [loading, setLoading] = useState(true);
@@ -97,6 +117,13 @@ export default function ProjectManagement() {
   const activeUsers = useMemo(() => users.filter((item) => item.isActive), [users]);
   const selectedProject = isCreatingProject ? null : projects.find((project) => project.id === selectedProjectId) || null;
   const selectedDashboard = dashboardProjects.find((project) => project.projectId === selectedProject?.id);
+  const dashboardEmployeesByUserId = useMemo(() => {
+    const rows = {};
+    (selectedDashboard?.employees || []).forEach((employee) => {
+      rows[employee.userId] = employee;
+    });
+    return rows;
+  }, [selectedDashboard]);
   const activeAssignments = (selectedProject?.assignments || []).filter((assignment) => assignment.isActive);
   const historicalAssignments = (selectedProject?.assignments || []).filter((assignment) => !assignment.isActive);
 
@@ -105,11 +132,12 @@ export default function ProjectManagement() {
     loadData();
   }, [canView, selectedPeriod]);
 
-  const seedDrafts = (loadedProjects) => {
+  const seedDrafts = (loadedProjects, loadedDashboard) => {
     const hourDrafts = {};
     loadedProjects.forEach((project) => {
       (project.assignments || []).forEach((resource) => {
-        hourDrafts[`${project.id}:${resource.userId}`] = resource.plannedHours ?? '';
+        const savedHours = loadedDashboard.find((row) => row.projectId === project.id)?.employees?.find((row) => row.userId === resource.userId)?.plannedHours;
+        hourDrafts[`${project.id}:${resource.userId}`] = resource.plannedHours ?? savedHours ?? '';
       });
     });
     const dateDrafts = {};
@@ -139,7 +167,7 @@ export default function ProjectManagement() {
       setProjects(loadedProjects);
       setUsers(userRes.data || []);
       setDashboardProjects(loadedDashboard);
-      seedDrafts(loadedProjects);
+      seedDrafts(loadedProjects, loadedDashboard);
       if (selectedProjectId && !loadedProjects.some((project) => project.id === selectedProjectId)) {
         setSelectedProjectId(null);
         setProjectSearch('');
@@ -153,6 +181,7 @@ export default function ProjectManagement() {
   };
 
   const selectProject = (project) => {
+    const managerAssignment = (project?.assignments || []).find((assignment) => assignment.userId === project?.projectManagerId);
     setSelectedProjectId(project?.id || null);
     setIsCreatingProject(false);
     setActiveTab('overview');
@@ -161,6 +190,8 @@ export default function ProjectManagement() {
     setAssignStartDate('');
     setAssignEndDate('');
     setAssignBillRate('');
+    setAssignHours('');
+    setOffboarding(null);
     setForm({
       code: project?.code || '',
       name: project?.name || '',
@@ -181,6 +212,8 @@ export default function ProjectManagement() {
     setAssignStartDate('');
     setAssignEndDate('');
     setAssignBillRate('');
+    setAssignHours('');
+    setOffboarding(null);
     setForm(emptyForm);
   };
 
@@ -208,7 +241,7 @@ export default function ProjectManagement() {
     if (projectFilter === 'no-team' && (project.assignments || []).some((assignment) => assignment.isActive)) return false;
     if (projectFilter === 'over-plan') {
       const dashboard = dashboardProjects.find((item) => item.projectId === project.id);
-      const budget = (project.assignments || []).reduce((total, resource) => total + Number(resource.plannedHours || 0), 0);
+      const budget = (project.assignments || []).reduce((total, resource) => total + Number(resource.plannedHours ?? dashboard?.employees?.find((row) => row.userId === resource.userId)?.plannedHours ?? 0), 0);
       if (!budget || Number(dashboard?.totalLoggedHours || 0) <= budget) return false;
     }
     return true;
@@ -248,19 +281,31 @@ export default function ProjectManagement() {
         ? await projectAPI.updateProject(selectedProjectId, payload)
         : await projectAPI.createProject(payload);
       await loadData();
-      setSelectedProjectId(response.data?.id || selectedProjectId);
+      const savedProject = response.data;
+      if (!selectedProject?.id && savedProject?.id) {
+        setProjects((current) => [...current.filter((project) => project.id !== savedProject.id), savedProject]);
+        setProjectSearch(savedProject.code + ' - ' + savedProject.name);
+        setActiveTab('team');
+        setAssignDraft(String(payload.projectManagerId));
+        const manager = activeUsers.find((member) => String(member.id) === String(payload.projectManagerId));
+        setAssignBillRate(manager?.effectiveHourlyRate ?? manager?.hourlyRate ?? '');
+        setAssignStartDate('');
+        setAssignEndDate('');
+        setAssignHours('');
+      }
+      setSelectedProjectId(savedProject?.id || selectedProjectId);
       setIsCreatingProject(false);
       setError('');
     } catch (err) {
-      setError('Failed to save project. Check required fields and project code uniqueness.');
+      setError(err.response?.data?.message || 'Failed to save project. Check required fields and project code uniqueness.');
     }
   };
 
   const assignEmployee = async () => {
     if (!canManage) return;
     if (!selectedProject?.id || !assignDraft) return;
-    if (!assignStartDate || !assignEndDate || assignBillRate === '') {
-      setError('Start date, end date, and bill rate are required to assign an employee');
+    if (!assignStartDate || !assignEndDate || assignBillRate === '' || !Number.isFinite(Number(assignHours)) || Number(assignHours) <= 0) {
+      setError('Start date, end date, bill rate, and positive assigned hours are required to assign an employee');
       return;
     }
     if (assignStartDate && assignEndDate && assignStartDate > assignEndDate) {
@@ -272,15 +317,20 @@ export default function ProjectManagement() {
       return;
     }
     try {
-      await projectAPI.assignEmployee(selectedProject.id, assignDraft, assignStartDate, assignEndDate, assignBillRate);
+      setSavingAssignment(true);
+      await projectAPI.assignEmployee(selectedProject.id, assignDraft, assignStartDate, assignEndDate, assignBillRate, assignHours);
       setAssignDraft('');
       setAssignStartDate('');
       setAssignEndDate('');
       setAssignBillRate('');
+    setAssignHours('');
+    setOffboarding(null);
       await loadData();
       setError('');
     } catch (err) {
       setError('Failed to assign employee');
+    } finally {
+      setSavingAssignment(false);
     }
   };
 
@@ -321,10 +371,14 @@ export default function ProjectManagement() {
     if (!canManage) return;
     if (!selectedProject?.id) return;
     try {
-      await projectAPI.removeEmployee(selectedProject.id, userId);
+      setSavingAssignment(true);
+      await projectAPI.removeEmployee(selectedProject.id, userId, replacementManagerId || undefined);
       await loadData();
     } catch (err) {
-      setError('Failed to end assignment');
+      setError(err.response?.data?.message || 'Failed to offboard team member');
+    } finally {
+      setSavingAssignment(false);
+      setOffboarding(null);
     }
   };
 
@@ -347,32 +401,46 @@ export default function ProjectManagement() {
   const totals = selectedDashboard || {};
   const warnings = selectedProject ? setupWarnings(selectedProject) : [];
 
-  const logged = Number(totals.totalLoggedHours || 0);
+  const logged = Number(totals.totalLoggedHours || 0) + historicalAssignments.reduce((sum, resource) => sum + Number(resource.plannedHours || 0) - Number(dashboardEmployeesByUserId[resource.userId]?.totalLoggedHours || 0), 0);
   const submitted = Number(totals.submittedHours || 0);
-  const approved = Number(totals.approvedHours || 0);
-  const resources = selectedProject?.assignments || [];
+  const frozenApprovedAdjustment = historicalAssignments.reduce((sum, resource) => sum + Number(resource.plannedHours || 0) - Number(dashboardEmployeesByUserId[resource.userId]?.approvedHours || 0), 0);
+  const approved = Number(totals.approvedHours || 0) + frozenApprovedAdjustment;
+  const resources = (selectedProject?.assignments || []).map((resource) => ({
+    ...resource,
+    plannedHours: resource.plannedHours ?? dashboardEmployeesByUserId[resource.userId]?.plannedHours ?? 0,
+  }));
   const projectHours = resources.reduce((total, resource) => total + Number(resource.plannedHours || 0), 0);
-  const allocationColors = ['#278569', '#518eae', '#bf861f', '#cf5267', '#8b6ab1', '#578443'];
+  const rejected = Number(totals.rejectedHours || 0);
+  const draft = Math.max(0, logged - approved - submitted - rejected);
+  const remaining = Math.max(0, projectHours - logged);
+  const chartTotal = Math.max(projectHours, logged);
+  const chartSlices = [
+    { label: 'Approved', value: approved, color: 'var(--pc-approved)' },
+    { label: 'Submitted', value: submitted, color: 'var(--pc-submitted)' },
+    { label: 'Rejected', value: rejected, color: 'var(--pc-rejected)' },
+    { label: 'Draft', value: draft, color: 'var(--pc-draft)' },
+    { label: 'Remaining', value: remaining, color: 'var(--border-color)' },
+  ];
   let allocationEnd = 0;
-  const allocationSegments = resources.filter((resource) => Number(resource.plannedHours) > 0).map((resource, index) => {
+  const allocationSegments = chartSlices.map((slice) => {
     const start = allocationEnd;
-    allocationEnd += percent(resource.plannedHours, projectHours) * 3.6;
-    return `${allocationColors[index % allocationColors.length]} ${start}deg ${allocationEnd}deg`;
+    allocationEnd += percent(slice.value, chartTotal) * 3.6;
+    return `${slice.color} ${start}deg ${allocationEnd}deg`;
   });
   const unassignedUsers = activeUsers.filter((item) =>
     !(selectedProject?.assignments || []).some((assignment) => assignment.userId === item.id && assignment.isActive)
   );
 
   if (!canView) {
-    return <div className="page-container"><div className="error-message">You do not have permission to access this page.</div></div>;
+    return <div className="page-container highlighted-workspace"><div className="error-message">You do not have permission to access this page.</div></div>;
   }
 
   if (loading) {
-    return <div className="page-container"><div className="loading-panel"><LoadingIndicator label="Loading projects..." /></div></div>;
+    return <div className="page-container highlighted-workspace"><div className="loading-panel"><LoadingIndicator label="Loading projects..." /></div></div>;
   }
 
   return (
-    <div className="page-container admin-page projects-workspace-page">
+    <div className="page-container highlighted-workspace admin-page projects-workspace-page">
       <div className="header-bar project-command-header">
         <div>
           <ScreenTitle title="Project Control" icon="briefcase" eyebrow="PROJECT OPERATIONS" />
@@ -381,7 +449,7 @@ export default function ProjectManagement() {
         {canManage && <button className="button button-primary" type="button" onClick={startNewProject}><span aria-hidden="true">+</span> New Project</button>}
       </div>
 
-      {error && <div className="error-message" role="alert">{error}</div>}
+      <ValidationMessage message={error} onDismiss={() => setError('')} />
 
       <section className="admin-panel project-selector-panel">
         <div className="project-search-field">
@@ -477,13 +545,12 @@ export default function ProjectManagement() {
             <div className="project-overview-hero">
               <div className="project-donut-card">
                 <div className="project-donut-left">
-                  <div className="project-status-donut" role="img" aria-label={`Total project hours: ${hours(projectHours)}, summed across all project resources`} style={{ background: `radial-gradient(circle at center, var(--surface-color) 0 56%, transparent 57%), conic-gradient(${allocationSegments.length ? allocationSegments.join(', ') : 'var(--border-color) 0deg 360deg'})` }}>
+                  <div className="project-status-donut" role="img" aria-label={`Total project hours: ${hours(projectHours)}, summed across all project resources`} style={{ background: `radial-gradient(circle at center, var(--surface-color) 0 56%, transparent 57%), conic-gradient(${chartTotal > 0 ? allocationSegments.join(', ') : 'var(--border-color) 0deg 360deg'})` }}>
                     <span>{hours(projectHours)}</span>
                     <small>total project hours</small>
                   </div>
                   <div className="project-chart-legend">
-                    {resources.filter((resource) => Number(resource.plannedHours) > 0).map((resource, index) => <span key={resource.id || resource.userId}><i style={{ background: allocationColors[index % allocationColors.length] }} />{resource.userName}<strong>{hours(resource.plannedHours)}</strong></span>)}
-                    {projectHours === 0 && <span>No resource hours assigned yet.</span>}
+                    {chartSlices.map((slice) => <span key={slice.label}><i style={{ background: slice.color }} />{slice.label}<strong>{hours(slice.value)}</strong></span>)}
                   </div>
                 </div>
                 <aside className="project-insight-panel" aria-label="Project overview details">
@@ -507,9 +574,9 @@ export default function ProjectManagement() {
               </div>
             </div>
             <div className="pc-plan-progress">
-              <div><strong>Project hours used ({selectedOption.label})</strong><span>{Number(projectHours) > 0 ? `${Math.round(logged / projectHours * 100)}% of ${hours(projectHours)} total project hrs` : projectHours == null ? 'Total project hours not set' : '0.00 total project hrs'}</span></div>
+              <div><strong>Project hours used</strong><span>{Number(projectHours) > 0 ? `${Math.round(logged / projectHours * 100)}% of ${hours(projectHours)} total project hrs` : projectHours == null ? 'Total project hours not set' : '0.00 total project hrs'}</span></div>
               <div className="pc-progress-track" role="meter" aria-label="Selected month usage of total project hours" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent(logged, Number(projectHours))} aria-valuetext={`${hours(logged)} hours logged in ${selectedOption.label}; total project hours: ${projectHours == null ? 'not set' : hours(projectHours)}`}><span style={{ width: `${percent(logged, Number(projectHours))}%` }} /></div>
-              <p>{hours(logged)} hrs logged in {selectedOption.label}. Total project hours are the sum of hours assigned to all project resources.</p>
+              <p>Total project hours are the sum of hours assigned to all project resources.</p>
             </div>
           </>
         )}
@@ -523,8 +590,15 @@ export default function ProjectManagement() {
               </div>
               <p>{activeAssignments.length} active member{activeAssignments.length === 1 ? '' : 's'}</p>
             </div>
+            {canManage && offboarding && <dialog ref={offboardingDialog} className="pc-offboarding-dialog" role="dialog" aria-modal="true" aria-label="Offboard team member" onCancel={(event) => { event.preventDefault(); if (!savingAssignment) setOffboarding(null); }}>
+              <strong>Offboard {offboarding.userName}?</strong>
+              <p>This ends their active membership immediately and freezes assigned hours at their total approved hours to date. Their history is retained.</p>
+              {offboarding.pendingApproval && <p role="alert">Please approve or reject pending hours before offboarding this employee.</p>}
+              {offboarding.userId === selectedProject.projectManagerId && <label>Secondary PM<select value={replacementManagerId} onChange={(event) => setReplacementManagerId(event.target.value)}><option value="">Select a replacement project manager</option>{Array.from(new Map([...activeAssignments, ...activeUsers.filter((member) => member.role === 'ADMIN').map((member) => ({ userId: member.id, userName: member.name || member.fullName || [member.firstName, member.lastName].filter(Boolean).join(' ') || member.email }))].map((member) => [member.userId, member])).values()).filter((member) => member.userId !== offboarding.userId && member.userId !== selectedProject.projectManagerHoursApproverId).map((member) => <option key={member.userId} value={member.userId}>{member.userName}</option>)}</select><span>Choose an active team member or admin. This person becomes the project manager.</span></label>}
+              <div className="compact-actions"><button type="button" className="button button-primary" disabled={savingAssignment || offboarding.pendingApproval || (offboarding.userId === selectedProject.projectManagerId && !replacementManagerId)} onClick={() => endAssignment(offboarding.userId)}>Confirm offboarding</button><button type="button" className="button button-secondary" disabled={savingAssignment} onClick={() => setOffboarding(null)}>Cancel</button></div>
+            </dialog>}
             <div className="pc-team-summary"><span><Icon name="users" size={18} /><strong>{activeAssignments.length}</strong> active members</span><span><strong>{historicalAssignments.length}</strong> ended assignments</span><span>PM: <strong>{selectedProject.projectManagerName || 'Not assigned'}</strong></span></div>
-            {canManage && <div className="pc-assignment-heading"><h4>Add a team member</h4><p>Set their assignment window and hourly bill rate.</p></div>}
+            {canManage && <div className="pc-assignment-heading"><h4>Add a team member</h4><p>Enter their assignment dates, hourly bill rate, and total assigned hours.</p></div>}
             {canManage && <div className="assign-employee-panel">
               <label className="compact-input-field">
                 <span>Employee</span>
@@ -553,11 +627,12 @@ export default function ProjectManagement() {
                 <span>Bill rate</span>
                 <input required type="number" min="0" step="0.01" value={assignBillRate} onChange={(event) => setAssignBillRate(event.target.value)} placeholder="0.00" />
               </label>
-              <button className="button button-small" type="button" onClick={assignEmployee} disabled={!assignDraft || !assignStartDate || !assignEndDate || assignBillRate === ''}>Assign</button>
+              <label className="compact-input-field"><span>Assigned hours</span><input required type="number" min="0.5" step="0.5" value={assignHours} onChange={(event) => setAssignHours(event.target.value)} placeholder="0.00" /></label>
+              <button className="button button-small" type="button" onClick={assignEmployee} disabled={savingAssignment || !assignDraft || !assignStartDate || !assignEndDate || assignStartDate > assignEndDate || assignBillRate === '' || !Number.isFinite(Number(assignBillRate)) || Number(assignBillRate) < 0 || !Number.isFinite(Number(assignHours)) || Number(assignHours) <= 0}>Assign</button>
             </div>}
             <div className="table-container">
               <table className="data-table project-control-table">
-                <thead><tr><th>Employee</th><th>Designation</th><th>Start</th><th>End</th><th>Bill Rate</th><th>Status</th></tr></thead>
+                <thead><tr><th>Employee</th><th>Designation</th><th>Start</th><th>End</th><th>Bill Rate</th><th>Status</th>{canManage && <th>Actions</th>}</tr></thead>
                 <tbody>
                   {(selectedProject.assignments || []).map((assignment) => {
                     const key = `${selectedProject.id}:${assignment.userId}`;
@@ -570,10 +645,11 @@ export default function ProjectManagement() {
                         <td><input className="table-date-input" aria-label={`End date for ${assignment.userName}`} type="date" value={draft.endDate || ''} onChange={(event) => updateAssignmentDraft(assignment, 'endDate', event.target.value)} onBlur={() => updateAssignmentDates(assignment)} /></td>
                         <td><input className="table-rate-input" aria-label={`Bill rate for ${assignment.userName}`} type="number" min="0" step="0.01" value={draft.billRate ?? ''} onChange={(event) => updateAssignmentDraft(assignment, 'billRate', event.target.value)} onBlur={() => updateAssignmentDates(assignment)} /></td>
                         <td><span className={assignment.isActive ? 'status-badge status-approved' : 'status-badge status-locked'}>{assignment.isActive ? 'Active' : 'Ended'}</span></td>
+                        {canManage && <td>{assignment.isActive && <button type="button" className="button button-small button-secondary" onClick={() => { setReplacementManagerId(''); setOffboarding(assignment); }}>Offboard {assignment.userName}</button>}</td>}
                       </tr>
                     );
                   })}
-                  {(selectedProject.assignments || []).length === 0 && <tr><td colSpan="6" className="text-center">No team assignments yet.</td></tr>}
+                  {(selectedProject.assignments || []).length === 0 && <tr><td colSpan={canManage ? 7 : 6} className="text-center">No team assignments yet.</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -597,34 +673,36 @@ export default function ProjectManagement() {
             </div>
             <div className="table-container">
             <table className="data-table project-control-table">
-              <thead><tr><th>Employee</th><th>Dates</th><th>Assigned Project Hours</th><th>Logged</th><th>Submitted</th><th>Approved</th><th>Status</th></tr></thead>
+              <thead><tr><th>Employee</th><th>Dates</th><th>Assigned Project Hours</th><th>Logged</th><th>Submitted</th><th>Approved</th><th>Remaining Hours</th></tr></thead>
               <tbody>
-                {(selectedDashboard?.employees || []).map((employee) => {
-                  const draftKey = `${selectedProject.id}:${employee.userId}`;
+                {(selectedProject.assignments || []).map((assignment) => {
+                  const employee = dashboardEmployeesByUserId[assignment.userId] || assignment;
+                  const draftKey = `${selectedProject.id}:${assignment.userId}`;
                   return (
-                    <tr key={employee.userId}>
-                      <td><strong>{employee.userName}</strong><div className="table-subtext">{employee.email}</div></td>
-                      <td><strong>{dateText(employee.assignmentStartDate)}</strong><div className="table-subtext">to {dateText(employee.assignmentEndDate)}</div></td>
+                    <tr key={assignment.id || assignment.userId}>
+                      <td><strong>{assignment.userName}</strong><div className="table-subtext">{assignment.email}</div></td>
+                      <td><strong>{dateText(assignment.startDate)}</strong><div className="table-subtext">to {dateText(assignment.endDate)}</div></td>
                       <td>
                         <input
                           className="table-hours-input"
                           type="number"
                           min="0"
                           step="0.5"
+                          disabled={!assignment.isActive}
                           value={plannedHourDrafts[draftKey] ?? ''}
                           onChange={(event) => setPlannedHourDrafts({ ...plannedHourDrafts, [draftKey]: event.target.value })}
-                          onBlur={(event) => updatePlannedHours(selectedProject.id, employee.userId, event.target.value)}
-                          aria-label={`Planned hours for ${employee.userName}`}
+                          onBlur={(event) => { if (assignment.isActive) updatePlannedHours(selectedProject.id, assignment.userId, event.target.value); }}
+                          aria-label={`Planned hours for ${assignment.userName}`}
                         />
                       </td>
                       <td>{hours(employee.totalLoggedHours)}</td>
                       <td>{hours(employee.submittedHours)}</td>
-                      <td>{hours(employee.approvedHours)}</td>
-                      <td><span className={statusClass(employee.status)}>{labelize(employee.status || 'DRAFT')}</span></td>
+                      <td>{hours(assignment.approvedHoursToDate ?? employee.approvedHours)}</td>
+                      <td>{hours(Number(plannedHourDrafts[draftKey] || 0) - Number(assignment.approvedHoursToDate ?? employee.approvedHours ?? 0))}</td>
                     </tr>
                   );
                 })}
-                {(selectedDashboard?.employees || []).length === 0 && <tr><td colSpan="7" className="text-center">No hours for {selectedOption.label}.</td></tr>}
+                {(selectedProject.assignments || []).length === 0 && <tr><td colSpan="7" className="text-center">No team assignments yet.</td></tr>}
               </tbody>
             </table>
             </div>
@@ -641,7 +719,7 @@ export default function ProjectManagement() {
               <p>{selectedProject ? 'Changes save when you submit' : 'Manager and approver are required'}</p>
             </div>
             <div className="pc-form-section-title"><Icon name="briefcase" size={19} /><div><h4>Project essentials</h4><p>Define the project identity and status. Total hours are calculated from resource assignments.</p></div></div>
-            <div className="form-row">
+            <div className="form-row pc-essentials-row">
               <div className="form-group">
                 <label htmlFor="projectmanagement-field-1">Project Code</label>
                 <input id="projectmanagement-field-1" value={form.code} onChange={(event) => setForm({ ...form, code: event.target.value })} required />
@@ -658,11 +736,18 @@ export default function ProjectManagement() {
               </div>
 
             </div>
-            <div className="pc-form-section-title"><Icon name="users" size={19} /><div><h4>Ownership & approval routing</h4><p>Choose a project manager and a different person to approve their hours.</p></div></div>
+            <div className="pc-form-section-title"><Icon name="users" size={19} /><div><h4>Ownership & approval routing</h4><p>Choose a project manager and a different person to approve their hours. Onboard the PM through Team, like any other member.</p></div></div>
             <div className="form-row pc-routing-row">
               <div className="form-group">
                 <label htmlFor="projectmanagement-field-5">Project Manager</label>
-                <select id="projectmanagement-field-5" required value={form.projectManagerId} onChange={(event) => setForm({ ...form, projectManagerId: event.target.value })}>
+                <select id="projectmanagement-field-5" required value={form.projectManagerId} onChange={(event) => {
+                  const selectedUser = activeUsers.find((item) => String(item.id) === event.target.value);
+                  const managerAssignment = (selectedProject?.assignments || []).find((assignment) => String(assignment.userId) === event.target.value);
+                  setForm({
+                    ...form,
+                    projectManagerId: event.target.value,
+                  });
+                }}>
                   <option value="">Select PM</option>
                   {activeUsers.map((item) => <option key={item.id} value={item.id}>{item.firstName} {item.lastName}</option>)}
                 </select>

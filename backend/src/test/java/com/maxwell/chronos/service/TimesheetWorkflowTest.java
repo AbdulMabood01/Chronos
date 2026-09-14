@@ -146,4 +146,40 @@ class TimesheetWorkflowTest {
         assertEquals(new BigDecimal("75"), submission.getApprovedBillRate());
         assertThrows(IllegalArgumentException.class, () -> add(LocalDate.of(2026,9,11), "8", List.of()));
     }
+
+    @Test void frozenProjectsRejectEntryAndSubmission() {
+        for (ProjectStatus status : List.of(ProjectStatus.ON_HOLD, ProjectStatus.ARCHIVED, ProjectStatus.COMPLETED)) {
+            project.setStatus(status);
+            assertThrows(IllegalArgumentException.class, () -> add(LocalDate.of(2026, 9, 10), "8", List.of()));
+            assertThrows(IllegalArgumentException.class, () -> service.submitProjectTimesheet(4L, 3L, 1L));
+        }
+        verify(entries, never()).save(any());
+    }
+
+    @Test void futureMonthCannotBeSubmitted() {
+        YearMonth future = YearMonth.now().plusMonths(1);
+        sheet.setYear(future.getYear());
+        sheet.setMonth(future.getMonthValue());
+        assertThrows(IllegalArgumentException.class, () -> service.submitProjectTimesheet(4L, 3L, 1L));
+        verify(submissions, never()).save(any());
+    }
+
+    @Test void approvedMonthDoesNotFreezeAnotherDraftProject() {
+        sheet.setStatus(TimesheetStatus.APPROVED);
+        submission.setStatus(TimesheetStatus.DRAFT);
+        add(LocalDate.of(2026, 9, 10), "8", List.of());
+        verify(entries).save(any());
+    }
+
+    @Test void approvedProjectStillRejectsChanges() {
+        submission.setStatus(TimesheetStatus.APPROVED);
+        assertThrows(IllegalArgumentException.class, () -> add(LocalDate.of(2026, 9, 10), "8", List.of()));
+        verify(entries, never()).save(any());
+    }
+
+    @Test void lockedMonthStillRejectsDraftChanges() {
+        sheet.setStatus(TimesheetStatus.LOCKED);
+        assertThrows(IllegalArgumentException.class, () -> add(LocalDate.of(2026, 9, 10), "8", List.of()));
+        verify(entries, never()).save(any());
+    }
 }

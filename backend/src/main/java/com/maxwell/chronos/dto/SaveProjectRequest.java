@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 @Data
 @NoArgsConstructor
@@ -21,4 +22,8 @@ public class SaveProjectRequest {
     private BigDecimal totalAllocatedHours;
     private Long projectManagerId;
     private Long projectManagerHoursApproverId;
+    private LocalDate projectManagerStartDate;
+    private LocalDate projectManagerEndDate;
+    private BigDecimal projectManagerBillRate;
+    private BigDecimal projectManagerPlannedHours;
 }

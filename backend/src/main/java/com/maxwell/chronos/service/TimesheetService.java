@@ -194,7 +194,11 @@ public class TimesheetService {
 
         var project = requireAssignedProject(projectId, userId);
         TimesheetProjectSubmission submission = getOrCreateProjectSubmission(timesheet, project);
-        if (timesheet.getStatus() == TimesheetStatus.APPROVED || timesheet.isLocked() || !submission.isEditable()) {
+        if (java.time.YearMonth.of(timesheet.getYear(), timesheet.getMonth()).isAfter(java.time.YearMonth.now())) {
+            throw new IllegalArgumentException("Future timesheets are read-only until that month begins");
+        }
+        requireCurrentEditingPeriod(timesheet);
+        if (timesheet.isLocked() || !submission.isEditable()) {
             throw new IllegalArgumentException("Project timesheet is not editable");
         }
 
@@ -263,9 +267,11 @@ public class TimesheetService {
         }
 
         Project project = requireAssignedProject(projectId, userId);
+        if (entry.getProject() != null) requireAssignedProject(entry.getProject().getId(), userId);
         TimesheetProjectSubmission existingSubmission = getOrCreateProjectSubmission(timesheet, entry.getProject() != null ? entry.getProject() : project);
         TimesheetProjectSubmission targetSubmission = getOrCreateProjectSubmission(timesheet, project);
-        if (timesheet.getStatus() == TimesheetStatus.APPROVED || timesheet.isLocked() || !existingSubmission.isEditable() || !targetSubmission.isEditable()) {
+        requireCurrentEditingPeriod(timesheet);
+        if (timesheet.isLocked() || !existingSubmission.isEditable() || !targetSubmission.isEditable()) {
             throw new IllegalArgumentException("Project timesheet is not editable");
         }
         validateEntry(timesheet, project, entry.getEntryDate(), entry.getId(), hours, sessions);
@@ -306,8 +312,10 @@ public class TimesheetService {
         if (entry.getProject() == null) {
             throw new IllegalArgumentException("Time entry does not have a project code");
         }
+        requireAssignedProject(entry.getProject().getId(), userId);
         TimesheetProjectSubmission submission = getOrCreateProjectSubmission(timesheet, entry.getProject());
-        if (timesheet.getStatus() == TimesheetStatus.APPROVED || timesheet.isLocked() || !submission.isEditable()) {
+        requireCurrentEditingPeriod(timesheet);
+        if (timesheet.isLocked() || !submission.isEditable()) {
             throw new IllegalArgumentException("Project timesheet is not editable");
         }
 
@@ -378,7 +386,8 @@ public class TimesheetService {
 
         Project project = requireAssignedProject(projectId, userId);
         TimesheetProjectSubmission submission = getOrCreateProjectSubmission(timesheet, project);
-        if (timesheet.getStatus() == TimesheetStatus.APPROVED || timesheet.isLocked() || !submission.isEditable()) {
+        requireCurrentEditingPeriod(timesheet);
+        if (timesheet.isLocked() || !submission.isEditable()) {
             throw new IllegalArgumentException("Project timesheet cannot be submitted from its current status");
         }
 
@@ -658,11 +667,11 @@ public class TimesheetService {
         if (timesheet == null || project == null || timesheet.getUser() == null) {
             return BigDecimal.ZERO;
         }
-        return projectHourPlanRepository
-                .findByProjectIdAndUserIdAndYearAndMonth(project.getId(), timesheet.getUser().getId(), timesheet.getYear(), timesheet.getMonth())
-                .map(plan -> plan.getPlannedHours() != null ? plan.getPlannedHours() : BigDecimal.ZERO)
-                .or(() -> projectAssignmentRepository.findByProjectIdAndUserId(project.getId(), timesheet.getUser().getId())
-                        .map(assignment -> assignment.getPlannedHours() != null ? assignment.getPlannedHours() : BigDecimal.ZERO))
+        return projectAssignmentRepository.findByProjectIdAndUserId(project.getId(), timesheet.getUser().getId())
+                .map(assignment -> assignment.getPlannedHours())
+                .or(() -> projectHourPlanRepository
+                        .findByProjectIdAndUserIdAndYearAndMonth(project.getId(), timesheet.getUser().getId(), timesheet.getYear(), timesheet.getMonth())
+                        .map(plan -> plan.getPlannedHours()))
                 .orElse(BigDecimal.ZERO);
     }
 
@@ -712,9 +721,18 @@ public class TimesheetService {
         if (!projectService.isAssigned(projectId, userId)) {
             throw new IllegalArgumentException("Employee is not assigned to this project");
         }
-        return projectRepository.findById(projectId)
-                .filter(project -> ProjectStatus.ACTIVE.equals(project.getStatus()))
+        Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new IllegalArgumentException("Project not found"));
+        if (project.getStatus() != ProjectStatus.ACTIVE || Boolean.FALSE.equals(project.getIsActive())) {
+            throw new IllegalArgumentException("Hour entry is frozen while this project is " + project.getStatus().name().toLowerCase().replace('_', ' '));
+        }
+        return project;
+    }
+
+    private void requireCurrentEditingPeriod(Timesheet timesheet) {
+        if (!YearMonth.of(timesheet.getYear(), timesheet.getMonth()).equals(YearMonth.now())) {
+            throw new IllegalArgumentException("Only the current month's timesheet can be edited or submitted");
+        }
     }
 
     private void validateEntry(Timesheet timesheet, Project project, LocalDate date, Long entryId,

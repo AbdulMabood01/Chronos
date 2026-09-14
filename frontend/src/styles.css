@@ -3554,3 +3554,59 @@ body.theme-dark .summary-tile strong,
 body.theme-dark .gross-pay-tile strong {
   color: var(--primary-color);
 }
+
+.offboarding-notice { padding: 20px 24px; margin: 20px 0; border: 1px solid var(--border-color); border-left: 4px solid var(--primary-color); border-radius: 10px; background: var(--surface-muted); }
+.offboarding-notice p { margin: 8px 0 0; line-height: 1.6; }
+.approved-calendar .calendar-day { box-shadow: none; background: var(--surface-color); min-height: 120px; }
+.approved-day-hours { display: flex; align-items: baseline; gap: 6px; padding: 20px 0 8px; color: var(--text-primary); }
+.approved-day-hours strong { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.approved-day-hours > span { font-size: 12px; color: var(--text-secondary); }
+.approved-calendar .time-session-list { font-size: 11px; color: var(--text-secondary); }
+
+.timesheet-calendar-grid .calendar-day-weekend { background: color-mix(in srgb, var(--primary-color) 7%, var(--surface-color)); border-color: color-mix(in srgb, var(--primary-color) 18%, var(--border-color)); }
+
+.offboarding-notice { border-left-width: 5px; background: color-mix(in srgb, #bf861f 12%, var(--surface-color)); padding: 24px 28px; }
+.offboarding-notice-label { display: block; font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 10px; }
+.offboarding-notice > strong { display: block; font-size: 20px; line-height: 1.4; color: var(--text-primary); }
+
+/* Keep validation feedback in view while editing any calendar row. */
+.timesheet-error-toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 10000; width: min(560px, calc(100vw - 32px)); box-sizing: border-box; display: flex; align-items: flex-start; gap: 20px; padding: 20px 24px; border: 1px solid #cf5267; border-left: 5px solid #cf5267; border-radius: 12px; background: var(--surface-color, #fff); color: var(--text-primary, #17212f); box-shadow: 0 12px 40px #0003; }
+.timesheet-error-toast > div { flex: 1; min-width: 0; }
+.timesheet-error-toast strong { font-size: 15px; }
+.timesheet-error-toast p { margin: 8px 0 0; line-height: 1.5; overflow-wrap: anywhere; font-size: 14px; }
+.timesheet-error-toast button { padding: 6px 10px; border: 1px solid var(--border-color, #ccc); border-radius: 6px; color: inherit; background: transparent; cursor: pointer; }
+.offboarding-notice { --notice-accent: #64748b; border-color: color-mix(in srgb, var(--notice-accent) 45%, var(--border-color)); border-left-color: var(--notice-accent); background: color-mix(in srgb, var(--notice-accent) 12%, var(--surface-color)); }
+.offboarding-notice.notice-on-hold { --notice-accent: #c28a20; }
+.offboarding-notice.notice-completed { --notice-accent: #278569; }
+.offboarding-notice.notice-archived { --notice-accent: #8b6bb5; }
+.offboarding-notice.notice-offboarded { --notice-accent: #cf5267; }
+.offboarding-notice.notice-ended, .offboarding-notice.notice-assignment-ended { --notice-accent: #518eae; }
+
+/* Shared field and summary highlights across project, report and time workspaces. */
+.highlighted-workspace .report-panel .form-group,
+.highlighted-workspace .project-selector-panel > div,
+.highlighted-workspace .timesheet-summary-grid > .summary-tile,
+.highlighted-workspace .project-mini-metrics > div,
+.highlighted-workspace .pc-project-card {
+  --cell-accent: #518eae;
+  border: 1px solid color-mix(in srgb, var(--cell-accent) 30%, var(--border-color));
+  border-top: 4px solid var(--cell-accent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--cell-accent) 9%, var(--surface-color));
+  color: var(--text-primary);
+}
+.highlighted-workspace .report-panel .form-group,
+.highlighted-workspace .project-selector-panel > div { padding: 18px; min-width: 0; }
+.highlighted-workspace .report-panel .form-group:nth-child(2),
+.highlighted-workspace .project-selector-panel > div:nth-child(2),
+.highlighted-workspace .timesheet-summary-grid > .summary-tile:nth-child(3n + 2),
+.highlighted-workspace .project-mini-metrics > div:nth-child(3n + 2),
+.highlighted-workspace .pc-project-card:nth-child(3n + 2) { --cell-accent: #278569; }
+.highlighted-workspace .report-panel .form-group:nth-child(3),
+.highlighted-workspace .project-selector-panel > div:nth-child(3),
+.highlighted-workspace .timesheet-summary-grid > .summary-tile:nth-child(3n),
+.highlighted-workspace .project-mini-metrics > div:nth-child(3n),
+.highlighted-workspace .pc-project-card:nth-child(3n) { --cell-accent: #8b6bb5; }
+.highlighted-workspace .report-panel .form-group:nth-child(4) { --cell-accent: #bf861f; }
+.highlighted-workspace .timesheet-filter-row select { border: 1px solid #518eae; border-left: 4px solid #518eae; background: color-mix(in srgb, #518eae 9%, var(--surface-color)); min-height: 46px; }
+.highlighted-workspace .timesheet-filter-row #timesheet-project-select { border-color: #278569; background: color-mix(in srgb, #278569 9%, var(--surface-color)); }

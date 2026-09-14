@@ -95,11 +95,12 @@ export const projectAPI = {
   getHoursDashboard: (year, month) => apiClient.get('/projects/hours-dashboard', { params: { year, month } }),
   createProject: (data) => apiClient.post('/projects', data),
   updateProject: (id, data) => apiClient.put(`/projects/${id}`, data),
-  assignEmployee: (projectId, userId, startDate, endDate, billRate) => apiClient.post(`/projects/${projectId}/assignments/${userId}`, null, {
+  assignEmployee: (projectId, userId, startDate, endDate, billRate, plannedHours) => apiClient.post(`/projects/${projectId}/assignments/${userId}`, null, {
     params: {
       startDate,
       endDate,
       billRate,
+      plannedHours,
     },
   }),
   updateAssignmentDates: (projectId, userId, startDate, endDate, billRate) =>
@@ -110,7 +111,7 @@ export const projectAPI = {
         billRate,
       },
     }),
-  removeEmployee: (projectId, userId) => apiClient.delete(`/projects/${projectId}/assignments/${userId}`),
+  removeEmployee: (projectId, userId, replacementManagerId) => apiClient.delete(`/projects/${projectId}/assignments/${userId}`, { params: { replacementManagerId } }),
   updatePlannedHours: (projectId, userId, plannedHours, year, month) =>
     apiClient.patch(`/projects/${projectId}/assignments/${userId}/planned-hours`, null, {
       params: {

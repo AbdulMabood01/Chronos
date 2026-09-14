@@ -83,10 +83,11 @@ public class ProjectController {
                                                      @RequestParam LocalDate startDate,
                                                      @RequestParam LocalDate endDate,
                                                      @RequestParam BigDecimal billRate,
+                                                     @RequestParam BigDecimal plannedHours,
                                                      @AuthenticationPrincipal Jwt jwt) {
         var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
         try {
-            return ResponseEntity.ok(projectService.assignEmployee(projectId, userId, startDate, endDate, billRate, user));
+            return ResponseEntity.ok(projectService.assignEmployee(projectId, userId, startDate, endDate, billRate, plannedHours, user));
         } catch (IllegalArgumentException e) {
             throw e;
         }
@@ -94,10 +95,11 @@ public class ProjectController {
 
     @DeleteMapping("/{projectId}/assignments/{userId}")
     public ResponseEntity<ProjectDTO> removeEmployee(@PathVariable Long projectId, @PathVariable Long userId,
+                                                     @RequestParam(required = false) Long replacementManagerId,
                                                      @AuthenticationPrincipal Jwt jwt) {
         var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
         try {
-            return ResponseEntity.ok(projectService.removeEmployee(projectId, userId, user));
+            return ResponseEntity.ok(projectService.removeEmployee(projectId, userId, replacementManagerId, user));
         } catch (IllegalArgumentException e) {
             throw e;
         }

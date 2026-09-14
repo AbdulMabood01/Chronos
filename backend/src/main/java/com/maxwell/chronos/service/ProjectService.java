@@ -71,8 +71,7 @@ public class ProjectService {
         if (year != null) {
             validatePeriod(year, month);
         }
-        return assignmentRepository.findByUserIdAndIsActiveTrue(userId).stream()
-                .filter(assignment -> ProjectStatus.ACTIVE.equals(assignment.getProject().getStatus()))
+        return assignmentRepository.findByUserId(userId).stream()
                 .sorted(Comparator.comparing(assignment -> assignment.getProject().getCode(), String.CASE_INSENSITIVE_ORDER))
                 .map(assignment -> toDTO(assignment.getProject(), List.of(toAssignmentDTO(assignment, year, month))))
                 .toList();
@@ -109,6 +108,13 @@ public class ProjectService {
         project.setDescription(clean(request.getDescription()));
         ProjectStatus status = request.getStatus() != null ? request.getStatus()
                 : Boolean.FALSE.equals(request.getIsActive()) ? ProjectStatus.ARCHIVED : ProjectStatus.ACTIVE;
+        if (projectId != null && (status == ProjectStatus.COMPLETED || status == ProjectStatus.ARCHIVED)
+                && (projectSubmissionRepository.findByProjectId(projectId).stream().anyMatch(submission ->
+                        pendingApproval(submission) || (!submission.isPdfExportEligible()
+                                && submission.getTotalHours() != null && submission.getTotalHours().signum() > 0))
+                    || projectSubmissionRepository.countUnfinalizedEntries(projectId, List.of(TimesheetStatus.APPROVED, TimesheetStatus.LOCKED)) > 0)) {
+            throw new IllegalArgumentException("This project has unfinalized hours. Submit draft hours, correct and resubmit rejected hours, and approve pending timesheets before completing or archiving. Remove logged hours only if they were entered in error.");
+        }
         project.setStatus(status);
         project.setIsActive(ProjectStatus.ACTIVE.equals(status));
         project.setTotalAllocatedHours(request.getTotalAllocatedHours());
@@ -130,16 +136,6 @@ public class ProjectService {
         }
 
         Project saved = projectRepository.save(project);
-        if (saved.getProjectManager() != null) {
-            ProjectAssignment managerAssignment = assignmentRepository.findByProjectIdAndUserId(saved.getId(), saved.getProjectManager().getId())
-                    .orElseGet(() -> ProjectAssignment.builder()
-                            .project(saved)
-                            .user(saved.getProjectManager())
-                            .assignedBy(requester)
-                            .build());
-            managerAssignment.setIsActive(true);
-            assignmentRepository.save(managerAssignment);
-        }
         auditService.logAction(requester.getId(), projectId == null ? "PROJECT_CREATED" : "PROJECT_UPDATED",
                 "Project", saved.getId(), "Code: " + saved.getCode());
         return toDTO(saved);
@@ -151,7 +147,15 @@ public class ProjectService {
 
     public ProjectDTO assignEmployee(Long projectId, Long userId, LocalDate startDate, LocalDate endDate,
                                      BigDecimal billRate, User requester) {
+        return assignEmployee(projectId, userId, startDate, endDate, billRate, null, requester);
+    }
+
+    public ProjectDTO assignEmployee(Long projectId, Long userId, LocalDate startDate, LocalDate endDate,
+                                     BigDecimal billRate, BigDecimal plannedHours, User requester) {
         requireProjectAdmin(requester);
+        if (plannedHours == null || plannedHours.signum() <= 0) {
+            throw new IllegalArgumentException("Assigned hours must be greater than zero");
+        }
         if (requester.getId().equals(userId)) {
             throw new IllegalArgumentException("Users cannot assign themselves to projects");
         }
@@ -170,6 +174,7 @@ public class ProjectService {
                         .user(user)
                         .assignedBy(requester)
                         .build());
+        assignment.setPlannedHours(plannedHours);
         assignment.setIsActive(true);
         assignment.setStartDate(startDate);
         assignment.setEndDate(endDate);
@@ -202,6 +207,7 @@ public class ProjectService {
         requireCanPlanProject(projectId, requester);
         ProjectAssignment assignment = assignmentRepository.findByProjectIdAndUserId(projectId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Assignment not found"));
+        requireActiveAssignment(assignment);
         assignment.setPlannedHours(plannedHours);
         assignmentRepository.save(assignment);
         auditService.logAction(requester.getId(), "PROJECT_UPDATED", "Project", projectId,
@@ -219,6 +225,8 @@ public class ProjectService {
                 .orElseThrow(() -> new IllegalArgumentException("Project not found"));
         User targetUser = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        requireActiveAssignment(assignmentRepository.findByProjectIdAndUserId(projectId, userId)
+                .orElseThrow(() -> new IllegalArgumentException("Assignment not found")));
         ProjectHourPlan plan = hourPlanRepository.findByProjectIdAndUserIdAndYearAndMonth(projectId, userId, year, month)
                 .orElseGet(() -> ProjectHourPlan.builder()
                         .project(project)
@@ -253,10 +261,55 @@ public class ProjectService {
                 .toList();
     }
 
+    private void requireActiveAssignment(ProjectAssignment assignment) {
+        if (!Boolean.TRUE.equals(assignment.getIsActive())) {
+            throw new IllegalArgumentException("Hours for offboarded members are frozen");
+        }
+    }
+
+    private boolean pendingApproval(TimesheetProjectSubmission submission) {
+        return submission.getStatus() == TimesheetStatus.SUBMITTED || submission.getStatus() == TimesheetStatus.CHANGE_REQUESTED;
+    }
+
+    private BigDecimal approvedHoursToDate(Long projectId, Long userId) {
+        return projectSubmissionRepository.findByProjectIdAndTimesheetUserId(projectId, userId).stream()
+                .filter(s -> s.getStatus() == TimesheetStatus.APPROVED || s.getStatus() == TimesheetStatus.LOCKED)
+                .map(s -> s.getTotalHours() != null ? s.getTotalHours() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
     public ProjectDTO removeEmployee(Long projectId, Long userId, User requester) {
+        return removeEmployee(projectId, userId, null, requester);
+    }
+
+    public ProjectDTO removeEmployee(Long projectId, Long userId, Long replacementManagerId, User requester) {
         requireProjectAdmin(requester);
         ProjectAssignment assignment = assignmentRepository.findByProjectIdAndUserId(projectId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Assignment not found"));
+        requireActiveAssignment(assignment);
+        if (projectSubmissionRepository.findByProjectIdAndTimesheetUserId(projectId, userId).stream().anyMatch(this::pendingApproval)) {
+            throw new IllegalArgumentException("Please approve or reject pending hours before offboarding this employee");
+        }
+        Project project = assignment.getProject();
+        if (project.getProjectManager() != null && project.getProjectManager().getId().equals(userId)) {
+            if (replacementManagerId == null || replacementManagerId.equals(userId)) {
+                throw new IllegalArgumentException("Assign a secondary PM before offboarding the project manager");
+            }
+            User replacementUser = userRepository.findById(replacementManagerId)
+                    .orElseThrow(() -> new IllegalArgumentException("Replacement PM not found"));
+            if (replacementUser.getRole() != com.maxwell.chronos.enums.UserRole.ADMIN) {
+                ProjectAssignment replacement = assignmentRepository.findByProjectIdAndUserId(projectId, replacementManagerId)
+                        .orElseThrow(() -> new IllegalArgumentException("The secondary PM must be an active project team member or admin"));
+                requireActiveAssignment(replacement);
+            }
+            if (!Boolean.TRUE.equals(replacementUser.getIsActive()) ||
+                    (project.getProjectManagerHoursApprover() != null && project.getProjectManagerHoursApprover().getId().equals(replacementManagerId))) {
+                throw new IllegalArgumentException("Choose an active secondary PM different from the PM hours approver");
+            }
+            project.setProjectManager(replacementUser);
+            projectRepository.save(project);
+        }
+        assignment.setPlannedHours(approvedHoursToDate(projectId, userId));
         assignment.setIsActive(false);
         if (assignment.getEndDate() == null) {
             assignment.setEndDate(LocalDate.now());
@@ -361,12 +414,15 @@ public class ProjectService {
     private ProjectAssignmentDTO toAssignmentDTO(ProjectAssignment assignment, Integer year, Integer month) {
         User user = assignment.getUser();
         BigDecimal plannedHours = assignment.getPlannedHours();
-        if (year != null && month != null) {
+        if (plannedHours == null && year != null && month != null) {
             plannedHours = hourPlanRepository
                     .findByProjectIdAndUserIdAndYearAndMonth(assignment.getProject().getId(), user.getId(), year, month)
                     .map(plan -> plan.getPlannedHours() != null ? plan.getPlannedHours() : BigDecimal.ZERO)
                     .orElse(plannedHours);
         }
+        boolean active = Boolean.TRUE.equals(assignment.getIsActive());
+        BigDecimal approvedToDate = approvedHoursToDate(assignment.getProject().getId(), user.getId());
+        if (!active) plannedHours = assignment.getPlannedHours() != null ? assignment.getPlannedHours() : approvedToDate;
         return ProjectAssignmentDTO.builder()
                 .id(assignment.getId())
                 .userId(user.getId())
@@ -376,6 +432,8 @@ public class ProjectService {
                 .jobTitle(user.getJobTitle())
                 .isActive(assignment.getIsActive())
                 .plannedHours(plannedHours)
+                .approvedHoursToDate(active ? approvedToDate : plannedHours)
+                .pendingApproval(projectSubmissionRepository.findByProjectIdAndTimesheetUserId(assignment.getProject().getId(), user.getId()).stream().anyMatch(this::pendingApproval))
                 .billRate(assignment.getBillRate())
                 .startDate(assignment.getStartDate())
                 .endDate(assignment.getEndDate())

@@ -22,6 +22,8 @@ public class ProjectAssignmentDTO {
     private String jobTitle;
     private Boolean isActive;
     private BigDecimal plannedHours;
+    private BigDecimal approvedHoursToDate;
+    private boolean pendingApproval;
     private BigDecimal billRate;
     private LocalDate startDate;
     private LocalDate endDate;

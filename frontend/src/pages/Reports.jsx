@@ -117,14 +117,14 @@ export default function Reports() {
 
   if (!canViewReports) {
     return (
-      <div className="page-container">
+      <div className="page-container highlighted-workspace">
         <div className="error-message">You do not have permission to access this page.</div>
       </div>
     );
   }
 
   return (
-    <div className="page-container admin-page">
+    <div className="page-container highlighted-workspace admin-page">
       <div className="header-bar">
         <div>
           <ScreenTitle title="Reports" icon="chart" eyebrow="REPORTING CENTER" />

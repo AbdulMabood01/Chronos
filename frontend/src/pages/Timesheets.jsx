@@ -47,11 +47,11 @@ export default function Timesheets() {
   };
 
   if (loading) {
-    return <div className="page-container"><div className="loading-panel"><LoadingIndicator label="Loading timesheets..." /></div></div>;
+    return <div className="page-container highlighted-workspace"><div className="loading-panel"><LoadingIndicator label="Loading timesheets..." /></div></div>;
   }
 
   return (
-    <div className="page-container">
+    <div className="page-container highlighted-workspace">
       <ScreenTitle title="My Timesheets" icon="clock" eyebrow="YOUR TIME ARCHIVE" />
 
       {error && <div className="error-message">{error}</div>}

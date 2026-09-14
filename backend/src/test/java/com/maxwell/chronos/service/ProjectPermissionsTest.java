@@ -64,12 +64,12 @@ class ProjectPermissionsTest {
         assertEquals(UserRole.EMPLOYEE, manager.getRole());
         assertEquals(UserRole.EMPLOYEE, approver.getRole());
         verify(users, never()).save(any());
-        verify(assignments).save(any());
+        verify(assignments, never()).save(any());
     }
 
     @Test void employeeCanPlanOnlyTheirManagedProject() {
         var project = Project.builder().id(10L).code("P1").projectManager(manager).build();
-        var assignment = ProjectAssignment.builder().project(project).user(approver).build();
+        var assignment = ProjectAssignment.builder().project(project).user(approver).isActive(true).build();
         when(projects.findById(10L)).thenReturn(Optional.of(project));
         when(assignments.findByProjectIdAndUserId(10L, 4L)).thenReturn(Optional.of(assignment));
         service.updatePlannedHours(10L, 4L, BigDecimal.TEN, manager);
@@ -83,5 +83,62 @@ class ProjectPermissionsTest {
         service.getProjectHoursDashboard(2026, 9, manager);
         verify(projects).findByProjectManagerIdAndStatus(3L, ProjectStatus.ACTIVE);
         verify(projects, never()).findAll();
+    }
+
+    @Test void pendingApprovalBlocksOffboarding() {
+        var project = Project.builder().id(10L).build();
+        var assignment = ProjectAssignment.builder().project(project).user(manager).isActive(true).build();
+        when(assignments.findByProjectIdAndUserId(10L, 3L)).thenReturn(Optional.of(assignment));
+        when(submissions.findByProjectIdAndTimesheetUserId(10L, 3L)).thenReturn(List.of(
+                TimesheetProjectSubmission.builder().status(TimesheetStatus.SUBMITTED).build()));
+        assertThrows(IllegalArgumentException.class, () -> service.removeEmployee(10L, 3L, admin));
+        assertTrue(assignment.getIsActive());
+        verify(assignments, never()).save(any());
+    }
+
+    @Test void offboardingFreezesApprovedHoursAndTransfersManager() {
+        var project = Project.builder().id(10L).projectManager(manager).build();
+        var assignment = ProjectAssignment.builder().project(project).user(manager).isActive(true).plannedHours(new BigDecimal("100")).build();
+        var replacementUser = User.builder().id(5L).isActive(true).build();
+        when(users.findById(5L)).thenReturn(Optional.of(replacementUser));
+        var replacement = ProjectAssignment.builder().project(project).user(replacementUser).isActive(true).build();
+        when(assignments.findByProjectIdAndUserId(10L, 3L)).thenReturn(Optional.of(assignment));
+        when(assignments.findByProjectIdAndUserId(10L, 5L)).thenReturn(Optional.of(replacement));
+        when(submissions.findByProjectIdAndTimesheetUserId(10L, 3L)).thenReturn(List.of(
+                TimesheetProjectSubmission.builder().status(TimesheetStatus.APPROVED).totalHours(new BigDecimal("20")).build(),
+                TimesheetProjectSubmission.builder().status(TimesheetStatus.LOCKED).totalHours(new BigDecimal("15")).build(),
+                TimesheetProjectSubmission.builder().status(TimesheetStatus.REJECTED).totalHours(new BigDecimal("10")).build()));
+        assertThrows(IllegalArgumentException.class, () -> service.removeEmployee(10L, 3L, admin));
+        service.removeEmployee(10L, 3L, 5L, admin);
+        assertFalse(assignment.getIsActive());
+        assertEquals(new BigDecimal("35"), assignment.getPlannedHours());
+        assertEquals(5L, project.getProjectManager().getId());
+    }
+
+    @Test void closureBlocksUnsubmittedAndUnapprovedHours() {
+        for (ProjectStatus target : List.of(ProjectStatus.COMPLETED, ProjectStatus.ARCHIVED)) {
+            for (TimesheetStatus pending : List.of(TimesheetStatus.DRAFT, TimesheetStatus.REJECTED, TimesheetStatus.SUBMITTED, TimesheetStatus.CHANGE_REQUESTED)) {
+                Project project = Project.builder().id(10L).status(ProjectStatus.ACTIVE).build();
+                when(projects.findById(10L)).thenReturn(Optional.of(project));
+                when(submissions.findByProjectId(10L)).thenReturn(List.of(TimesheetProjectSubmission.builder().status(pending).totalHours(BigDecimal.TEN).build()));
+                SaveProjectRequest request = new SaveProjectRequest();
+                request.setCode("P1"); request.setName("Project"); request.setProjectManagerId(3L); request.setProjectManagerHoursApproverId(4L); request.setStatus(target);
+                assertThrows(IllegalArgumentException.class, () -> service.saveProject(10L, request, admin));
+                assertEquals(ProjectStatus.ACTIVE, project.getStatus());
+            }
+        }
+        verify(projects, never()).save(any());
+    }
+
+    @Test void closureBlocksLoggedHoursWithoutSubmission() {
+        when(projects.findById(10L)).thenReturn(Optional.of(Project.builder().id(10L).status(ProjectStatus.ACTIVE).build()));
+        when(submissions.countUnfinalizedEntries(eq(10L), anyList())).thenReturn(1L);
+        SaveProjectRequest request = new SaveProjectRequest();
+        request.setCode("P1"); request.setName("Project"); request.setProjectManagerId(3L); request.setProjectManagerHoursApproverId(4L); request.setStatus(ProjectStatus.ARCHIVED);
+        assertThrows(IllegalArgumentException.class, () -> service.saveProject(10L, request, admin));
+        verify(projects, never()).save(any());
+    }
+    private void stubExistingManager() {
+        when(assignments.findByProjectIdAndUserId(10L, 3L)).thenReturn(Optional.of(ProjectAssignment.builder().isActive(true).startDate(LocalDate.now()).endDate(LocalDate.now().plusMonths(1)).billRate(BigDecimal.TEN).plannedHours(BigDecimal.TEN).build()));
     }
 }
