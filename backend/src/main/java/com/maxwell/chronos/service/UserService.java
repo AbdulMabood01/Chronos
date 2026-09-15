@@ -199,12 +199,39 @@ public class UserService {
             user.setSsnLast4(clean(request.getSsnLast4()));
         }
         user.setProfileImageUrl(clean(request.getProfileImageUrl()));
+        user.setPhoneNumber(clean(request.getPhoneNumber()));
+        user.setPersonalEmail(clean(request.getPersonalEmail()));
+        user.setAddressLine1(clean(request.getAddressLine1()));
+        user.setAddressLine2(clean(request.getAddressLine2()));
+        user.setCity(clean(request.getCity()));
+        user.setStateProvince(clean(request.getStateProvince()));
+        user.setPostalCode(clean(request.getPostalCode()));
+        user.setCountry(clean(request.getCountry()));
+        user.setBloodGroup(clean(request.getBloodGroup()));
+        user.setEmergencyContactName(clean(request.getEmergencyContactName()));
+        user.setEmergencyContactRelationship(clean(request.getEmergencyContactRelationship()));
+        user.setEmergencyContactPhone(clean(request.getEmergencyContactPhone()));
+        user.setEmergencyContactEmail(clean(request.getEmergencyContactEmail()));
         user.setProfileCompleted(true);
 
         User saved = userRepository.save(user);
         auditService.logAction(saved.getId(), "USER_PROFILE_UPDATED", "User", saved.getId(),
                 "User updated their profile");
-        return toDTO(saved);
+        UserDTO profile = toDTO(saved);
+        profile.setPhoneNumber(saved.getPhoneNumber());
+        profile.setPersonalEmail(saved.getPersonalEmail());
+        profile.setAddressLine1(saved.getAddressLine1());
+        profile.setAddressLine2(saved.getAddressLine2());
+        profile.setCity(saved.getCity());
+        profile.setStateProvince(saved.getStateProvince());
+        profile.setPostalCode(saved.getPostalCode());
+        profile.setCountry(saved.getCountry());
+        profile.setBloodGroup(saved.getBloodGroup());
+        profile.setEmergencyContactName(saved.getEmergencyContactName());
+        profile.setEmergencyContactRelationship(saved.getEmergencyContactRelationship());
+        profile.setEmergencyContactPhone(saved.getEmergencyContactPhone());
+        profile.setEmergencyContactEmail(saved.getEmergencyContactEmail());
+        return profile;
     }
 
     public boolean hasSuperAdminRole(Long userId) {

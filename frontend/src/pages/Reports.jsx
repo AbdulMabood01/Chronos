@@ -4,6 +4,7 @@ import { useAuth } from '../AuthContext';
 import { projectAPI, reportsAPI } from '../api';
 import { LoadingIndicator } from '../components/Hourglass';
 import '../styles.css';
+import './Reports.css';
 
 const monthNames = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -35,9 +36,32 @@ export default function Reports() {
   const canViewReports = ['ADMIN', 'SUPER_ADMIN'].includes(user?.role);
 
   useEffect(() => {
-    if (canViewReports) {
-      loadSummary();
+    let cancelled = false;
+    setProjectSummaries([]);
+    setSelectedSubmissionIds([]);
+    if (!canViewReports) return;
+    if (!Number.isInteger(year) || year < 1 || year > 9999) {
+      setLoadingSummary(false);
+      setError('Enter a year between 1 and 9999.');
+      return;
     }
+    setLoadingSummary(true);
+    setError('');
+    projectAPI.getHoursDashboard(year, month).then((response) => {
+      if (cancelled) return;
+      const projects = (response.data || []).map((project) => ({
+        ...project,
+        employees: (project.employees || []).filter((row) => row.submissionId || Number(row.totalLoggedHours) > 0),
+      })).filter((project) => project.employees.length > 0);
+      setProjectSummaries(projects);
+      setSelectedProjectId((current) => projects.some((project) => String(project.projectId) === String(current))
+        ? current : (projects[0]?.projectId || ''));
+    }).catch(() => {
+      if (!cancelled) setError('Failed to load project timesheet summary');
+    }).finally(() => {
+      if (!cancelled) setLoadingSummary(false);
+    });
+    return () => { cancelled = true; };
   }, [canViewReports, year, month]);
 
   const selectedProject = useMemo(
@@ -56,24 +80,6 @@ export default function Reports() {
   const allSelected = exportableSubmissionIds.length > 0 && selectedSubmissionIds.length === exportableSubmissionIds.length;
   const selectedCount = selectedSubmissionIds.length;
   const selectedSet = useMemo(() => new Set(selectedSubmissionIds), [selectedSubmissionIds]);
-
-  const loadSummary = async () => {
-    setLoadingSummary(true);
-    try {
-      const response = await projectAPI.getHoursDashboard(year, month);
-      const rows = response.data || [];
-      setProjectSummaries(rows);
-      setSelectedProjectId((current) => (rows.some((project) => String(project.projectId) === String(current))
-        ? current
-        : (rows[0]?.projectId || '')));
-      setSelectedSubmissionIds([]);
-      setError('');
-    } catch (err) {
-      setError('Failed to load project timesheet summary');
-    } finally {
-      setLoadingSummary(false);
-    }
-  };
 
   const toggleSubmission = (row) => {
     if (!['APPROVED', 'LOCKED'].includes(row.status) || !row.submissionId) {
@@ -124,7 +130,7 @@ export default function Reports() {
   }
 
   return (
-    <div className="page-container highlighted-workspace admin-page">
+    <div className="page-container highlighted-workspace admin-page reports-page">
       <div className="header-bar">
         <div>
           <ScreenTitle title="Reports" icon="chart" eyebrow="REPORTING CENTER" />
@@ -137,14 +143,16 @@ export default function Reports() {
       <div className="card report-panel">
         <div className="panel-heading">
           <div>
-            <h2>Select Period</h2>
-            <p>Choose the month and year for reports.</p>
+            <h2>Filters</h2>
           </div>
+          <button className="button button-secondary" onClick={handleExportVacation} disabled={!Number.isInteger(year) || year < 1 || year > 9999}>
+            Export vacations
+          </button>
         </div>
         <div className="form-row">
           <div className="form-group">
             <label htmlFor="reports-field-1">Year</label>
-            <input id="reports-field-1" type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} />
+            <input id="reports-field-1" type="number" min="1" max="9999" value={year || ''} onChange={(e) => setYear(Number(e.target.value))} />
           </div>
           <div className="form-group">
             <label htmlFor="reports-field-2">Month</label>
@@ -156,7 +164,8 @@ export default function Reports() {
           </div>
           <div className="form-group">
             <label htmlFor="reports-field-3">Project</label>
-            <select id="reports-field-3" value={selectedProjectId} onChange={(e) => { setSelectedProjectId(e.target.value); setSelectedSubmissionIds([]); }}>
+            <select id="reports-field-3" value={selectedProjectId} disabled={loadingSummary || !projectSummaries.length} onChange={(e) => { setSelectedProjectId(e.target.value); setSelectedSubmissionIds([]); }}>
+              {!projectSummaries.length && <option value="">{loadingSummary ? 'Loading…' : 'No reports'}</option>}
               {projectSummaries.map((project) => (
                 <option value={project.projectId} key={project.projectId}>
                   {project.projectCode} - {project.projectName}
@@ -165,19 +174,14 @@ export default function Reports() {
             </select>
           </div>
           <div className="form-group">
-            <label htmlFor="reports-field-4">Employee Name</label>
+            <label htmlFor="reports-field-4">Employee</label>
             <input
               id="reports-field-4"
               value={employeeFilter}
               onChange={(e) => { setEmployeeFilter(e.target.value); setSelectedSubmissionIds([]); }}
-              placeholder="All project members"
+              placeholder="Name, ID or email"
             />
           </div>
-        </div>
-        <div className="action-buttons">
-          <button className="button button-secondary" onClick={handleExportVacation}>
-            Export Vacation Requests
-          </button>
         </div>
       </div>
 
@@ -188,14 +192,14 @@ export default function Reports() {
             <p>{selectedCount} approved project timesheet{selectedCount === 1 ? '' : 's'} selected. Draft, submitted, and rejected project timesheets cannot be selected.</p>
           </div>
           <button className="button button-primary report-download-button" onClick={handleExportTimesheets} disabled={selectedCount === 0}>
-            Download Selected Timesheets
+            Download selected
           </button>
         </div>
 
         {loadingSummary ? (
           <div className="loading-panel"><LoadingIndicator label="Loading project timesheets..." /></div>
         ) : projectSummaries.length === 0 ? (
-          <div className="empty-state"><p>No projects available for this period.</p></div>
+          <div className="empty-state"><p>No project timesheets for this period.</p></div>
         ) : filteredRows.length === 0 ? (
           <div className="empty-state"><p>No project members match this filter.</p></div>
         ) : (

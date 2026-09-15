@@ -31,6 +31,7 @@ public class TimesheetProjectSubmissionDTO {
     private Integer month;
     private TimesheetStatus status;
     private BigDecimal totalHours;
+    private BigDecimal loggedHoursToDate;
     private BigDecimal plannedHours;
     private BigDecimal remainingHours;
     private BigDecimal billRate;

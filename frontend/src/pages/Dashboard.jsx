@@ -6,6 +6,7 @@ import AdminDashboard from './AdminDashboard';
 import { format } from 'date-fns';
 import '../styles.css';
 import Icon from '../components/Icon';
+import './Dashboard.css';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -66,7 +67,7 @@ export default function Dashboard() {
           <p>Keep your hours, time off, and requests<br className="desktop-break"/> together. Get on with your best work.</p>
           <Link className="button hero-action" to="/timesheets">Open my timesheet <Icon name="arrow" size={18}/></Link>
         </div>
-        <div className="hero-month"><div className="month-ring" style={{ '--progress': monthProgress + '%' }}><div><small>MONTH ELAPSED</small><strong>{monthProgress}<span>%</span></strong></div></div><strong>{monthName}</strong><span>{new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - now.getDate()} days remaining</span></div>
+        <div className="hero-month"><div className="month-scene"><div className="month-orbit month-orbit-outer" aria-hidden="true"/><div className="month-orbit month-orbit-inner" aria-hidden="true"/><div className="month-ring" style={{ '--progress': monthProgress + '%' }}><div><small>MONTH ELAPSED</small><strong>{monthProgress}<span>%</span></strong></div></div></div><strong>{monthName}</strong><span>{new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - now.getDate()} days remaining</span></div>
       </section>
       <div className="section-heading"><h2>Your month at a glance</h2><span>{monthName}</span></div>
       <section className="employee-home-grid" aria-label="Workspace summary" aria-busy={loading}>

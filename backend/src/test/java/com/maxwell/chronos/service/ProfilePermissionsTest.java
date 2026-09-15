@@ -11,6 +11,52 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class ProfilePermissionsTest {
+    @Test void optionalDetailsAreSavedClearedAndExcludedFromGeneralUserResponses() throws Exception {
+        var users = mock(UserRepository.class);
+        var service = new UserService(users, mock(AuditService.class));
+        var user = User.builder().id(1L).email("employee@example.com").role(UserRole.EMPLOYEE).build();
+        when(users.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
+        when(users.save(user)).thenReturn(user);
+        var request = new UpdateProfileRequest();
+        String[] fields = {"PhoneNumber", "PersonalEmail", "AddressLine1", "AddressLine2", "City", "StateProvince", "PostalCode", "Country", "BloodGroup", "EmergencyContactName", "EmergencyContactRelationship", "EmergencyContactPhone", "EmergencyContactEmail"};
+        for (String field : fields) {
+            UpdateProfileRequest.class.getMethod("set" + field, String.class).invoke(request, " value ");
+        }
+        var saved = service.updateOwnProfile(user.getEmail(), request);
+        var general = service.findByEmail(user.getEmail());
+        for (String field : fields) {
+            assertEquals("value", User.class.getMethod("get" + field).invoke(user));
+            assertEquals("value", saved.getClass().getMethod("get" + field).invoke(saved));
+            assertNull(general.getClass().getMethod("get" + field).invoke(general));
+            UpdateProfileRequest.class.getMethod("set" + field, String.class).invoke(request, " ");
+        }
+        var cleared = service.updateOwnProfile(user.getEmail(), request);
+        for (String field : fields) {
+            assertNull(User.class.getMethod("get" + field).invoke(user));
+            assertNull(cleared.getClass().getMethod("get" + field).invoke(cleared));
+        }
+    }
+
+    @Test void validatesBloodGroupEmailAndFieldLengths() {
+        try (var factory = jakarta.validation.Validation.buildDefaultValidatorFactory()) {
+            var validator = factory.getValidator();
+            var request = new UpdateProfileRequest();
+            request.setFirstName("Test");
+            request.setLastName("User");
+            request.setJobTitle("Engineer");
+            request.setDateOfBirth(java.time.LocalDate.of(1990, 1, 1));
+            request.setBloodGroup("O+");
+            request.setPersonalEmail("");
+            assertTrue(validator.validate(request).isEmpty());
+            request.setBloodGroup("X+");
+            request.setEmergencyContactEmail("invalid");
+            request.setPostalCode("x".repeat(21));
+            var invalidFields = validator.validate(request).stream()
+                    .map(v -> v.getPropertyPath().toString()).collect(java.util.stream.Collectors.toSet());
+            assertTrue(invalidFields.containsAll(java.util.Set.of("bloodGroup", "emergencyContactEmail", "postalCode")));
+        }
+    }
+
     @Test void superAdminCannotSetSsnAndExistingValueIsNotReturnedOrErased() {
         var users = mock(UserRepository.class);
         var service = new UserService(users, mock(AuditService.class));

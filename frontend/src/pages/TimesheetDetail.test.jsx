@@ -40,6 +40,25 @@ beforeEach(() => {
   projectAPI.getAssignedProjects.mockResolvedValue({ data: [{ id: 4, code: 'ATLAS', name: 'Atlas' }] });
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+describe('daily notes and summary', () => {
+  it('shows monthly and cumulative project hours in one summary', async () => {
+    timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, loggedHoursToDate: 120 } });
+    open();
+    expect(await screen.findByText('8.00 / 120.00')).toBeTruthy();
+    expect(screen.getByText('Hours logged This Month/Till Date')).toBeTruthy();
+  });
+  it('saves notes using the existing entry hours and sessions', async () => {
+    HTMLDialogElement.prototype.showModal = vi.fn(function () { this.setAttribute('open', ''); });
+    timesheetAPI.getTimesheetById.mockResolvedValue({ data: { ...sheet, status: 'DRAFT', timeEntries: [{ ...sheet.timeEntries[0], notes: 'Planning' }] } });
+    timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, status: 'DRAFT', plannedHours: 160 } });
+    open(false);
+    await waitFor(() => expect(screen.getByLabelText('Hours for 2026-08-03').disabled).toBe(false));
+    fireEvent.click(screen.getByRole('button', { name: 'Notes for 2026-08-03' }));
+    fireEvent.change(screen.getByLabelText('Tasks done that day (optional)'), { target: { value: 'Implemented reporting' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save notes' }));
+    await waitFor(() => expect(timesheetAPI.updateTimeEntry).toHaveBeenCalledWith(2, 8, expect.objectContaining({ hours: '8', notes: 'Implemented reporting', projectId: 4 })));
+  });
+});
 describe('employee PDF export', () => {
   it('allows an employee designated as approver to review', async () => {
     employee.id = 6;

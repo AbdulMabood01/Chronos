@@ -1,0 +1,70 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+6 0 obj
+<< /Length 3408 >>
+stream
+0.08 0.16 0.25 rg 0 690 612 102 re f
+BT /F2 12 Tf 1 1 1 rg 1 0 0 1 44 760 Tm (MAXWELL SOFTWARE AND SOLUTIONS) Tj ET
+BT /F2 25 Tf 1 1 1 rg 1 0 0 1 44 728 Tm (Weekly Status Report) Tj ET
+BT /F1 10 Tf 0.72 0.85 0.92 rg 1 0 0 1 44 707 Tm (CHRONOS  /  DATA ENGINEERING) Tj ET
+BT /F2 13 Tf 0.16 0.21 0.28 rg 1 0 0 1 44 667 Tm (Abdul Majeed) Tj ET
+BT /F2 10 Tf 0.16 0.21 0.28 rg 1 0 0 1 285 667 Tm (WEEK 07  |  2026-09-13 to 2026-09-14) Tj ET
+BT /F1 8 Tf 0.16 0.21 0.28 rg 1 0 0 1 44 647 Tm (Scenario-based activities grounded in Chronos; not verified personal work history.) Tj ET
+BT /F2 9 Tf 0.02 0.40 0.46 rg 1 0 0 1 44 623 Tm (WEEK-TO-DATE REVIEW AND NEXT-CYCLE PLANNING) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 44 606 Tm (For this partial reporting week, I consolidated the data-engineering priorities and outstanding) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 44 593.5 Tm (acceptance decisions. I focused on the work needed to move from reporting specifications to) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 44 581 Tm (evidence-backed operational reporting.) Tj ET
+BT /F2 9 Tf 0.02 0.40 0.46 rg 1 0 0 1 44 557.5 Tm (WORK COMPLETED) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 49 540.5 Tm (- Prioritized the open definitions for allocation period, approval-rate fallback, and the) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 49 528 Tm (treatment of reopened reporting periods.) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 49 512.5 Tm (- Organized the next validation pass around multi-project employees, rate changes, vacation) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 49 500 Tm (conflicts, and offboarded assignments.) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 49 484.5 Tm (- Separated implementation tasks from business-policy decisions so each item has an appropriate) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 49 472 Tm (review owner.) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 49 456.5 Tm (- Documented that production load results, reconciliation pass rates, and performance measurements) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 49 444 Tm (remain unverified.) Tj ET
+BT /F2 9 Tf 0.02 0.40 0.46 rg 1 0 0 1 44 417.5 Tm (WORK IN PROGRESS) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 44 400.5 Tm (I am preparing the validation sequence: confirm definitions, obtain representative data, implement) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 44 388 Tm (reporting queries, reconcile outputs, and review exceptions.) Tj ET
+BT /F2 9 Tf 0.02 0.40 0.46 rg 1 0 0 1 44 364.5 Tm (RISKS AND DEPENDENCIES) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 44 347.5 Tm (The key dependencies are an approved reporting policy and authorized representative source data.) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 44 335 Tm (Production-readiness claims should wait for measured validation results.) Tj ET
+BT /F2 9 Tf 0.02 0.40 0.46 rg 1 0 0 1 44 311.5 Tm (PLAN FOR THE REST OF THE WEEK) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 44 294.5 Tm (During September 15-19, confirm the outstanding definitions and begin validating reporting) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 44 282 Tm (calculations with application and operations owners.) Tj ET
+BT /F2 9 Tf 0.02 0.40 0.46 rg 1 0 0 1 44 258.5 Tm (OUTPUTS COVERED) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 44 241.5 Tm (Prioritized acceptance backlog; validation sequence; reporting decision register outline.) Tj ET
+endstream
+endobj
+7 0 obj
+<< /Title (Chronos Weekly Status Report: 2026-09-13 to 2026-09-14) /Author (Abdul Majeed) /Subject (Scenario-based data engineering status report) >>
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000251 00000 n 
+0000000321 00000 n 
+0000000396 00000 n 
+0000003856 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R /Info 7 0 R >>
+startxref
+4021
+%%EOF

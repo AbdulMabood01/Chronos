@@ -19,6 +19,7 @@ import {
 } from 'date-fns';
 import { LoadingIndicator } from '../components/Hourglass';
 import '../styles.css';
+import './TimesheetDetail.css';
 import Icon from '../components/Icon';
 
 const MIN_TIMESHEET_MONTH = new Date(2025, 0, 1);
@@ -124,6 +125,14 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
   const [projectSubmissionLoading, setProjectSubmissionLoading] = useState(false);
   const [timeDialogDay, setTimeDialogDay] = useState(null);
   const [timeDrafts, setTimeDrafts] = useState([]);
+  const [notesDay, setNotesDay] = useState(null);
+  const [notesDraft, setNotesDraft] = useState('');
+  const [notesSaving, setNotesSaving] = useState(false);
+  const [notesError, setNotesError] = useState('');
+  const notesDialog = useRef(null);
+  const notesTrigger = useRef(null);
+  useEffect(() => { if (notesDay) notesDialog.current?.showModal(); }, [notesDay]);
+  const closeNotes = () => { if (!notesSaving) { setNotesDay(null); notesTrigger.current?.focus(); } };
   const requestedProjectId = useMemo(() => new URLSearchParams(location.search).get('projectId') || '', [location.search]);
 
   useEffect(() => {
@@ -168,6 +177,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
         hours,
         originalHours: hours,
         sessions: entry?.sessions || [],
+        notes: entry?.notes || '',
         vacationDay,
         isApprovedVacation,
       };
@@ -442,7 +452,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
   const buildEntryPayload = (day, hours, sessions = day.sessions || []) => ({
     entryDate: day.dateStr,
     hours: String(hours),
-    notes: '',
+    notes: day.notes || '',
     projectId: Number(selectedProjectId || 0) || null,
     sessions,
   });
@@ -483,7 +493,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
 
     setSavingDayKeys((current) => [...current, day.dateStr]);
     try {
-      if (hours > 0) {
+      if (hours > 0 || day.notes) {
         if (day.entryId) {
           await timesheetAPI.updateTimeEntry(timesheet.id, day.entryId, buildEntryPayload(day, hours, []));
         } else {
@@ -565,9 +575,9 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
     }
     setSavingDayKeys((current) => [...current, day.dateStr]);
     try {
-      if (parsedHours > 0 && day.entryId) {
+      if ((parsedHours > 0 || day.notes) && day.entryId) {
         await timesheetAPI.updateTimeEntry(timesheet.id, day.entryId, buildEntryPayload(day, parsedHours));
-      } else if (parsedHours > 0) {
+      } else if (parsedHours > 0 || day.notes) {
         await timesheetAPI.addTimeEntry(timesheet.id, buildEntryPayload(day, parsedHours));
       } else if (day.entryId) {
         await timesheetAPI.deleteTimeEntry(timesheet.id, day.entryId);
@@ -682,7 +692,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
   const leadingBlanks = days.length > 0 ? getDay(days[0].date) : 0;
 
   return (
-    <div className="page-container highlighted-workspace">
+    <div className="page-container highlighted-workspace timesheet-page">
       <div className="header-bar timesheet-page-header">
         <div>
           <ScreenTitle title="Timesheet" icon="clock" eyebrow="TIME & ATTENDANCE" />
@@ -758,8 +768,8 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
           <strong>{currency(numericBillRate)}</strong>
         </div>
         <div className="summary-tile">
-          <span>Project Hours</span>
-          <strong>{totalHours.toFixed(2)} / {plannedHours.toFixed(2)}</strong>
+          <span>Hours logged This Month/Till Date</span>
+          <strong>{totalHours.toFixed(2)} / {projectSubmission?.loggedHoursToDate == null ? '—' : Number(projectSubmission.loggedHoursToDate).toFixed(2)}</strong>
         </div>
         <div className="summary-tile remaining-hours-tile">
           <span>Hours Remaining</span>
@@ -809,7 +819,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
               disabled={!canGoPreviousMonth}
               type="button"
             >
-              Previous Month
+              <Icon name="arrow" className="previous-month-arrow" /> Previous Month
             </button>
             <div className="month-title">
               <span>{format(new Date(timesheet.year, timesheet.month - 1, 1), 'MMMM')}</span>
@@ -821,7 +831,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
               disabled={!canGoNextMonth}
               type="button"
             >
-              Next Month
+              Next Month <Icon name="arrow" />
             </button>
           </div>
         )}
@@ -891,8 +901,16 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
                     >
                       <Icon name="clock" size={16}/>
                     </button>
+                    <button type="button" className={`clock-time-button notes-button${day.notes ? ' has-notes' : ''}`}
+                      aria-label={`Notes for ${day.dateStr}`} title="Daily task notes"
+                      disabled={isSavingDay || (!day.notes && !(isEditable && withinAssignment && !day.isApprovedVacation))}
+                      onClick={(event) => { notesTrigger.current = event.currentTarget; setNotesDay({ ...day, editable: Boolean(isEditable && withinAssignment && !day.isApprovedVacation) }); setNotesDraft(day.notes); setNotesError(''); }}>
+                      <Icon name="file" size={16} />
+                    </button>
                   </div>
                 </label>}
+                {isApproved && day.notes && <button type="button" className="clock-time-button notes-button has-notes" aria-label={`Notes for ${day.dateStr}`}
+                  onClick={(event) => { notesTrigger.current = event.currentTarget; setNotesDay({ ...day, editable: false }); setNotesDraft(day.notes); setNotesError(''); }}><Icon name="file" size={16} /></button>}
                 {day.sessions?.length > 0 && (
                   <div className="time-session-list">
                     {day.sessions.map((session, sessionIndex) => (
@@ -946,6 +964,29 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
           </button>
         )}
       </div>
+
+      {notesDay && <dialog ref={notesDialog} className="modal-card daily-notes-dialog" aria-labelledby="daily-notes-title"
+        onCancel={(event) => { event.preventDefault(); closeNotes(); }}>
+        <div className="modal-header"><h2 id="daily-notes-title">Daily notes · {format(notesDay.date, 'MMM d, yyyy')}</h2></div>
+        <label htmlFor="daily-notes">Tasks done that day (optional)</label>
+        <textarea id="daily-notes" autoFocus rows={5} maxLength={500} value={notesDraft} readOnly={!notesDay.editable} disabled={notesSaving}
+          placeholder="What did you work on?" onChange={(event) => setNotesDraft(event.target.value)} />
+        {notesError && <p role="alert">{notesError}</p>}
+        <div className="action-bar compact-actions">
+          <button type="button" className="button button-secondary" disabled={notesSaving} onClick={closeNotes}>Close</button>
+          {notesDay.editable && <button type="button" className="button button-primary" disabled={notesSaving} onClick={async () => {
+            setNotesSaving(true); setNotesError('');
+            try {
+              const payload = buildEntryPayload({ ...notesDay, notes: notesDraft }, notesDay.originalHours);
+              if (notesDay.entryId) await timesheetAPI.updateTimeEntry(timesheet.id, notesDay.entryId, payload);
+              else await timesheetAPI.addTimeEntry(timesheet.id, payload);
+              await loadTimesheetById(timesheet.id);
+              setNotesDay(null); notesTrigger.current?.focus();
+            } catch (err) { setNotesError(apiErrorMessage(err, 'Could not save notes. Please try again.')); }
+            finally { setNotesSaving(false); }
+          }}>{notesSaving ? 'Saving…' : 'Save notes'}</button>}
+        </div>
+      </dialog>}
 
       {rejectDialogOpen && (
         <div className="modal-backdrop" role="presentation">

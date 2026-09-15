@@ -1,0 +1,66 @@
+.reports-page .report-panel .form-row {
+  display: grid;
+  grid-template-columns: 100px 145px minmax(180px, 280px) minmax(180px, 240px);
+  gap: 14px;
+  align-items: end;
+}
+.reports-page.highlighted-workspace .report-panel .form-group {
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.reports-page .report-panel input,
+.reports-page .report-panel select {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  background: var(--surface-color);
+  color: var(--text-primary);
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+.reports-page .button {
+  background: var(--report-tint);
+  color: var(--report-accent);
+  border: 1px solid var(--report-border);
+  box-shadow: none;
+  min-width: 0;
+  width: auto;
+}
+.reports-page .button:hover:not(:disabled) { background: var(--report-hover); border-color: var(--report-accent); }
+.reports-page .button:focus-visible { outline: 2px solid var(--report-accent); outline-offset: 3px; }
+.reports-page .data-table thead,
+.reports-page .data-table th { background: var(--report-tint); color: var(--report-accent); border-bottom-color: var(--report-border); }
+.reports-page .data-table tbody tr:nth-child(even) { background: color-mix(in srgb, var(--report-tint) 35%, var(--surface-color)); }
+.reports-page .data-table tbody tr:hover,
+.reports-page .data-table tbody tr:has(input:checked) { background: var(--report-tint); }
+.reports-page .data-table input[type="checkbox"] { accent-color: var(--report-accent); }
+body.theme-dark .reports-page {
+  --report-accent: #efb8cb;
+  --report-tint: #382730;
+  --report-hover: #4b303d;
+  --report-border: #795365;
+}
+@media (max-width: 900px) {
+  .reports-page .report-panel .form-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 480px) {
+  .reports-page .report-panel .form-row { grid-template-columns: minmax(0, 1fr); }
+}
+.reports-page {
+  --report-accent: #773e50;
+  --report-tint: #f5e8ed;
+  --report-hover: #ecd5df;
+  --report-border: #d9b7c5;
+}
+.reports-page .report-panel .panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.reports-page .report-panel .panel-heading > .button { margin-left: auto; flex-shrink: 0; }

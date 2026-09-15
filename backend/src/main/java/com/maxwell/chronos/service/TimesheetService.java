@@ -885,6 +885,7 @@ public class TimesheetService {
                 .month(timesheet.getMonth())
                 .status(submission.getStatus())
                 .totalHours(totalHours)
+                .loggedHoursToDate(timeEntryRepository.sumLoggedHoursToDate(timesheet.getUser().getId(), project.getId(), LocalDate.now()))
                 .plannedHours(plannedHours)
                 .remainingHours(plannedHours.subtract(totalHours).max(BigDecimal.ZERO))
                 .billRate(submission.isPdfExportEligible() ? submission.getApprovedBillRate() : resolveProjectBillRate(project, timesheet.getUser()))

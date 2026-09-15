@@ -10,6 +10,10 @@ import java.util.Optional;
 
 @Repository
 public interface TimeEntryRepository extends JpaRepository<TimeEntry, Long> {
+    @org.springframework.data.jpa.repository.Query("select coalesce(sum(e.hours), 0) from TimeEntry e where e.timesheet.user.id = :userId and e.project.id = :projectId and e.entryDate <= :throughDate")
+    java.math.BigDecimal sumLoggedHoursToDate(@org.springframework.data.repository.query.Param("userId") Long userId,
+        @org.springframework.data.repository.query.Param("projectId") Long projectId,
+        @org.springframework.data.repository.query.Param("throughDate") LocalDate throughDate);
     Optional<TimeEntry> findByTimesheetIdAndEntryDate(Long timesheetId, LocalDate entryDate);
     Optional<TimeEntry> findByTimesheetIdAndEntryDateAndProjectId(Long timesheetId, LocalDate entryDate, Long projectId);
     List<TimeEntry> findByTimesheetId(Long timesheetId);

@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import { LoadingIndicator } from './Hourglass';
+import './ProfileForm.css';
 
 const MAX_PROFILE_PHOTO_BYTES = 650 * 1024;
 const PROFILE_PHOTO_SIZE = 512;
+const additionalSections = [["Contact details",[["phoneNumber","Phone number","tel","tel"],["personalEmail","Personal email","email","email"]]],["Address",[["addressLine1","Address line 1","text","address-line1"],["addressLine2","Address line 2","text","address-line2"],["city","City","text","address-level2"],["stateProvince","State / Province","text","address-level1"],["postalCode","Postal code","text","postal-code"],["country","Country","text","country-name"]]],["Emergency contact",[["emergencyContactName","Contact name"],["emergencyContactRelationship","Relationship"],["emergencyContactPhone","Contact phone","tel"],["emergencyContactEmail","Contact email","email"]]]];
+const additionalFieldLimits = {"phoneNumber":40,"personalEmail":255,"addressLine1":200,"addressLine2":200,"city":100,"stateProvince":100,"postalCode":20,"country":100,"bloodGroup":3,"emergencyContactName":200,"emergencyContactRelationship":100,"emergencyContactPhone":40,"emergencyContactEmail":255};
 
 const emptyProfile = {
   firstName: '',
@@ -16,6 +19,7 @@ const emptyProfile = {
 export default function ProfileForm({ user, onSave, submitLabel = 'Save Profile' }) {
   const [formData, setFormData] = useState({
     ...emptyProfile,
+    ...Object.fromEntries(Object.keys(additionalFieldLimits).map((field) => [field, user?.[field] || ''])),
     firstName: user?.firstName || '',
     lastName: user?.lastName || '',
     jobTitle: user?.jobTitle || '',
@@ -109,6 +113,7 @@ export default function ProfileForm({ user, onSave, submitLabel = 'Save Profile'
     setError('');
     try {
       await onSave({
+        ...Object.fromEntries(Object.keys(additionalFieldLimits).map((field) => [field, formData[field].trim()])),
         firstName: formData.firstName,
         lastName: formData.lastName,
         jobTitle: formData.jobTitle,
@@ -215,6 +220,32 @@ export default function ProfileForm({ user, onSave, submitLabel = 'Save Profile'
           />
         </div>}
       </div>
+
+      <fieldset className="profile-details-section">
+        <legend>Personal details</legend>
+        <div className="form-group">
+          <label htmlFor="profile-blood-group">Blood group</label>
+          <select id="profile-blood-group" value={formData.bloodGroup} onChange={(event) => updateField('bloodGroup', event.target.value)}>
+            <option value="">Unknown / Prefer not to say</option>
+            {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((group) => <option key={group} value={group}>{group}</option>)}
+          </select>
+        </div>
+      </fieldset>
+      {additionalSections.map(([title, fields]) => (
+        <fieldset className="profile-details-section" key={title}>
+          <legend>{title}</legend>
+          <div className="profile-details-grid">
+            {fields.map(([field, label, type = 'text', autoComplete = 'off']) => (
+              <div className="form-group" key={field}>
+                <label htmlFor={`profile-${field}`}>{label}</label>
+                <input id={`profile-${field}`} type={type} autoComplete={autoComplete}
+                  maxLength={additionalFieldLimits[field]} value={formData[field]}
+                  onChange={(event) => updateField(field, event.target.value)} />
+              </div>
+            ))}
+          </div>
+        </fieldset>
+      ))}
 
       <div className="action-bar compact-actions">
         <button type="submit" className="button button-primary" disabled={saving}>

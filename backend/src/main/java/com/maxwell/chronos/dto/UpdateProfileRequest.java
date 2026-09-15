@@ -14,6 +14,47 @@ import java.time.LocalDate;
 @NoArgsConstructor
 @AllArgsConstructor
 public class UpdateProfileRequest {
+    @Size(max = 40)
+    private String phoneNumber;
+
+    @Size(max = 255)
+    @jakarta.validation.constraints.Email
+    private String personalEmail;
+
+    @Size(max = 200)
+    private String addressLine1;
+
+    @Size(max = 200)
+    private String addressLine2;
+
+    @Size(max = 100)
+    private String city;
+
+    @Size(max = 100)
+    private String stateProvince;
+
+    @Size(max = 20)
+    private String postalCode;
+
+    @Size(max = 100)
+    private String country;
+
+    @Size(max = 3)
+    @Pattern(regexp = "^$|^(A|B|AB|O)[+-]$", message = "Choose a valid blood group")
+    private String bloodGroup;
+
+    @Size(max = 200)
+    private String emergencyContactName;
+
+    @Size(max = 100)
+    private String emergencyContactRelationship;
+
+    @Size(max = 40)
+    private String emergencyContactPhone;
+
+    @Size(max = 255)
+    @jakarta.validation.constraints.Email
+    private String emergencyContactEmail;
     @NotBlank
     @Size(max = 100)
     private String firstName;

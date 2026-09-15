@@ -1,0 +1,24 @@
+.profile-form.form { gap: 12px; }
+.profile-form .form-group { margin-bottom: 0; min-width: 0; }
+.profile-form .form-group label { margin-bottom: 4px; }
+.profile-form .form-group input,
+.profile-form .form-group select { min-height: 38px; padding: 8px 10px; }
+.profile-form .form-row { gap: 12px; }
+.profile-form .profile-photo-section { gap: 12px; }
+.profile-form .profile-photo-preview { width: 60px; height: 60px; }
+.profile-form .profile-photo-section .button { margin-top: 6px; }
+
+.profile-form .profile-details-section {
+  min-width: 0;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+}
+.profile-details-section legend { padding: 0 6px; font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.profile-details-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
+.profile-details-grid input { min-width: 0; }
+@media (max-width: 600px) {
+  .profile-details-grid { grid-template-columns: 1fr; }
+  .profile-form .profile-details-section { padding: 10px; }
+}

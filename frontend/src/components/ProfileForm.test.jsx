@@ -5,6 +5,23 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import ProfileForm from './ProfileForm';
 
 afterEach(cleanup);
+
+it('loads, updates and clears optional contact details in the saved profile', async () => {
+  const save = vi.fn().mockResolvedValue({});
+  render(<ProfileForm user={{ ...profile, role: 'EMPLOYEE', addressLine1: '12 Main St', bloodGroup: 'O+', emergencyContactName: 'Alex', emergencyContactPhone: '+1 555 0100' }} onSave={save} />);
+  expect(screen.getByLabelText('Address line 1').value).toBe('12 Main St');
+  expect(screen.getByLabelText('Blood group').value).toBe('O+');
+  expect(screen.getByLabelText('Contact phone').value).toBe('+1 555 0100');
+  fireEvent.change(screen.getByLabelText('Contact name'), { target: { value: '  Taylor  ' } });
+  fireEvent.change(screen.getByLabelText('Address line 1'), { target: { value: '' } });
+  fireEvent.change(screen.getByLabelText('Blood group'), { target: { value: '' } });
+  fireEvent.change(screen.getByLabelText('Personal email'), { target: { value: 'personal@example.com' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save Profile' }));
+  await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({
+    emergencyContactName: 'Taylor', emergencyContactPhone: '+1 555 0100',
+    addressLine1: '', bloodGroup: '', personalEmail: 'personal@example.com',
+  })));
+});
 const profile = { firstName: 'Test', lastName: 'User', jobTitle: 'Engineer', dateOfBirth: '1990-01-01', ssnLast4: '1234' };
 
 it('omits SuperAdmin SSN from the form and saved payload, including legacy values', async () => {

@@ -15,6 +15,31 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 public class UserDTO {
+    private String phoneNumber;
+
+    private String personalEmail;
+
+    private String addressLine1;
+
+    private String addressLine2;
+
+    private String city;
+
+    private String stateProvince;
+
+    private String postalCode;
+
+    private String country;
+
+    private String bloodGroup;
+
+    private String emergencyContactName;
+
+    private String emergencyContactRelationship;
+
+    private String emergencyContactPhone;
+
+    private String emergencyContactEmail;
     private Long id;
     private String employeeId;
     private String firstName;

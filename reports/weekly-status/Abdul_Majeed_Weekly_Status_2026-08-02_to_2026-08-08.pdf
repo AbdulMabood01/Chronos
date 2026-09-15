@@ -1,0 +1,70 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+6 0 obj
+<< /Length 3357 >>
+stream
+0.08 0.16 0.25 rg 0 690 612 102 re f
+BT /F2 12 Tf 1 1 1 rg 1 0 0 1 44 760 Tm (MAXWELL SOFTWARE AND SOLUTIONS) Tj ET
+BT /F2 25 Tf 1 1 1 rg 1 0 0 1 44 728 Tm (Weekly Status Report) Tj ET
+BT /F1 10 Tf 0.72 0.85 0.92 rg 1 0 0 1 44 707 Tm (CHRONOS  /  DATA ENGINEERING) Tj ET
+BT /F2 13 Tf 0.16 0.21 0.28 rg 1 0 0 1 44 667 Tm (Abdul Majeed) Tj ET
+BT /F2 10 Tf 0.16 0.21 0.28 rg 1 0 0 1 285 667 Tm (WEEK 01  |  2026-08-02 to 2026-08-08) Tj ET
+BT /F1 8 Tf 0.16 0.21 0.28 rg 1 0 0 1 44 647 Tm (Scenario-based activities grounded in Chronos; not verified personal work history.) Tj ET
+BT /F2 9 Tf 0.02 0.40 0.46 rg 1 0 0 1 44 623 Tm (SOURCE DISCOVERY AND REPORTING REQUIREMENTS) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 44 606 Tm (I focused on understanding how Chronos records employee time, project assignments, leave, and) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 44 593.5 Tm (approvals. I organized the reporting requirements around traceable project-level hours rather than) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 44 581 Tm (relying only on monthly totals.) Tj ET
+BT /F2 9 Tf 0.02 0.40 0.46 rg 1 0 0 1 44 557.5 Tm (WORK COMPLETED) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 49 540.5 Tm (- Mapped the reporting relationships between users, projects, assignments, time entries, sessions,) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 49 528 Tm (and project submissions.) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 49 512.5 Tm (- Defined the primary reporting grain as one employee, project, and calendar month, with daily) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 49 500 Tm (entries retained for reconciliation.) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 49 484.5 Tm (- Outlined the audiences for operational reporting: project managers, project operations, and) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 49 472 Tm (Super Admin reviewers.) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 49 456.5 Tm (- Identified sensitive profile fields to exclude from general analytics, including date of birth) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 49 444 Tm (and SSN-related information.) Tj ET
+BT /F2 9 Tf 0.02 0.40 0.46 rg 1 0 0 1 44 417.5 Tm (WORK IN PROGRESS) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 44 400.5 Tm (I am refining a source-to-report inventory and separating staffing, timekeeping, and approval) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 44 388 Tm (metrics so that joins do not inflate totals.) Tj ET
+BT /F2 9 Tf 0.02 0.40 0.46 rg 1 0 0 1 44 364.5 Tm (RISKS AND DEPENDENCIES) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 44 347.5 Tm (A monthly timesheet can span several projects. Joining its total directly to project assignments) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 44 335 Tm (would duplicate hours. Reporting must aggregate daily entries by project first.) Tj ET
+BT /F2 9 Tf 0.02 0.40 0.46 rg 1 0 0 1 44 311.5 Tm (NEXT WEEK) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 44 294.5 Tm (Define shared metric definitions and a reconciliation checklist for daily entries, project) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 44 282 Tm (submissions, and monthly totals.) Tj ET
+BT /F2 9 Tf 0.02 0.40 0.46 rg 1 0 0 1 44 258.5 Tm (OUTPUTS COVERED) Tj ET
+BT /F1 9.5 Tf 0.16 0.21 0.28 rg 1 0 0 1 44 241.5 Tm (Source inventory outline; reporting-grain definition; sensitive-field exclusion list.) Tj ET
+endstream
+endobj
+7 0 obj
+<< /Title (Chronos Weekly Status Report: 2026-08-02 to 2026-08-08) /Author (Abdul Majeed) /Subject (Scenario-based data engineering status report) >>
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000251 00000 n 
+0000000321 00000 n 
+0000000396 00000 n 
+0000003805 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R /Info 7 0 R >>
+startxref
+3970
+%%EOF

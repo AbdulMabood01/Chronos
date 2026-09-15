@@ -22,6 +22,44 @@ import java.util.Set;
 @AllArgsConstructor
 @Builder
 public class User {
+    @Column(length = 40)
+    private String phoneNumber;
+
+    @Column(length = 255)
+    private String personalEmail;
+
+    @Column(length = 200)
+    private String addressLine1;
+
+    @Column(length = 200)
+    private String addressLine2;
+
+    @Column(length = 100)
+    private String city;
+
+    @Column(length = 100)
+    private String stateProvince;
+
+    @Column(length = 20)
+    private String postalCode;
+
+    @Column(length = 100)
+    private String country;
+
+    @Column(length = 3)
+    private String bloodGroup;
+
+    @Column(length = 200)
+    private String emergencyContactName;
+
+    @Column(length = 100)
+    private String emergencyContactRelationship;
+
+    @Column(length = 40)
+    private String emergencyContactPhone;
+
+    @Column(length = 255)
+    private String emergencyContactEmail;
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

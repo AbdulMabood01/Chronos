@@ -1,0 +1,103 @@
+.employee-home .month-scene {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 220px;
+  height: 200px;
+  perspective: 700px;
+  isolation: isolate;
+}
+
+.employee-home .month-ring {
+  position: relative;
+  box-shadow: 0 12px 0 -5px #082738, 0 24px 30px -12px #0008;
+  animation: home-dial-arrive 4.5s ease-out both;
+}
+
+.employee-home .month-orbit {
+  position: absolute;
+  width: 210px;
+  height: 210px;
+  border: 1px solid #cea3b680;
+  border-radius: 50%;
+  transform-style: preserve-3d;
+  pointer-events: none;
+}
+
+.employee-home .month-orbit::after {
+  content: '';
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 25%, #fff3e8, #cea3b6 45%, #72506b);
+  box-shadow: 0 0 18px #cea3b666;
+}
+
+.employee-home .month-orbit-outer {
+  transform: rotateX(62deg) rotateY(-18deg) rotateZ(-25deg);
+  animation: home-orbit-arrive 4.5s ease-out both;
+}
+
+.employee-home .month-orbit-inner {
+  width: 190px;
+  height: 190px;
+  border-color: #b8dce340;
+  transform: rotateX(-58deg) rotateY(28deg) rotateZ(30deg);
+  animation: home-orbit-cross 4.5s ease-out both;
+}
+
+.employee-home .employee-command-card {
+  transition: transform 240ms ease, box-shadow 240ms ease, border-color 240ms ease;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .employee-home .hero-copy {
+    animation: home-copy-arrive 700ms ease-out both;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .employee-home .employee-command-card:hover {
+    transform: perspective(850px) translateY(-5px) rotateX(4deg) rotateY(-3deg);
+    box-shadow: 8px 16px 28px -16px #10334766;
+  }
+}
+
+@keyframes home-dial-arrive {
+  0% { transform: translateY(12px) rotateX(18deg) rotateY(-18deg); }
+  45% { transform: translateY(-6px) rotateX(-5deg) rotateY(7deg); }
+  100% { transform: translateY(0) rotateX(0) rotateY(0); }
+}
+
+@keyframes home-orbit-arrive {
+  from { transform: rotateX(62deg) rotateY(-18deg) rotateZ(-205deg); }
+  to { transform: rotateX(62deg) rotateY(-18deg) rotateZ(-25deg); }
+}
+
+@keyframes home-orbit-cross {
+  from { transform: rotateX(-58deg) rotateY(28deg) rotateZ(210deg); }
+  to { transform: rotateX(-58deg) rotateY(28deg) rotateZ(30deg); }
+}
+
+@keyframes home-copy-arrive {
+  from { opacity: 0; transform: perspective(900px) translateY(12px) rotateX(5deg); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .employee-home .month-ring,
+  .employee-home .month-orbit {
+    animation: none;
+  }
+
+  .employee-home .employee-command-card {
+    transition: none;
+  }
+
+  .employee-home .employee-command-card:hover {
+    transform: none;
+  }
+}

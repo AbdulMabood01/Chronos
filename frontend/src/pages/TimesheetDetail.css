@@ -1,0 +1,55 @@
+.timesheet-page .button,
+.timesheet-page .clock-time-button,
+.timesheet-page .modal-close {
+  background: #edf2f7;
+  color: #273b53;
+  border: 1px solid #bdcad8;
+  box-shadow: 0 3px 0 #a6b5c5, 0 5px 10px #142b4512;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+.timesheet-page .button-primary,
+.timesheet-page .button-success {
+  background: #244c68;
+  color: #fff;
+  border-color: #19384e;
+  box-shadow: 0 3px 0 #142d40, 0 5px 10px #142b4520;
+}
+.timesheet-page .button-danger { background: #843f4b; color: #fff; border-color: #6c303a; }
+.timesheet-page button:hover:not(:disabled) { transform: translateY(-2px); filter: brightness(1.05); }
+.timesheet-page button:active:not(:disabled) { transform: translateY(2px); box-shadow: none; }
+.timesheet-page button:focus-visible { outline: 3px solid #3689b5; outline-offset: 4px; }
+.timesheet-page button:disabled { opacity: .45; box-shadow: none; cursor: not-allowed; }
+.timesheet-page .timesheet-calendar-card button,
+.timesheet-page .timesheet-calendar-card button:hover:not(:disabled),
+.timesheet-page .timesheet-calendar-card button:active:not(:disabled) {
+  box-shadow: none;
+  transform: none;
+}
+.timesheet-page .timesheet-summary-grid > .gross-pay-tile {
+  background: linear-gradient(135deg, #116b61, #06483f);
+  border: 1px solid #2d9788;
+  box-shadow: 0 5px 0 #033a32, 0 12px 24px #06483f30;
+}
+.timesheet-page .gross-pay-tile span { color: #c9eee5; }
+.timesheet-page .gross-pay-tile strong { color: #fff; font-size: 1.85rem; }
+.timesheet-page .day-entry-controls { grid-template-columns: minmax(0, 1fr) 1.9rem 1.9rem; }
+.timesheet-page .clock-time-button { width: 1.9rem; }
+.timesheet-page .has-notes { background: #cce9e1; color: #125e4e; border-color: #6ca995; }
+.previous-month-arrow { transform: rotate(180deg); }
+.timesheet-page > .action-bar:not(:empty) {
+  position: sticky;
+  bottom: 1rem;
+  z-index: 5;
+  padding: 1rem;
+  background: var(--surface-color, #fff);
+  border: 1px solid var(--border-color, #bdcad8);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px #142b4530;
+}
+.daily-notes-dialog { margin: auto; width: min(520px, calc(100vw - 2rem)); max-height: 85vh; overflow: auto; color: var(--text-color); }
+.daily-notes-dialog::backdrop { background: #10233799; backdrop-filter: blur(3px); }
+.daily-notes-dialog textarea { display: block; width: 100%; margin-top: .75rem; box-sizing: border-box; }
+@media (prefers-reduced-motion: reduce) {
+  .timesheet-page button { transition: none; }
+  .timesheet-page button:hover:not(:disabled), .timesheet-page button:active:not(:disabled) { transform: none; }
+}

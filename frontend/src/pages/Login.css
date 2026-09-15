@@ -1,0 +1,124 @@
+.login-experience .login-story-content {
+  position: relative;
+  z-index: 1;
+}
+
+.login-clock-scene {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 220px;
+  height: 200px;
+  margin: 24px 0 30px;
+  perspective: 700px;
+  pointer-events: none;
+}
+
+.login-clock {
+  width: 154px;
+  height: 154px;
+  padding: 8px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f9e2cf, #cea3b6 45%, #805c76);
+  box-shadow: 2px 3px 0 #997287, 4px 6px 0 #805c76, 6px 9px 0 #60475b, 12px 22px 30px #061d3266;
+  transform: rotateX(12deg) rotateY(-22deg) rotateZ(-8deg);
+}
+
+.login-clock-face {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border: 1px solid #ffffff26;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 20%, #24536a, #103347 70%);
+  box-shadow: inset 3px 4px 12px #061d3280;
+}
+
+.login-clock-tick {
+  position: absolute;
+  left: calc(50% - 1px);
+  top: 9px;
+  width: 2px;
+  height: 7px;
+  background: #e5c5ce;
+  transform-origin: 1px 59px;
+  transform: rotate(calc(var(--tick) * 30deg));
+}
+
+.login-clock-hand {
+  position: absolute;
+  bottom: 50%;
+  left: calc(50% - 2px);
+  width: 4px;
+  border-radius: 4px;
+  transform-origin: 50% 100%;
+}
+
+.login-clock-hour { height: 31px; background: #cea3b6; transform: rotate(-55deg); }
+.login-clock-minute { height: 45px; background: #f6e6dc; transform: rotate(60deg); }
+.login-clock-pin { position: absolute; inset: calc(50% - 5px); border-radius: 50%; background: #f6e6dc; box-shadow: 0 2px 5px #0005; }
+
+.login-clock-orbit {
+  position: absolute;
+  width: 215px;
+  height: 215px;
+  border: 1px solid #cea3b65c;
+  border-radius: 50%;
+  transform: rotateX(65deg) rotateY(15deg) rotateZ(-30deg);
+}
+
+.login-clock-orbit::after {
+  content: '';
+  position: absolute;
+  top: 26px;
+  left: 26px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 25%, #fff1df, #cea3b6 50%, #805c76);
+  box-shadow: 0 0 20px #cea3b64d;
+}
+
+.login-clock-shadow {
+  position: absolute;
+  bottom: 0;
+  width: 125px;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, #061d3270, transparent 70%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .login-clock { animation: login-clock-float 4.5s ease-in-out both; }
+  .login-clock-minute { animation: login-clock-sweep 4.5s ease-out both; }
+  .login-clock-orbit { animation: login-clock-orbit 4.5s ease-out both; }
+  .login-experience .login-card { animation: login-card-arrive 650ms ease-out both; }
+}
+
+@keyframes login-clock-float {
+  0% { transform: translateY(14px) rotateX(22deg) rotateY(-35deg) rotateZ(-12deg); }
+  50% { transform: translateY(-8px) rotateX(6deg) rotateY(-12deg) rotateZ(-4deg); }
+  100% { transform: rotateX(12deg) rotateY(-22deg) rotateZ(-8deg); }
+}
+
+@keyframes login-clock-sweep {
+  from { transform: rotate(-120deg); }
+  to { transform: rotate(60deg); }
+}
+
+@keyframes login-clock-orbit {
+  from { transform: rotateX(65deg) rotateY(15deg) rotateZ(-210deg); }
+  to { transform: rotateX(65deg) rotateY(15deg) rotateZ(-30deg); }
+}
+
+@keyframes login-card-arrive {
+  from { opacity: 0; transform: perspective(1000px) translateY(12px) rotateX(3deg); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (max-width: 767px) {
+  .login-clock-scene {
+    margin: 0 0 12px;
+    zoom: .7;
+  }
+}
