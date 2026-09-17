@@ -1,0 +1,33 @@
+.modal-backdrop.profile-modal-backdrop {
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.modal-card.profile-modal-card {
+  width: 100%;
+  max-width: 680px;
+  min-width: 0;
+  max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  background: var(--surface-color);
+  color: var(--text-primary);
+}
+
+.profile-modal-card .profile-checklist { margin-top: 0; }
+.profile-modal-card .profile-form input,
+.profile-modal-card .profile-form select { max-width: 100%; min-width: 0; }
+.profile-modal-card .profile-form > * { flex-shrink: 0; }
+
+@media (max-width: 600px) {
+  .modal-backdrop.profile-modal-backdrop { padding: 12px; }
+  .modal-card.profile-modal-card {
+    padding: 18px;
+    max-height: calc(100vh - 24px);
+    max-height: calc(100dvh - 24px);
+  }
+  .profile-modal-card .form-row { grid-template-columns: minmax(0, 1fr); }
+  .profile-modal-card .profile-checklist ul { grid-template-columns: minmax(0, 1fr); }
+}

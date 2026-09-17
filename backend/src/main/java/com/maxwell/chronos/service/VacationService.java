@@ -139,6 +139,7 @@ public class VacationService {
                 "From " + saved.getStartDate() + " to " + saved.getEndDate());
 
         notifyAdminsOfVacationSubmission(saved);
+        notifyProjectManagers(saved, "VACATION_SUBMITTED", "Vacation Request Submitted", " submitted a vacation request");
 
         return toDTO(saved);
     }
@@ -172,6 +173,7 @@ public class VacationService {
                 "Your vacation request from " + saved.getStartDate() + " to " + saved.getEndDate() + " has been approved.",
                 vacationId,
                 "VacationRequest");
+        notifyProjectManagers(saved, "VACATION_APPROVED", "Vacation Request Approved", " has an approved vacation request");
 
         return toDTO(saved);
     }
@@ -305,10 +307,7 @@ public class VacationService {
     }
 
     private void notifyAdminsOfVacationSubmission(VacationRequest vacation) {
-        List<User> reviewers = findVacationReviewers(vacation);
-        if (reviewers.isEmpty()) {
-            reviewers = userRepository.findByRole(com.maxwell.chronos.enums.UserRole.SUPER_ADMIN);
-        }
+        List<User> reviewers = userRepository.findByRole(com.maxwell.chronos.enums.UserRole.SUPER_ADMIN);
         for (User reviewer : reviewers) {
             notificationService.createNotification(reviewer.getId(),
                     "VACATION_SUBMITTED",
@@ -329,23 +328,29 @@ public class VacationService {
         if (vacation == null || reviewer == null || vacation.getUser().getId().equals(reviewer.getId())) {
             return false;
         }
-        if (reviewer.isSuperAdmin()) {
-            return true;
-        }
-        return findVacationReviewers(vacation).stream()
-                .anyMatch(candidate -> candidate.getId().equals(reviewer.getId()));
+        return reviewer.isSuperAdmin();
     }
 
-    private List<User> findVacationReviewers(VacationRequest vacation) {
+    private void notifyProjectManagers(VacationRequest vacation, String type, String title, String action) {
+        for (User manager : findProjectManagers(vacation)) {
+            if (type.equals("VACATION_SUBMITTED") && manager.isSuperAdmin()) {
+                continue;
+            }
+            notificationService.createNotification(manager.getId(), type, title,
+                    vacation.getUser().getFullName() + action + " from " + vacation.getStartDate()
+                            + " to " + vacation.getEndDate(), vacation.getId(), "VacationRequest");
+        }
+    }
+
+    private List<User> findProjectManagers(VacationRequest vacation) {
         List<User> reviewers = new ArrayList<>();
         projectAssignmentRepository.findByUserIdAndIsActiveTrue(vacation.getUser().getId()).stream()
                 .map(assignment -> assignment.getProject())
                 .filter(Objects::nonNull)
+                .filter(project -> Boolean.TRUE.equals(project.getIsActive())
+                        && project.getStatus() == com.maxwell.chronos.enums.ProjectStatus.ACTIVE)
                 .forEach(project -> {
-                    User reviewer = project.getProjectManager() != null
-                            && project.getProjectManager().getId().equals(vacation.getUser().getId())
-                            ? project.getProjectManagerHoursApprover()
-                            : project.getProjectManager();
+                    User reviewer = project.getProjectManager();
                     if (reviewer != null
                             && Boolean.TRUE.equals(reviewer.getIsActive())
                             && !reviewer.getId().equals(vacation.getUser().getId())

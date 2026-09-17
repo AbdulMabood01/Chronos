@@ -21,8 +21,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(value = {ProjectController.class, TimesheetController.class, VacationController.class,
         AuthController.class, UserController.class}, properties = {"logging.level.root=WARN", "logging.level.org.springframework=WARN"})
-@Import({SecurityConfig.class, ProjectService.class, TimesheetService.class, VacationService.class})
+@Import({SecurityConfig.class, ProjectService.class, TimesheetService.class, VacationService.class, TeamCalendarService.class})
 class RolePermissionsApiTest {
+    @MockitoBean com.maxwell.chronos.service.LeaveBalanceService leaveBalances;
     @Autowired MockMvc mvc;
     @MockitoBean JwtDecoder decoder;
     @MockitoBean UserService userService;
@@ -49,6 +50,14 @@ class RolePermissionsApiTest {
         return jwt().jwt(j -> j.subject("subject").claim("preferred_username", user.getEmail()));
     }
 
+    @Test void teamCalendarRequiresManagerPermission() throws Exception {
+        mvc.perform(get("/vacation/team-calendar").param("year", "2026").param("month", "9").with(token())).andExpect(status().isOk());
+        user.setRole(UserRole.EMPLOYEE);
+        mvc.perform(get("/vacation/team-calendar").param("year", "2026").param("month", "9").with(token())).andExpect(status().isForbidden());
+        when(projects.existsByProjectManagerIdOrProjectManagerHoursApproverId(1L,1L)).thenReturn(true);
+        mvc.perform(get("/vacation/team-calendar").param("year", "2026").param("month", "9").with(token())).andExpect(status().isOk());
+    }
+
     @Test void superAdminReadsButAllProjectWriteEndpointsReturnForbidden() throws Exception {
         mvc.perform(get("/projects").with(token())).andExpect(status().isOk());
         mvc.perform(get("/projects/hours-dashboard").param("year", "2026").param("month", "9").with(token()))
@@ -56,10 +65,10 @@ class RolePermissionsApiTest {
         mvc.perform(post("/projects").contentType("application/json").content("{}").with(token())).andExpect(status().isForbidden());
         mvc.perform(put("/projects/10").contentType("application/json").content("{}").with(token())).andExpect(status().isForbidden());
         mvc.perform(post("/projects/10/assignments/3").param("startDate", "2026-09-01").param("endDate", "2026-09-30")
-                .param("billRate", "10").with(token())).andExpect(status().isForbidden());
+                .param("billRate", "10").param("plannedHours", "40").with(token())).andExpect(status().isForbidden());
         mvc.perform(delete("/projects/10/assignments/3").with(token())).andExpect(status().isForbidden());
         mvc.perform(patch("/projects/10/assignments/3/dates").param("startDate", "2026-09-01").param("endDate", "2026-09-30")
-                .param("billRate", "10").with(token())).andExpect(status().isForbidden());
+                .param("billRate", "10").param("plannedHours", "40").with(token())).andExpect(status().isForbidden());
         mvc.perform(patch("/projects/10/assignments/3/planned-hours").param("plannedHours", "10").with(token())).andExpect(status().isForbidden());
         mvc.perform(patch("/projects/10/assignments/3/planned-hours").param("plannedHours", "10")
                 .param("year", "2026").param("month", "9").with(token())).andExpect(status().isForbidden());
@@ -81,13 +90,21 @@ class RolePermissionsApiTest {
                 .andExpect(jsonPath("$.ssnLast4").doesNotExist());
         user.setRole(UserRole.EMPLOYEE);
         when(projects.existsByProjectManagerIdOrProjectManagerHoursApproverId(1L, 1L)).thenReturn(true);
+        when(projects.existsByProjectManagerId(1L)).thenReturn(true);
         mvc.perform(get("/auth/me").with(token())).andExpect(status().isOk())
                 .andExpect(jsonPath("$.role").value("EMPLOYEE"))
-                .andExpect(jsonPath("$.canReviewProjects").value(true));
+                .andExpect(jsonPath("$.canReviewProjects").value(true))
+                .andExpect(jsonPath("$.canManageProjects").value(true));
     }
 
     @Test void removedGlobalRoleCannotBeAssigned() throws Exception {
         mvc.perform(patch("/users/2/role").param("role", "PROJECT_MANAGER").with(token())).andExpect(status().isBadRequest());
         verify(userService, never()).changeRole(any(), any(), any());
+    }
+    @Test void ordinaryEmployeeCannotReadManagementEndpoints() throws Exception {
+        user.setRole(UserRole.EMPLOYEE);
+        mvc.perform(get("/projects").with(token())).andExpect(status().isForbidden());
+        mvc.perform(get("/projects/hours-dashboard").param("year", "2026").param("month", "9").with(token())).andExpect(status().isForbidden());
+        mvc.perform(get("/vacation/pending").with(token())).andExpect(status().isForbidden());
     }
 }

@@ -43,10 +43,12 @@ public class AuthResponse {
     private String lastName;
     private String jobTitle;
     private LocalDate dateOfBirth;
+    private LocalDate joiningDate;
     private String ssnLast4;
     private String profileImageUrl;
     private Boolean profileCompleted;
     private String role;
     private boolean canReviewProjects;
+    private boolean canManageProjects;
     private Boolean isActive;
 }

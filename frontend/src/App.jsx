@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { AuthProvider, useAuth } from './AuthContext';
 import { GlobalApiLoader, LoadingIndicator } from './components/Hourglass';
@@ -18,6 +18,7 @@ import ProjectHoursDashboard from './pages/ProjectHoursDashboard';
 import Settings from './pages/Settings';
 import Reports from './pages/Reports';
 import Profile from './pages/Profile';
+import { MissingTimesheetsPage, TeamLeaveCalendarPage } from './pages/TeamManagement';
 import NotFound from './pages/NotFound';
 import './styles.css';
 import './workspace.css';
@@ -26,6 +27,7 @@ import Layout from './components/WorkspaceLayout';
 const THEME_STORAGE_KEY = 'chronos-dark-background';
 
 function ProtectedRoute({ children }) {
+  const location = useLocation();
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -36,6 +38,16 @@ function ProtectedRoute({ children }) {
     return <Navigate to="/login" />;
   }
 
+  const operations = ['ADMIN', 'SUPER_ADMIN'].includes(user.role);
+  const reviewer = operations || user.canReviewProjects;
+  const projectManager = operations || user.canManageProjects;
+  const path = location.pathname;
+  if ((path === '/admin' || path.startsWith('/admin/') || ['/missing-timesheets', '/team-leave-calendar'].includes(path)) && !reviewer
+      || (['/projects', '/project-hours'].some(p => path === p || path.startsWith(p + '/')) && !projectManager)
+      || (path === '/reports' && !operations)
+      || (['/settings', '/users', '/audit'].includes(path) && user.role !== 'SUPER_ADMIN')) {
+    return <Navigate to="/dashboard" replace />;
+  }
   return children;
 }
 
@@ -130,6 +142,12 @@ function AppContent({ darkBackground, onToggleBackground }) {
           </ProtectedRoute>
         }
       />
+      <Route path="/missing-timesheets" element={
+        <ProtectedRoute><Layout darkBackground={darkBackground} onToggleBackground={onToggleBackground}><MissingTimesheetsPage /></Layout></ProtectedRoute>
+      } />
+      <Route path="/team-leave-calendar" element={
+        <ProtectedRoute><Layout darkBackground={darkBackground} onToggleBackground={onToggleBackground}><TeamLeaveCalendarPage /></Layout></ProtectedRoute>
+      } />
       <Route
         path="/admin/letter-request/:id"
         element={

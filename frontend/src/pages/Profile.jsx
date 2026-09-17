@@ -1,6 +1,7 @@
 import ScreenTitle from '../components/ScreenTitle';
 import React from 'react';
 import { useAuth } from '../AuthContext';
+import EmploymentDetails from '../components/EmploymentDetails';
 import ProfileForm from '../components/ProfileForm';
 import '../styles.css';
 
@@ -27,6 +28,7 @@ export default function Profile() {
       <div className="card profile-card">
         <ProfileForm user={user} onSave={handleSave} />
       </div>
+      <EmploymentDetails user={user} />
     </div>
   );
 }

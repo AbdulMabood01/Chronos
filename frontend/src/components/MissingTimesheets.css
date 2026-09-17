@@ -1,0 +1,22 @@
+.missing-timesheets { min-width: 0; }
+.missing-timesheets .panel-heading p { margin: 6px 0 0; line-height: 1.6; }
+.missing-timesheets-toolbar { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; }
+.missing-timesheets-toolbar .form-group { margin: 0; min-width: 200px; }
+.missing-timesheets-toolbar input, .missing-timesheets-toolbar select { width: 100%; }
+.missing-timesheets-sort { display: inline-flex; align-items: center; gap: 8px; padding: 6px 0; border: 0; background: transparent; color: inherit; font: inherit; text-transform: inherit; letter-spacing: inherit; cursor: pointer; }
+.missing-timesheets-sort:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 4px; }
+.missing-timesheets-sort span { color: var(--primary-color); }
+.missing-timesheets-toolbar .button { min-height: 42px; }
+.missing-timesheets-summary { margin: 0 0 16px; color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
+.missing-timesheets-summary strong { color: var(--text-primary); }
+.missing-timesheets .table-container { margin-bottom: 0; overflow-x: auto; box-shadow: none; }
+.missing-timesheets .data-table { min-width: 620px; }
+.missing-timesheets .data-table tbody tr:last-child td { border-bottom: 0; }
+.missing-timesheets .missing-timesheets-hours { text-align: right; font-variant-numeric: tabular-nums; }
+.missing-timesheets-employee { font-weight: 600; }
+.missing-timesheets-link { color: var(--primary-color); font-weight: 600; text-underline-offset: 3px; white-space: nowrap; }
+.missing-timesheets-muted { color: var(--text-secondary); }
+@media (max-width: 600px) {
+  .missing-timesheets-toolbar { align-items: stretch; }
+  .missing-timesheets-toolbar > * { width: 100%; min-width: 0; }
+}

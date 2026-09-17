@@ -44,19 +44,25 @@ export const authAPI = {
 };
 
 export const userAPI = {
+  updateJoiningDate: (id, joiningDate) => apiClient.patch(`/users/${id}/joining-date`, { joiningDate: joiningDate || null }),
   getUser: (id) => apiClient.get(`/users/${id}`),
   getAllUsers: () => apiClient.get('/users'),
   getAllUsersAsAdmin: () => apiClient.get('/users/all'),
+  getLeaveBalance: (id, year) => apiClient.get(`/users/${id}/leave-balance`, { params: { year } }),
+  updateLeaveAllowance: (id, data) => apiClient.put(`/users/${id}/leave-allowance`, data),
   updateMyProfile: (data) => apiClient.put('/users/me/profile', data),
-  updateHourlyRate: (id, rate) => apiClient.patch(`/users/${id}/hourly-rate`, null, { params: { rate } }),
   deactivateUser: (id) => apiClient.patch(`/users/${id}/deactivate`),
   reactivateUser: (id) => apiClient.patch(`/users/${id}/reactivate`),
   changeRole: (id, role) => apiClient.patch(`/users/${id}/role`, null, { params: { role } }),
 };
 
 export const timesheetAPI = {
+  getApprovalHistory: (id, projectId) => apiClient.get('/timesheets/' + id + '/projects/' + projectId + '/history'),
+  getMissingTimesheets: (year, month) => apiClient.get('/timesheets/missing', { params: { year, month } }),
+  previewPreviousWeek: (id, projectId, weekStart) => apiClient.get(`/timesheets/${id}/projects/${projectId}/copy-week`, { params: { weekStart } }),
+  copyPreviousWeek: (id, projectId, weekStart) => apiClient.post(`/timesheets/${id}/projects/${projectId}/copy-week`, null, { params: { weekStart } }),
   getTimesheet: (year, month) => apiClient.get(`/timesheets/${year}/${month}`),
-  getTimesheetById: (timesheetId) => apiClient.get(`/timesheets/id/${timesheetId}`),
+  getTimesheetById: (timesheetId, projectId) => apiClient.get(`/timesheets/id/${timesheetId}`, projectId ? { params: { projectId } } : undefined),
   createTimesheet: (year, month) => apiClient.post('/timesheets', null, { params: { year, month } }),
   addTimeEntry: (timesheetId, data) => apiClient.post(`/timesheets/${timesheetId}/time-entries`, data),
   updateTimeEntry: (timesheetId, entryId, data) => apiClient.put(`/timesheets/${timesheetId}/time-entries/${entryId}`, data),
@@ -75,6 +81,7 @@ export const timesheetAPI = {
 };
 
 export const vacationAPI = {
+  getTeamCalendar: (year, month) => apiClient.get('/vacation/team-calendar', { params: { year, month } }),
   createRequest: (startDate, endDate, vacationType, notes) => 
     apiClient.post('/vacation', null, { params: { startDate, endDate, type: vacationType, notes } }),
   updateRequest: (vacationId, startDate, endDate, vacationType, notes) =>
@@ -144,6 +151,7 @@ export const auditAPI = {
 };
 
 export const settingsAPI = {
+  applyLeaveDefaults: (year) => apiClient.post('/settings/leave-defaults/apply', { year, confirmed: true }),
   getAllSettings: () => apiClient.get('/settings'),
   getSetting: (key) => apiClient.get(`/settings/${key}`),
   updateSetting: (key, value) => apiClient.put(`/settings/${key}`, { value }),

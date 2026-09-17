@@ -10,7 +10,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -58,7 +57,6 @@ public class UserService {
                 .email(email)
                 .entraId(entraId)
                 .role(isInitialSuperAdmin(email) ? UserRole.SUPER_ADMIN : UserRole.EMPLOYEE)
-                .hourlyRate(BigDecimal.ZERO)
                 .isActive(true)
                 .profileCompleted(false)
                 .build();
@@ -84,7 +82,6 @@ public class UserService {
                 .email(email)
                 .entraId("dev:" + email)
                 .role(isInitialSuperAdmin(email) ? UserRole.SUPER_ADMIN : UserRole.EMPLOYEE)
-                .hourlyRate(BigDecimal.ZERO)
                 .isActive(true)
                 .profileCompleted(false)
                 .build();
@@ -113,23 +110,6 @@ public class UserService {
         return userRepository.findAll().stream()
                 .map(this::toDTO)
                 .collect(Collectors.toList());
-    }
-
-    public void updateHourlyRate(Long userId, BigDecimal newRate, Long requestingUserId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
-        User requestingUser = userRepository.findById(requestingUserId)
-                .orElseThrow(() -> new IllegalArgumentException("Requesting user not found"));
-        
-        BigDecimal oldRate = user.getAdminOverrideHourlyRate();
-        user.setAdminOverrideHourlyRate(newRate);
-        user.setRateOverriddenBy(requestingUser);
-        user.setRateOverriddenAt(java.time.LocalDateTime.now());
-        user.setRateOverrideReason("Admin override");
-        userRepository.save(user);
-
-        auditService.logAction(requestingUserId, "HOURLY_RATE_CHANGED", "User", userId,
-                "Old override rate: " + oldRate + ", New override rate: " + newRate);
     }
 
     public void deactivateUser(Long userId, Long requestingUserId) {
@@ -174,6 +154,15 @@ public class UserService {
 
         auditService.logAction(requestingUserId, "ROLE_CHANGED", "User", userId,
                 "Old role: " + oldRole + ", New role: " + newRole);
+    }
+
+    public UserDTO updateJoiningDate(Long id, java.time.LocalDate joiningDate, User requester) {
+        if (requester == null || !requester.isSuperAdmin())
+            throw new org.springframework.security.access.AccessDeniedException("Only Super Admin can edit joining dates");
+        User employee = userRepository.findForUpdate(id).orElseThrow(() -> new IllegalArgumentException("User not found"));
+        employee.setJoiningDate(joiningDate);
+        auditService.logAction(requester.getId(), "USER_PROFILE_UPDATED", "User", id, "Joining date: " + joiningDate);
+        return toDTO(userRepository.save(employee));
     }
 
     public UserDTO updateOwnProfile(String email, UpdateProfileRequest request) {
@@ -268,20 +257,13 @@ public class UserService {
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
                 .jobTitle(user.getJobTitle())
+                .joiningDate(user.getJoiningDate())
                 .dateOfBirth(user.getDateOfBirth())
                 .ssnLast4(user.isSuperAdmin() ? null : user.getSsnLast4())
                 .profileImageUrl(user.getProfileImageUrl())
                 .profileCompleted(Boolean.TRUE.equals(user.getProfileCompleted()))
                 .email(user.getEmail())
                 .role(user.getRole())
-                .hourlyRate(user.getEffectiveHourlyRate())
-                .defaultHourlyRate(user.getHourlyRate())
-                .adminOverrideHourlyRate(user.getAdminOverrideHourlyRate())
-                .effectiveHourlyRate(user.getEffectiveHourlyRate())
-                .rateOverridden(user.hasAdminRateOverride())
-                .rateOverriddenByName(user.getRateOverriddenBy() != null ? user.getRateOverriddenBy().getFullName() : null)
-                .rateOverriddenAt(user.getRateOverriddenAt())
-                .rateOverrideReason(user.getRateOverrideReason())
                 .isActive(user.getIsActive())
                 .createdAt(user.getCreatedAt())
                 .updatedAt(user.getUpdatedAt())

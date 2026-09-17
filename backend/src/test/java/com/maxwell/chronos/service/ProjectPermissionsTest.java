@@ -30,6 +30,31 @@ class ProjectPermissionsTest {
     User manager = User.builder().id(3L).role(UserRole.EMPLOYEE).build();
     User approver = User.builder().id(4L).role(UserRole.EMPLOYEE).build();
 
+    @Test void managerVisibilityExcludesUnrelatedProjectsAndEmployees() {
+        var managed = Project.builder().id(10L).code("MANAGED").projectManager(manager).build();
+        var member = Project.builder().id(11L).code("MEMBER").build();
+        var unrelated = Project.builder().id(12L).code("OTHER").build();
+        var mine = ProjectAssignment.builder().project(member).user(manager).isActive(true).build();
+        var teammate = ProjectAssignment.builder().project(managed).user(approver).isActive(true).build();
+        var other = ProjectAssignment.builder().project(unrelated).user(admin).isActive(true).build();
+        when(projects.findAll()).thenReturn(List.of(managed, member, unrelated));
+        when(assignments.findByUserId(3L)).thenReturn(List.of(mine));
+        when(assignments.findAll()).thenReturn(List.of(mine, teammate, other));
+        assertEquals(Set.of(10L, 11L), service.visibleProjectIds(manager));
+        assertEquals(Set.of(3L, 4L), service.visibleEmployeeIds(manager));
+        assertEquals(Set.of(10L, 11L, 12L), service.visibleProjectIds(admin));
+    }
+
+    @Test void dashboardBudgetUsesLifetimeHoursInsteadOfMonthlyHours() {
+        var project = Project.builder().id(10L).code("ATLAS").name("Atlas").totalAllocatedHours(new BigDecimal("100")).build();
+        when(projects.findAll()).thenReturn(List.of(project));
+        when(projects.totalRecordedHours(10L)).thenReturn(new BigDecimal("85"));
+        var result = service.getProjectHoursDashboard(2026,9,admin).get(0);
+        assertEquals(new BigDecimal("100"),result.getBudgetHours());
+        assertEquals(new BigDecimal("85"),result.getLifetimeLoggedHours());
+        assertEquals(BigDecimal.ZERO,result.getTotalLoggedHours());
+    }
+
     @Test void superAdminCanReadProjectsAndDashboard() {
         when(projects.findAll()).thenReturn(List.of());
         assertTrue(service.getProjects(superAdmin).isEmpty());
@@ -67,21 +92,44 @@ class ProjectPermissionsTest {
         verify(assignments, never()).save(any());
     }
 
-    @Test void employeeCanPlanOnlyTheirManagedProject() {
-        var project = Project.builder().id(10L).code("P1").projectManager(manager).build();
-        var assignment = ProjectAssignment.builder().project(project).user(approver).isActive(true).build();
-        when(projects.findById(10L)).thenReturn(Optional.of(project));
-        when(assignments.findByProjectIdAndUserId(10L, 4L)).thenReturn(Optional.of(assignment));
-        service.updatePlannedHours(10L, 4L, BigDecimal.TEN, manager);
-        assertEquals(BigDecimal.TEN, assignment.getPlannedHours());
-        assertThrows(AccessDeniedException.class, () -> service.updatePlannedHours(10L, 4L, BigDecimal.ONE, approver));
-        verify(assignments, times(1)).save(any());
+    @Test void adminCanUseProjectManagerAsPmHoursApprover() {
+        var request = new SaveProjectRequest();
+        request.setCode("P1");
+        request.setName("Project");
+        request.setProjectManagerId(3L);
+        request.setProjectManagerHoursApproverId(3L);
+        when(users.findById(3L)).thenReturn(Optional.of(manager));
+        when(projects.save(any())).thenAnswer(call -> { Project p = call.getArgument(0); p.setId(10L); return p; });
+
+        var result = service.saveProject(null, request, admin);
+
+        assertEquals(3L, result.getProjectManagerId());
+        assertEquals(3L, result.getProjectManagerHoursApproverId());
     }
 
-    @Test void employeeDashboardIsScopedToManagedProjects() {
+    @Test void employeeCannotPlanProjectHoursEvenForTheirManagedProject() {
+        var project = Project.builder().id(10L).code("P1").projectManager(manager).build();
+        var assignment = ProjectAssignment.builder().project(project).user(approver).isActive(true).build();
+        assertThrows(AccessDeniedException.class, () -> service.updatePlannedHours(10L, 4L, BigDecimal.TEN, manager));
+        assertThrows(AccessDeniedException.class, () -> service.updatePlannedHours(10L, 4L, BigDecimal.ONE, approver));
+        verify(assignments, never()).save(any());
+        assertNull(assignment.getPlannedHours());
+    }
+
+    @Test void managerSeesOnlyManagedApprovedOrAssignedProjects() {
         when(projects.existsByProjectManagerIdOrProjectManagerHoursApproverId(3L, 3L)).thenReturn(true);
-        service.getProjectHoursDashboard(2026, 9, manager);
-        verify(projects).findByProjectManagerIdAndStatus(3L, ProjectStatus.ACTIVE);
+        var managed = Project.builder().id(10L).code("A").projectManager(manager).build();
+        var assigned = Project.builder().id(11L).code("B").build();
+        var other = Project.builder().id(12L).code("C").build();
+        when(projects.findAll()).thenReturn(List.of(managed, assigned, other));
+        when(assignments.findByUserId(3L)).thenReturn(List.of(ProjectAssignment.builder().project(assigned).isActive(true).build()));
+        assertEquals(List.of(10L, 11L), service.getProjects(manager).stream().map(p -> p.getId()).toList());
+        assertEquals(List.of(10L, 11L), service.getProjectHoursDashboard(2026, 9, manager).stream().map(p -> p.getProjectId()).toList());
+    }
+
+    @Test void regularEmployeeCannotReadManagementProjects() {
+        assertThrows(AccessDeniedException.class, () -> service.getProjects(manager));
+        assertThrows(IllegalArgumentException.class, () -> service.getProjectHoursDashboard(2026, 9, manager));
         verify(projects, never()).findAll();
     }
 

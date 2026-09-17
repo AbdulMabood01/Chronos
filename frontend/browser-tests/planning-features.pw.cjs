@@ -1,0 +1,45 @@
+const { test, expect } = require('@playwright/test');
+const path = require('path');
+const fs = require('fs');
+const output = path.resolve(__dirname, '../../backend/target/ui-preview');
+test('calendar, budget, checklist and history work on desktop and mobile', async ({ page }) => {
+  const now = new Date(), year = now.getFullYear(), month = now.getMonth() + 1;
+  const prefix = year + '-' + String(month).padStart(2,'0');
+  await page.addInitScript(() => localStorage.setItem('authToken','planning-test'));
+  await page.route('**/api/**', async route => {
+    const url = new URL(route.request().url()); let data = [];
+    if(url.pathname.endsWith('/auth/me')) data = { id: 1, firstName: 'Alice', lastName: 'Smith', role: 'ADMIN', jobTitle: 'Engineer', dateOfBirth: '1990-01-01', profileCompleted: true };
+    else if(url.pathname.endsWith('/team-calendar')) data = [{ id: 5, userId: 8, userName: 'Sam Jones', startDate: prefix+'-01', endDate: prefix+'-03' }];
+    else if(url.pathname.endsWith('/hours-dashboard')) data = [{ projectId:4, projectCode:'ATLAS', projectName:'Atlas platform', budgetHours:100, lifetimeLoggedHours:85, totalLoggedHours:8, plannedHours:40, employees:[] }];
+    else if(url.pathname.includes('/timesheets/id/')) data = { id:2,userId:1,year,month,status:'APPROVED',timeEntries:[{id:10,projectId:4,projectCode:'ATLAS',entryDate:prefix+'-01',hours:8}],vacationDays:[] };
+    else if(url.pathname.endsWith('/submission')) data = { id:3,timesheetId:2,projectId:4,status:'APPROVED',totalHours:8 };
+    else if(url.pathname.endsWith('/history')) data = [{id:9,action:'TIMESHEET_APPROVED',userName:'Taylor Manager',createdAt:prefix+'-10T10:00:00'},{id:8,action:'TIMESHEET_REJECTED',userName:'Taylor Manager',createdAt:prefix+'-09T10:00:00',details:{message:'Reason: Correct Monday hours'}}];
+    else if(url.pathname.endsWith('/leave-balance')) { const bucket={allowanceDays:10,extraDays:0,usedDays:0,remainingDays:10,unpaidDays:0}; data={configured:true,vacation:bucket,sick:bucket,bereavement:bucket}; }
+    else if(url.pathname.includes('unread-count')) data=0;
+    await route.fulfill({json:data});
+  });
+  fs.mkdirSync(output,{recursive:true});
+  await page.goto('/team-leave-calendar');
+  await expect(page.getByRole('link', { name: 'Team leave calendar' })).toHaveClass(/active/);
+  await page.getByRole('button',{name: /1, \d{4}: 1 away/}).click();
+  await expect(page.getByText('Sam Jones')).toBeVisible();
+  await page.screenshot({path:path.join(output,'team-calendar-desktop.png'),fullPage:true});
+  await page.setViewportSize({width:390,height:844});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.screenshot({path:path.join(output,'team-calendar-mobile.png'),fullPage:true});
+  await page.goto('/project-hours');
+  await expect(page.getByText('Approaching budget')).toBeVisible();
+  await expect(page.getByRole('progressbar',{name:'Project hours budget used'})).toHaveAttribute('value','85');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.goto('/profile');
+  await expect(page.getByRole('region', { name: 'Leave balances' })).toHaveCount(0);
+  await page.getByRole('button',{name:'Review emergency contact'}).click();
+  await expect(page.getByLabel('Contact name',{exact:true})).toBeFocused();
+  await page.getByLabel('Phone number',{exact:true}).fill('555-0101');
+  await expect(page.getByRole('progressbar',{name:'Profile completeness'})).toHaveAttribute('value','2');
+  await page.goto('/timesheet/2');
+  await page.getByRole('button',{name:'View approval history'}).click();
+  await expect(page.getByText('Reason: Correct Monday hours')).toBeVisible();
+  await expect(page.getByRole('region',{name:'Approval history'}).getByText('Approved',{exact:true})).toBeVisible();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});

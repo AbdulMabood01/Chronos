@@ -8,7 +8,6 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.type.SqlTypes;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashSet;
@@ -77,6 +76,7 @@ public class User {
     private String jobTitle;
 
     private LocalDate dateOfBirth;
+    private LocalDate joiningDate;
 
     @Column(length = 4)
     private String ssnLast4;
@@ -94,22 +94,6 @@ public class User {
     @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(nullable = false)
     private UserRole role;
-
-    @Column(nullable = false)
-    private BigDecimal hourlyRate;
-
-    @Column(name = "admin_override_hourly_rate")
-    private BigDecimal adminOverrideHourlyRate;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "rate_overridden_by_id")
-    private User rateOverriddenBy;
-
-    @Column(name = "rate_overridden_at")
-    private LocalDateTime rateOverriddenAt;
-
-    @Column(name = "rate_override_reason", length = 500)
-    private String rateOverrideReason;
 
     @Column(nullable = false)
     private Boolean isActive;
@@ -147,13 +131,5 @@ public class User {
 
     public String getFullName() {
         return firstName + " " + lastName;
-    }
-
-    public BigDecimal getEffectiveHourlyRate() {
-        return adminOverrideHourlyRate != null ? adminOverrideHourlyRate : hourlyRate;
-    }
-
-    public boolean hasAdminRateOverride() {
-        return adminOverrideHourlyRate != null;
     }
 }

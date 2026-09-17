@@ -25,6 +25,36 @@ public class TimesheetController {
     private final TimesheetService timesheetService;
     private final UserService userService;
 
+    @GetMapping("/{timesheetId}/projects/{projectId}/history")
+    public ResponseEntity<List<com.maxwell.chronos.dto.AuditLogDTO>> history(@PathVariable Long timesheetId,
+            @PathVariable Long projectId, @AuthenticationPrincipal Jwt jwt) {
+        var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
+        return ResponseEntity.ok(timesheetService.getApprovalHistory(timesheetId, projectId, user));
+    }
+
+    @GetMapping("/missing")
+    public ResponseEntity<List<TimesheetService.MissingTimesheet>> missing(@RequestParam int year, @RequestParam int month,
+                                                                          @AuthenticationPrincipal Jwt jwt) {
+        var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
+        return ResponseEntity.ok(timesheetService.getMissingTimesheets(year, month, user));
+    }
+
+    @GetMapping("/{timesheetId}/projects/{projectId}/copy-week")
+    public ResponseEntity<TimesheetService.WeekCopyResult> previewWeek(@PathVariable Long timesheetId, @PathVariable Long projectId,
+            @RequestParam LocalDate weekStart, @AuthenticationPrincipal Jwt jwt) {
+        var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
+        if (user == null) return ResponseEntity.status(403).build();
+        return ResponseEntity.ok(timesheetService.copyPreviousWeek(timesheetId, projectId, weekStart, user.getId(), false));
+    }
+
+    @PostMapping("/{timesheetId}/projects/{projectId}/copy-week")
+    public ResponseEntity<TimesheetService.WeekCopyResult> copyWeek(@PathVariable Long timesheetId, @PathVariable Long projectId,
+            @RequestParam LocalDate weekStart, @AuthenticationPrincipal Jwt jwt) {
+        var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
+        if (user == null) return ResponseEntity.status(403).build();
+        return ResponseEntity.ok(timesheetService.copyPreviousWeek(timesheetId, projectId, weekStart, user.getId(), true));
+    }
+
     @GetMapping("/{year}/{month}")
     public ResponseEntity<TimesheetDTO> getTimesheet(@PathVariable int year, @PathVariable int month,
                                                      @AuthenticationPrincipal Jwt jwt) {
@@ -55,6 +85,7 @@ public class TimesheetController {
 
     @GetMapping("/id/{timesheetId}")
     public ResponseEntity<TimesheetDTO> getTimesheetById(@PathVariable Long timesheetId,
+                                                         @RequestParam(required = false) Long projectId,
                                                          @AuthenticationPrincipal Jwt jwt) {
         String email = jwt.getClaimAsString("preferred_username");
         var user = userService.findUserEntityByEmail(email);
@@ -64,7 +95,9 @@ public class TimesheetController {
         }
 
         try {
-            TimesheetDTO timesheet = timesheetService.getTimesheetById(timesheetId, user.getId(), user.isSuperAdmin() || user.isAdmin());
+            TimesheetDTO timesheet = projectId == null
+                    ? timesheetService.getTimesheetById(timesheetId, user.getId(), user.isSuperAdmin() || user.isAdmin())
+                    : timesheetService.getProjectTimesheet(timesheetId, projectId, user);
             return ResponseEntity.ok(timesheet);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(403).build();

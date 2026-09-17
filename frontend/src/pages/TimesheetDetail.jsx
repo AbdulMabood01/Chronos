@@ -1,3 +1,6 @@
+import ApprovalHistory from '../components/ApprovalHistory';
+import CopyPreviousWeek from '../components/CopyPreviousWeek';
+import '../components/WorkflowFeatures.css';
 import ValidationMessage from '../components/ValidationMessage';
 import ScreenTitle from '../components/ScreenTitle';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -115,8 +118,17 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
   const [editMode, setEditMode] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [copyMessage, setCopyMessage] = useState('');
   const [assignedProjects, setAssignedProjects] = useState([]);
+  const favoritesKey = 'chronos:project-favorites:' + user?.id;
+  const [favorites, setFavorites] = useState([]);
+  useEffect(() => {
+    try { const saved = JSON.parse(localStorage.getItem(favoritesKey) || '[]'); setFavorites(Array.isArray(saved) ? saved.map(String) : []); }
+    catch { setFavorites([]); }
+  }, [favoritesKey]);
   const [selectedProjectId, setSelectedProjectId] = useState('');
+  useEffect(() => { setCopyMessage(''); }, [activeTimesheetId, selectedProjectId]);
   const [projectSubmissionState, setProjectSubmission] = useState(null);
   const projectSubmissionRequest = useRef(0);
   const projectSubmission = String(projectSubmissionState?.timesheetId) === String(timesheet?.id)
@@ -212,7 +224,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
 
   const loadTimesheetById = useCallback(async (timesheetId) => {
     try {
-      const response = await timesheetAPI.getTimesheetById(timesheetId);
+      const response = await timesheetAPI.getTimesheetById(timesheetId, requestedProjectId || undefined);
       applyTimesheet(response.data);
     } catch (err) {
       setError('Failed to load timesheet');
@@ -220,7 +232,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
     } finally {
       setLoading(false);
     }
-  }, [applyTimesheet]);
+  }, [applyTimesheet, requestedProjectId]);
 
   const loadTimesheetForMonth = useCallback(async (year, month) => {
     const targetMonthStart = startOfMonth(new Date(year, month - 1, 1));
@@ -305,8 +317,8 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
   const projectOptions = useMemo(() => {
     const projects = new Map(timesheetProjectOptions.map(project => [String(project.id), project]));
     if (isOwner) assignedProjects.forEach(project => projects.set(String(project.id), project));
-    return Array.from(projects.values()).sort((a, b) => String(a.code).localeCompare(String(b.code)));
-  }, [assignedProjects, isOwner, timesheetProjectOptions]);
+    return Array.from(projects.values()).sort((a, b) => Number(favorites.includes(String(b.id))) - Number(favorites.includes(String(a.id))) || String(a.code).localeCompare(String(b.code)));
+  }, [assignedProjects, isOwner, timesheetProjectOptions, favorites]);
   const selectedProject = projectOptions.find((project) => String(project.id) === String(selectedProjectId));
   const selectedAssignment = (selectedProject?.assignments || []).find((assignment) => String(assignment.userId) === String(timesheet?.userId));
   const isOffboarded = selectedAssignment?.isActive === false;
@@ -352,7 +364,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
     && projectSubmission
     && (autoEditableStatuses.includes(projectSubmission.status) || (editMode && editButtonStatuses.includes(projectSubmission.status)));
   const canStartEdit = false;
-  const canApprove = (user?.role === 'SUPER_ADMIN' || projectSubmission?.routedApproverId === user?.id)
+  const canApprove = (user?.role !== 'SUPER_ADMIN' && projectSubmission?.routedApproverId === user?.id)
     && !isReadOnlyPastMonth && ['SUBMITTED', 'CHANGE_REQUESTED'].includes(projectSubmission?.status) && !isOwner;
   const canReject = canApprove;
   const canReopen = user?.role === 'SUPER_ADMIN' && !isReadOnlyPastMonth && (timesheet?.status === 'APPROVED' || timesheet?.status === 'LOCKED');
@@ -364,6 +376,8 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
   const grossPay = totalHours * numericBillRate;
   const selectedStatus = projectSubmission?.status || 'DRAFT';
   const isApproved = ['APPROVED', 'LOCKED'].includes(selectedStatus);
+  const isReviewView = !isOwner;
+  const showReadOnlyHours = isApproved || isReviewView;
   const approvingManagerName = projectSubmission?.routedApproverName
     || (String(projectSubmission?.userId || timesheet?.userId || '') === String(selectedProject?.projectManagerId || '')
       ? selectedProject?.projectManagerHoursApproverName
@@ -594,6 +608,8 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
   };
 
   const handleSubmit = async () => {
+    if (submitting) return;
+    setSubmitting(true);
     try {
       await timesheetAPI.submitProjectTimesheet(timesheet.id, selectedProjectId);
       await loadTimesheetById(timesheet.id);
@@ -601,7 +617,9 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
       await loadAvailableTimesheets();
       setError('');
     } catch (err) {
-      setError('Failed to submit timesheet');
+      setError(apiErrorMessage(err, 'Failed to submit timesheet'));
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -692,10 +710,10 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
   const leadingBlanks = days.length > 0 ? getDay(days[0].date) : 0;
 
   return (
-    <div className="page-container highlighted-workspace timesheet-page">
+    <div className={`page-container highlighted-workspace timesheet-page${isReviewView ? ' timesheet-review' : ''}`}>
       <div className="header-bar timesheet-page-header">
         <div>
-          <ScreenTitle title="Timesheet" icon="clock" eyebrow="TIME & ATTENDANCE" />
+          {isReviewView ? <div><span className="eyebrow">TIMESHEET REVIEW</span><h1>{timesheet.userName || "Timesheet"}</h1></div> : <ScreenTitle title="Timesheet" icon="clock" eyebrow="TIME & ATTENDANCE" />}
           <p className="page-subtitle">
             {selectedProject ? `${selectedProject.code} - ${selectedProject.name || 'Project'}` : format(new Date(timesheet.year, timesheet.month - 1, 1), 'MMMM yyyy')}
           </p>
@@ -740,7 +758,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
           {projectOptions.length === 0 ? (
             <option value="">No assigned projects</option>
           ) : projectOptions.map((project) => (
-            <option key={project.id} value={project.id}>{project.code}{project.name ? ` - ${project.name}` : ''}</option>
+            <option key={project.id} value={project.id}>{favorites.includes(String(project.id)) ? '\u2605 ' : ''}{project.code}{project.name ? ` - ${project.name}` : ''}</option>
           ))}
         </select>
       </div>
@@ -786,11 +804,17 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
       )}
 
       {selectedRejectionReason && (
-        <div className="error-message">
-          <strong>Rejection Reason:</strong> {selectedRejectionReason}
-        </div>
+        <section className="workflow-panel correction-panel" aria-label="Requested corrections">
+          <h3>Changes requested</h3>
+          <p><strong>Rejection Reason:</strong> {selectedRejectionReason}</p>
+          {projectSubmission?.rejectedByName && <p>Reviewed by {projectSubmission.rejectedByName}</p>}
+          {isOwner && <p>Update the hours or daily notes below, then choose Resubmit for Approval.</p>}
+        </section>
       )}
 
+      {isEditable && <CopyPreviousWeek key={timesheet.id + '-' + selectedProjectId} timesheet={timesheet} projectId={selectedProjectId}
+        disabled={submitting || savingDayKeys.length > 0} onCopied={async (count) => { await loadTimesheetById(timesheet.id); setCopyMessage(count + (count === 1 ? ' day copied.' : ' days copied.') + ' Review the hours before submitting.'); }} />}
+      {copyMessage && <p role="status" className="login-note">{copyMessage}</p>}
       <div className="card timesheet-calendar-card">
         <div className="timesheet-card-heading">
           <div>
@@ -842,7 +866,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
           <p className="login-note">This submitted project timesheet is read-only until a Project Manager approves or rejects it.</p>
         )}
         {isAdminReview && canApprove && (
-          <p className="login-note">Admin review is read-only. Approve or reject after checking the submitted hours.</p>
+          <p className="login-note">Review the hours and daily notes, then approve or request corrections by rejecting the timesheet.</p>
         )}
         {selectedStatus === 'CHANGE_REQUESTED' && (
           <p className="login-note">Changes are waiting for admin approval before this timesheet is final again.</p>
@@ -853,10 +877,10 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
         {!projectSubmissionLoading && !projectSubmission && selectedProjectId && (
           <p className="login-note">Project timesheet status could not be loaded. Select Refresh status to try again.</p>
         )}
-        {!projectSubmissionLoading && projectSubmission && !isEditable && !isReadOnlyPastMonth && selectedStatus !== 'CHANGE_REQUESTED' && (
+        {!projectSubmissionLoading && projectSubmission && !isEditable && !isReviewView && !isReadOnlyPastMonth && selectedStatus !== 'CHANGE_REQUESTED' && (
           <p className="login-note">This project timesheet is {selectedStatus.toLowerCase()} and frozen for editing.</p>
         )}
-        <div className={`calendar-grid timesheet-calendar-grid${isApproved ? " approved-calendar" : ""}`}>
+        <div className={`calendar-grid timesheet-calendar-grid${showReadOnlyHours ? " approved-calendar" : ""}`}>
           {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((weekday) => (
             <div key={weekday} className="calendar-weekday">{weekday}</div>
           ))}
@@ -876,7 +900,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
                   {day.vacationDay && <span className="day-status-pill">{day.vacationDay.status}</span>}
                 </div>
                 {day.vacationDay && <div className="day-status-label">{vacationLabel}</div>}
-                {isApproved ? <div className="approved-day-hours" aria-label={`Hours for ${day.dateStr}`}>{Number(day.hours) > 0 ? <><strong>{Number(day.hours).toFixed(2)}</strong><span>hrs</span></> : <span className="approved-day-empty">-</span>}</div> : <label className="day-hours-field">
+                {showReadOnlyHours ? <div className="approved-day-hours" aria-label={`Hours for ${day.dateStr}`}>{Number(day.hours) > 0 ? <><strong>{Number(day.hours).toFixed(2)}</strong><span>hrs</span></> : <span className="approved-day-empty">-</span>}</div> : <label className="day-hours-field">
                   <span>{isSavingDay ? <LoadingIndicator label="Saving" /> : 'Hours'}</span>
                   <div className="day-entry-controls">
                     <input
@@ -903,13 +927,13 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
                     </button>
                     <button type="button" className={`clock-time-button notes-button${day.notes ? ' has-notes' : ''}`}
                       aria-label={`Notes for ${day.dateStr}`} title="Daily task notes"
-                      disabled={isSavingDay || (!day.notes && !(isEditable && withinAssignment && !day.isApprovedVacation))}
+                      disabled={isSavingDay}
                       onClick={(event) => { notesTrigger.current = event.currentTarget; setNotesDay({ ...day, editable: Boolean(isEditable && withinAssignment && !day.isApprovedVacation) }); setNotesDraft(day.notes); setNotesError(''); }}>
                       <Icon name="file" size={16} />
                     </button>
                   </div>
                 </label>}
-                {isApproved && day.notes && <button type="button" className="clock-time-button notes-button has-notes" aria-label={`Notes for ${day.dateStr}`}
+                {showReadOnlyHours && <button type="button" className={`clock-time-button notes-button${day.notes ? ' has-notes' : ''}`} aria-label={`Notes for ${day.dateStr}`}
                   onClick={(event) => { notesTrigger.current = event.currentTarget; setNotesDay({ ...day, editable: false }); setNotesDraft(day.notes); setNotesError(''); }}><Icon name="file" size={16} /></button>}
                 {day.sessions?.length > 0 && (
                   <div className="time-session-list">
@@ -928,13 +952,15 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
       )}
 
       <div className="action-bar">
+        {selectedProjectId && <ApprovalHistory key={timesheet.id + ':' + selectedProjectId} timesheetId={timesheet.id} projectId={selectedProjectId}
+          revision={[projectSubmission?.status, projectSubmission?.submittedAt, projectSubmission?.approvedAt, projectSubmission?.rejectedAt].join(':')} />}
         {isEditable && ['DRAFT', 'REJECTED'].includes(selectedStatus) && (
           <button
             className="button button-primary"
             onClick={handleSubmit}
-            disabled={!canSubmitProjectTimesheet}
+            disabled={submitting || !canSubmitProjectTimesheet || savingDayKeys.length > 0}
           >
-            {selectedStatus === 'REJECTED' ? 'Resubmit for Approval' : 'Submit for Approval'}
+            {submitting ? 'Submitting...' : selectedStatus === 'REJECTED' ? 'Resubmit for Approval' : 'Submit for Approval'}
           </button>
         )}
 
@@ -970,7 +996,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
         <div className="modal-header"><h2 id="daily-notes-title">Daily notes · {format(notesDay.date, 'MMM d, yyyy')}</h2></div>
         <label htmlFor="daily-notes">Tasks done that day (optional)</label>
         <textarea id="daily-notes" autoFocus rows={5} maxLength={500} value={notesDraft} readOnly={!notesDay.editable} disabled={notesSaving}
-          placeholder="What did you work on?" onChange={(event) => setNotesDraft(event.target.value)} />
+          placeholder={notesDay.editable ? 'What did you work on?' : 'No notes recorded for this day.'} onChange={(event) => setNotesDraft(event.target.value)} />
         {notesError && <p role="alert">{notesError}</p>}
         <div className="action-bar compact-actions">
           <button type="button" className="button button-secondary" disabled={notesSaving} onClick={closeNotes}>Close</button>
@@ -1002,6 +1028,8 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
               value={rejectReason}
               onChange={(event) => setRejectReason(event.target.value)}
               rows="4"
+              aria-label="Reason for rejection"
+              maxLength={500}
               placeholder="Reason for rejection"
               autoFocus
             />

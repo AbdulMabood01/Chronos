@@ -14,6 +14,8 @@ vi.mock('../api', () => ({
     addTimeEntry: vi.fn(),
     updateTimeEntry: vi.fn(),
     deleteTimeEntry: vi.fn(),
+    submitProjectTimesheet: vi.fn(),
+    getApprovalHistory: vi.fn(),
   },
   projectAPI: { getAssignedProjects: vi.fn() },
   reportsAPI: { exportProjectTimesheetPdf: vi.fn() },
@@ -37,10 +39,30 @@ beforeEach(() => {
   timesheetAPI.addTimeEntry.mockResolvedValue({ data: {} });
   timesheetAPI.updateTimeEntry.mockResolvedValue({ data: {} });
   timesheetAPI.deleteTimeEntry.mockResolvedValue({});
+  timesheetAPI.getApprovalHistory.mockResolvedValue({ data: [] });
   projectAPI.getAssignedProjects.mockResolvedValue({ data: [{ id: 4, code: 'ATLAS', name: 'Atlas' }] });
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 describe('daily notes and summary', () => {
+  it.each(['ADMIN', 'EMPLOYEE'])('lets a %s reviewer open populated and empty notes without editing', async (role) => {
+    HTMLDialogElement.prototype.showModal = vi.fn(function () { this.setAttribute('open', ''); });
+    employee.id = 6;
+    employee.role = role;
+    employee.canReviewProjects = true;
+    timesheetAPI.getTimesheetById.mockResolvedValue({ data: { ...sheet, status: 'SUBMITTED', timeEntries: [{ ...sheet.timeEntries[0], notes: 'Completed integration' }] } });
+    timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, status: 'SUBMITTED', routedApproverId: 6 } });
+    open(false);
+    await screen.findByRole('button', { name: 'Approve' });
+    expect(screen.queryByRole('button', { name: 'Add login and logout time for 2026-08-03' })).toBeNull();
+    expect(screen.getByLabelText('Hours for 2026-08-03').tagName).toBe('DIV');
+    fireEvent.click(screen.getByRole('button', { name: 'Notes for 2026-08-03' }));
+    expect(screen.getByRole('textbox').value).toBe('Completed integration');
+    expect(screen.getByRole('textbox').readOnly).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Save notes' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Notes for 2026-08-04' }));
+    expect(screen.getByPlaceholderText('No notes recorded for this day.')).toBeTruthy();
+  });
   it('shows monthly and cumulative project hours in one summary', async () => {
     timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, loggedHoursToDate: 120 } });
     open();
@@ -212,4 +234,39 @@ it('shows backend validation messages when hour saves fail', async () => {
   fireEvent.blur(input);
 
   expect(await screen.findByText('Entry date must be within the project assignment dates')).toBeTruthy();
+});
+
+it('hides approval actions from superadmins even when they are the routed approver', async () => {
+  employee.id = 6;
+  employee.role = 'SUPER_ADMIN';
+  timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, status: 'SUBMITTED', routedApproverId: 6 } });
+  open(false);
+  await screen.findByText('SUBMITTED');
+  expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull();
+});
+
+
+describe('favorites and corrections', () => {
+  it('sorts project favorites first from the shared project favorites store', async () => {
+    localStorage.clear();
+    localStorage.setItem('chronos:project-favorites:99', '[4]');
+    localStorage.setItem('chronos:project-favorites:1', '["5"]');
+    projectAPI.getAssignedProjects.mockResolvedValue({ data: [{ id: 4, code: 'ATLAS' }, { id: 5, code: 'ZEBRA' }] });
+    open(false);
+    await waitFor(() => expect(screen.getByLabelText('Project').options[0].value).toBe('5'));
+    expect(screen.queryByRole('button', { name: 'Add to favorites' })).toBeNull();
+    expect(localStorage.getItem('chronos:project-favorites:99')).toBe('[4]');
+    localStorage.clear();
+  });
+  it('shows the correction reason and resubmits to the selected project', async () => {
+    timesheetAPI.getTimesheetById.mockResolvedValue({ data: { ...sheet, status: 'REJECTED' } });
+    timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, status: 'REJECTED', plannedHours: 160, rejectionReason: 'Please correct Monday hours', rejectedByName: 'Sam Manager' } });
+    timesheetAPI.submitProjectTimesheet.mockResolvedValue({ data: {} });
+    open(false);
+    expect(await screen.findByRole('region', { name: 'Requested corrections' })).toBeTruthy();
+    expect(screen.getByText('Please correct Monday hours')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Resubmit for Approval' }));
+    await waitFor(() => expect(timesheetAPI.submitProjectTimesheet).toHaveBeenCalledWith(2, '4'));
+  });
 });

@@ -19,10 +19,25 @@ public class SettingsController {
     private final SystemSettingsService systemSettingsService;
     private final UserService userService;
 
+    private boolean canManageSettings(com.maxwell.chronos.domain.User user) {
+        return user != null && user.isSuperAdmin();
+    }
+
+    @PostMapping("/leave-defaults/apply")
+    public java.util.Map<String, Integer> applyLeaveDefaults(
+            @jakarta.validation.Valid @RequestBody com.maxwell.chronos.dto.ApplyLeaveDefaultsRequest input,
+            @AuthenticationPrincipal Jwt jwt) {
+        var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
+        if (!canManageSettings(user)) {
+            throw new org.springframework.security.access.AccessDeniedException("Only Super Admin can manage settings");
+        }
+        return java.util.Map.of("updated", systemSettingsService.applyLeaveDefaults(input.year(), input.confirmed(), user));
+    }
+
     @GetMapping
     public ResponseEntity<List<SystemSettingDTO>> getAllSettings(@AuthenticationPrincipal Jwt jwt) {
         var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        if (user == null || (!user.isSuperAdmin() && !user.isAdmin())) {
+        if (!canManageSettings(user)) {
             return ResponseEntity.status(403).build();
         }
         return ResponseEntity.ok(systemSettingsService.getAllSettings());
@@ -31,7 +46,7 @@ public class SettingsController {
     @GetMapping("/{key}")
     public ResponseEntity<SystemSettingDTO> getSetting(@PathVariable String key, @AuthenticationPrincipal Jwt jwt) {
         var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        if (user == null || (!user.isSuperAdmin() && !user.isAdmin())) {
+        if (!canManageSettings(user)) {
             return ResponseEntity.status(403).build();
         }
         SystemSettingDTO setting = systemSettingsService.getSetting(key);
@@ -46,7 +61,7 @@ public class SettingsController {
                                                            @RequestBody Map<String, String> body,
                                                            @AuthenticationPrincipal Jwt jwt) {
         var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        if (user == null || (!user.isSuperAdmin() && !user.isAdmin())) {
+        if (!canManageSettings(user)) {
             return ResponseEntity.status(403).build();
         }
         SystemSettingDTO updated = systemSettingsService.updateSetting(key, body.get("value"), user.getId());

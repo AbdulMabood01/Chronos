@@ -51,10 +51,10 @@ public class ProjectService {
     private final AuditService auditService;
 
     public List<ProjectDTO> getProjects(User requester) {
-        if (requester == null || (!requester.isSuperAdmin() && !requester.isAdmin())) {
+        if (requester == null || (!requester.isSuperAdmin() && !requester.isAdmin() && !canReviewProjects(requester.getId()))) {
             throw new org.springframework.security.access.AccessDeniedException("Project view permission required");
         }
-        return projectRepository.findAll().stream()
+        return visibleProjects(requester).stream()
                 .sorted(Comparator.comparing(Project::getCode, String.CASE_INSENSITIVE_ORDER))
                 .map(this::toDTO)
                 .toList();
@@ -89,9 +89,6 @@ public class ProjectService {
         }
         if (request.getProjectManagerId() == null || request.getProjectManagerHoursApproverId() == null) {
             throw new IllegalArgumentException("Project manager and PM hours approver are required");
-        }
-        if (request.getProjectManagerId().equals(request.getProjectManagerHoursApproverId())) {
-            throw new IllegalArgumentException("Project manager cannot approve their own hours");
         }
         if (request.getTotalAllocatedHours() != null && request.getTotalAllocatedHours().compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalArgumentException("Total allocated hours cannot be negative");
@@ -248,9 +245,7 @@ public class ProjectService {
             throw new IllegalArgumentException("Project dashboard permission required");
         }
 
-        List<Project> projects = !requester.isAdmin() && !requester.isSuperAdmin()
-                ? projectRepository.findByProjectManagerIdAndStatus(requester.getId(), ProjectStatus.ACTIVE)
-                : projectRepository.findAll();
+        List<Project> projects = visibleProjects(requester);
         List<Timesheet> timesheets = timesheetRepository.findByYearAndMonth(year, month);
         Map<Long, Timesheet> timesheetsByUser = timesheets.stream()
                 .collect(Collectors.toMap(timesheet -> timesheet.getUser().getId(), Function.identity(), (left, right) -> left));
@@ -330,8 +325,35 @@ public class ProjectService {
                 .orElse(false);
     }
 
+    public Set<Long> visibleProjectIds(User requester) {
+        if (requester == null) return Set.of();
+        return visibleProjects(requester).stream().map(Project::getId).collect(Collectors.toSet());
+    }
+
+    public Set<Long> visibleEmployeeIds(User requester) {
+        var projectIds = visibleProjectIds(requester);
+        return assignmentRepository.findAll().stream()
+                .filter(a -> projectIds.contains(a.getProject().getId()))
+                .map(a -> a.getUser().getId()).collect(Collectors.toSet());
+    }
+
+    private List<Project> visibleProjects(User requester) {
+        if (requester.isAdmin() || requester.isSuperAdmin()) return projectRepository.findAll();
+        var assigned = assignmentRepository.findByUserId(requester.getId()).stream()
+                .filter(a -> Boolean.TRUE.equals(a.getIsActive()))
+                .map(a -> a.getProject().getId()).collect(Collectors.toSet());
+        return projectRepository.findAll().stream().filter(p ->
+                (p.getProjectManager() != null && requester.getId().equals(p.getProjectManager().getId())) ||
+                (p.getProjectManagerHoursApprover() != null && requester.getId().equals(p.getProjectManagerHoursApprover().getId())) ||
+                assigned.contains(p.getId())).toList();
+    }
+
     public boolean canReviewProjects(Long userId) {
         return projectRepository.existsByProjectManagerIdOrProjectManagerHoursApproverId(userId, userId);
+    }
+
+    public boolean canManageProjects(Long userId) {
+        return projectRepository.existsByProjectManagerId(userId);
     }
 
     public boolean canApproveProjectManagerHours(Long projectId, Long approverId) {
@@ -348,16 +370,9 @@ public class ProjectService {
     }
 
     private void requireCanPlanProject(Long projectId, User requester) {
-        if (requester == null || requester.isSuperAdmin()) {
+        if (requester == null || !requester.isAdmin()) {
             throw new org.springframework.security.access.AccessDeniedException("Project planning permission required");
         }
-        if (requester.isAdmin()) {
-            return;
-        }
-        if (managesProject(projectId, requester.getId())) {
-            return;
-        }
-        throw new org.springframework.security.access.AccessDeniedException("Project planning permission required");
     }
 
     private void validatePeriod(Integer year, Integer month) {
@@ -468,6 +483,8 @@ public class ProjectService {
         employees.sort(Comparator.comparing(ProjectHoursEmployeeDTO::getUserName, String.CASE_INSENSITIVE_ORDER));
 
         return ProjectHoursDashboardDTO.builder()
+                .budgetHours(project.getTotalAllocatedHours())
+                .lifetimeLoggedHours(projectRepository.totalRecordedHours(project.getId()))
                 .projectId(project.getId())
                 .projectCode(project.getCode())
                 .projectName(project.getName())

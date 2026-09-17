@@ -16,6 +16,8 @@ beforeEach(() => {
   HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
   HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); };
   currentUser.role = 'SUPER_ADMIN';
+  currentUser.canReviewProjects = false;
+  localStorage.clear();
   projectAPI.getProjects.mockResolvedValue({ data: [project] });
   userAPI.getAllUsers.mockResolvedValue({ data: [] });
   projectAPI.getHoursDashboard.mockResolvedValue({ data: [{ projectId: 10, employees: [{ userId: 3, userName: 'Employee', plannedHours: 40, timesheetId: 20 }] }] });
@@ -57,6 +59,22 @@ it('shows editable assigned project hours from the assignment instead of monthly
   expect(screen.getByText('12.00')).toBeTruthy();
 });
 
+it('persists favorites from project cards and sorts favorite projects first', async () => {
+  currentUser.role = 'ADMIN';
+  projectAPI.getProjects.mockResolvedValue({ data: [
+    { ...project, id: 10, code: 'ATLAS', name: 'Atlas' },
+    { ...project, id: 11, code: 'ZEBRA', name: 'Zebra' },
+  ] });
+  render(<ProjectManagement />);
+  await screen.findByText('Atlas');
+  const buttons = screen.getAllByRole('button', { name: 'Add to favorites' });
+  fireEvent.click(buttons[1]);
+  expect(JSON.parse(localStorage.getItem('chronos:project-favorites:1'))).toEqual(['11']);
+  const cards = document.querySelectorAll('.pc-project-card');
+  expect(cards[0].textContent).toContain('Zebra');
+  expect(screen.getByRole('button', { name: 'Remove from favorites' })).toBeTruthy();
+});
+
 it('retains Admin project editing', async () => {
   currentUser.role = 'ADMIN';
   await selectProject();
@@ -86,6 +104,23 @@ it('creates a project with routing only and leaves onboarding to Team', async ()
   expect(await screen.findByText('Add a team member')).toBeTruthy();
   expect(screen.getByLabelText('Employee').value).toBe('3');
 
+});
+
+it('allows the project manager to also be the PM hours approver', async () => {
+  currentUser.role = 'ADMIN';
+  userAPI.getAllUsers.mockResolvedValue({ data: [
+    { id: 3, firstName: 'Project', lastName: 'Manager', isActive: true, hourlyRate: 70 },
+  ] });
+  projectAPI.createProject.mockResolvedValue({ data: { ...project, id: 11, projectManagerId: 3, projectManagerHoursApproverId: 3, assignments: [] } });
+  render(<ProjectManagement />);
+  fireEvent.click(await screen.findByRole('button', { name: 'New Project' }));
+  fireEvent.change(screen.getByLabelText('Project Code'), { target: { value: 'P2' } });
+  fireEvent.change(screen.getAllByLabelText('Project Name')[1], { target: { value: 'New Project' } });
+  fireEvent.change(screen.getByLabelText('Project Manager'), { target: { value: '3' } });
+  fireEvent.change(screen.getByLabelText('PM Hours Approver'), { target: { value: '3' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Create Project' }));
+  await waitFor(() => expect(projectAPI.createProject).toHaveBeenCalledWith(expect.objectContaining({ projectManagerId: 3, projectManagerHoursApproverId: 3 })));
+  expect(screen.queryByText('Project Manager cannot approve their own hours')).toBeNull();
 });
 
 it('sums all resource assignments instead of the manual allocation or monthly plan', async () => {
@@ -179,4 +214,13 @@ it('blocks pending approval and requires a secondary PM', async () => {
   expect(screen.getByText('Please approve or reject pending hours before offboarding this employee.')).toBeTruthy();
   expect(screen.getByRole('combobox', { name: /Secondary PM/ })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Confirm offboarding' }).disabled).toBe(true);
+});
+
+it('uses the shared project workspace for a project manager with read-only actions', async () => {
+  currentUser.role = 'EMPLOYEE'; currentUser.canReviewProjects = true;
+  await selectProject();
+  expect(screen.queryByRole('button', { name: 'New Project' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Team' }));
+  expect(screen.getByLabelText('Start date for Employee').closest('fieldset').disabled).toBe(true);
+  expect(userAPI.getAllUsers).not.toHaveBeenCalled();
 });

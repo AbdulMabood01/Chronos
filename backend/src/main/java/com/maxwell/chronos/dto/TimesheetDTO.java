@@ -26,12 +26,8 @@ public class TimesheetDTO {
     private Integer month;
     private TimesheetStatus status;
     private BigDecimal totalHours;
-    private BigDecimal hourlyRate;
     private BigDecimal billRate;
     private BigDecimal effectiveBillRate;
-    private Boolean adminRateOverridden;
-    private BigDecimal defaultHourlyRate;
-    private BigDecimal adminOverrideHourlyRate;
     private BigDecimal approvedHourlyRate;
     private LocalDateTime submittedAt;
     private LocalDateTime approvedAt;

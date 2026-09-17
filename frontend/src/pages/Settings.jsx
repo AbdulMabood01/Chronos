@@ -12,16 +12,11 @@ const knownSettings = {
     type: 'text',
     fallback: 'Maxwell Network',
   },
-  default_hourly_rate: {
-    title: 'Default Hourly Rate',
-    description: 'Fallback rate for new employees when no employee rate is configured.',
-    type: 'number',
-    fallback: '0.00',
-    prefix: '$',
-  },
+  sick_days_per_year: { title: 'Sick Days', description: 'Default annual sick leave allowance.', type: 'number', fallback: '5', suffix: 'days' },
+  bereavement_days_per_year: { title: 'Bereavement Days', description: 'Default annual bereavement allowance.', type: 'number', fallback: '3', suffix: 'days' },
   vacation_days_per_year: {
-    title: 'Vacation Days / Year',
-    description: 'Default annual vacation allowance used for policy reference.',
+    title: 'Paid Vacation Days',
+    description: 'Default annual allowance for vacation and other paid leave.',
     type: 'number',
     fallback: '15',
     suffix: 'days',
@@ -61,7 +56,8 @@ const knownSettings = {
   },
 };
 
-const primaryKeys = ['company_name', 'default_hourly_rate', 'vacation_days_per_year'];
+const primaryKeys = ['company_name'];
+const leaveKeys = ['vacation_days_per_year', 'sick_days_per_year', 'bereavement_days_per_year'];
 const reminderKeys = [
   'timesheet.reminders.enabled',
   'timesheet.reminders.initial_days_before_month_end',
@@ -79,7 +75,9 @@ export default function Settings() {
   const [draftValue, setDraftValue] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const canManageSettings = ['ADMIN', 'SUPER_ADMIN'].includes(user?.role);
+  const [leaveYear, setLeaveYear] = useState(new Date().getFullYear());
+  const [bulkMessage, setBulkMessage] = useState('');
+  const canManageSettings = user?.role === 'SUPER_ADMIN';
   const settingMap = settings.reduce((acc, item) => ({ ...acc, [item.key]: item }), {});
   const enabledSetting = settingMap['timesheet.reminders.enabled']?.value ?? knownSettings['timesheet.reminders.enabled'].fallback;
   const finalWeekSetting = settingMap['timesheet.reminders.final_working_week_daily']?.value ?? knownSettings['timesheet.reminders.final_working_week_daily'].fallback;
@@ -114,6 +112,16 @@ export default function Settings() {
     } catch (err) {
       setError('Failed to update setting. Your changes are still available below.');
     } finally { setSaving(false); }
+  };
+
+  const applyDefaults = async () => {
+    if (!window.confirm(`Apply saved leave defaults to all employees and admins for ${leaveYear}? This overwrites annual allowances and resets extra days to zero. Approved leave remains deducted. Other years are unchanged.`)) return;
+    setSaving(true); setError(''); setBulkMessage('');
+    try {
+      const response = await settingsAPI.applyLeaveDefaults(leaveYear);
+      setBulkMessage(`Defaults applied to ${response.data.updated} employees for ${leaveYear}.`);
+    } catch (err) { setError(err.response?.data?.message || 'Unable to apply leave defaults.'); }
+    finally { setSaving(false); }
   };
 
   const valueFor = (key) => settingMap[key]?.value ?? knownSettings[key]?.fallback ?? '';
@@ -154,7 +162,7 @@ export default function Settings() {
             className="setting-card-input"
             type={config.type}
             min={config.type === 'number' ? '0' : undefined}
-            step={key === 'default_hourly_rate' ? '0.01' : '1'}
+            step="1"
             value={draftValue}
             onChange={(event) => setDraftValue(event.target.value)}
             autoFocus
@@ -220,6 +228,15 @@ export default function Settings() {
         { label: 'Reminders', value: String(enabledSetting).toLowerCase() === 'true' ? 'On' : 'Off', icon: 'bell' },
         { label: 'Final week nudges', value: String(finalWeekSetting).toLowerCase() === 'true' ? 'On' : 'Off', icon: 'clock' },
       ]} />
+
+      <section className="settings-section" aria-label="Leave policy">
+        <h2>Leave Defaults / Leave Policy</h2>
+        <div className="settings-card-grid">{leaveKeys.map(renderSettingCard)}</div>
+        <p>Apply saved allowances to all employees and admins, including inactive employees. Approved leave remains deducted from these annual allowances.</p>
+        <label>Leave year <input type="number" min="1900" max="9998" value={leaveYear} disabled={saving} onChange={e => setLeaveYear(Number(e.target.value))} /></label>
+        <button type="button" className="button button-primary" disabled={saving || editingKey !== null || !Number.isInteger(leaveYear) || leaveYear < 1900 || leaveYear > 9998} onClick={applyDefaults}>Apply Defaults to All Employees</button>
+        {bulkMessage && <p role="status">{bulkMessage}</p>}
+      </section>
 
       <section className="settings-hero-card">
         <div>

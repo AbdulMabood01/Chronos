@@ -24,7 +24,7 @@ class VacationConflictTest {
         assertEquals(VacationStatus.DRAFT, vacation.getStatus());
     }
 
-    @Test void employeeManagerReceivesOnlyAssignedVacationRequests() {
+    @Test void onlySuperAdminReceivesPendingVacationRequests() {
         var vacations = mock(VacationRequestRepository.class);
         var assignments = mock(ProjectAssignmentRepository.class);
         var service = new VacationService(vacations, mock(UserRepository.class), mock(TimesheetRepository.class),
@@ -35,7 +35,8 @@ class VacationConflictTest {
         var vacation = VacationRequest.builder().id(3L).user(employee).status(VacationStatus.SUBMITTED).build();
         when(vacations.findByStatus(VacationStatus.SUBMITTED)).thenReturn(List.of(vacation));
         when(assignments.findByUserIdAndIsActiveTrue(1L)).thenReturn(List.of(ProjectAssignment.builder().project(project).build()));
-        assertEquals(1, service.getPendingVacationRequests(manager).size());
+        assertTrue(service.getPendingVacationRequests(manager).isEmpty());
+        assertEquals(1, service.getPendingVacationRequests(User.builder().id(10L).role(UserRole.SUPER_ADMIN).build()).size());
         assertTrue(service.getPendingVacationRequests(User.builder().id(9L).role(UserRole.EMPLOYEE).build()).isEmpty());
         assertTrue(service.getPendingVacationRequests(employee).isEmpty());
     }

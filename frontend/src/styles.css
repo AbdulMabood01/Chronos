@@ -1460,6 +1460,16 @@ html, body, #root {
   padding: 1.5rem;
 }
 
+.admin-approval-section {
+  margin-bottom: 1.25rem;
+}
+
+.admin-section-divider {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-color);
+}
+
 .task-list,
 .request-list {
   display: grid;

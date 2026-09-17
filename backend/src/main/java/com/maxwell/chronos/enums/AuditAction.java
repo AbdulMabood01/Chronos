@@ -3,6 +3,7 @@ package com.maxwell.chronos.enums;
 public enum AuditAction {
     USER_CREATED,
     USER_PROFILE_UPDATED,
+    LEAVE_ALLOWANCE_UPDATED,
     USER_DEACTIVATED,
     USER_REACTIVATED,
     ROLE_CHANGED,

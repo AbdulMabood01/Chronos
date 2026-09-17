@@ -16,6 +16,10 @@ function formatLetterType(value) {
   }[value] || value;
 }
 
+function apiErrorMessage(error, fallback) {
+  return error?.response?.data?.message || error?.message || fallback;
+}
+
 export default function AdminDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -37,8 +41,8 @@ export default function AdminDashboard() {
   const loadPendingItems = async () => {
     try {
       const requests = [
-        timesheetAPI.getPendingProjectSubmissions(),
-        vacationAPI.getPendingRequests(),
+        user?.role !== 'SUPER_ADMIN' ? timesheetAPI.getPendingProjectSubmissions() : Promise.resolve({ data: [] }),
+        user?.role === 'SUPER_ADMIN' ? vacationAPI.getPendingRequests() : Promise.resolve({ data: [] }),
       ];
       if (canReviewLetters) {
         requests.push(letterRequestAPI.getPendingRequests());
@@ -113,7 +117,7 @@ export default function AdminDashboard() {
       }
       await loadPendingItems();
     } catch (err) {
-      setError(`Failed to approve ${task.type.toLowerCase()}`);
+      setError(apiErrorMessage(err, `Failed to approve ${task.type.toLowerCase()}`));
     }
   };
 
@@ -141,7 +145,7 @@ export default function AdminDashboard() {
       setRejectReason('');
       await loadPendingItems();
     } catch (err) {
-      setError(`Failed to reject ${rejectingTask.type.toLowerCase()}`);
+      setError(apiErrorMessage(err, `Failed to reject ${rejectingTask.type.toLowerCase()}`));
     }
   };
 
@@ -182,7 +186,7 @@ export default function AdminDashboard() {
 
       {error && <div className="error-message">{error} <button type="button" onClick={loadPendingItems}>Retry</button></div>}
 
-      <section className="admin-panel">
+      <section className="admin-panel admin-approval-section admin-pending-section">
         <div className="panel-heading">
           <div>
             <h2>Pending Tasks</h2>

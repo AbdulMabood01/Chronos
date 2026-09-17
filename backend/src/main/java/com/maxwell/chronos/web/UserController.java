@@ -18,6 +18,28 @@ import java.util.List;
 @RequiredArgsConstructor
 public class UserController {
     private final UserService userService;
+    private final com.maxwell.chronos.service.ProjectService projectService;
+    private final com.maxwell.chronos.service.LeaveBalanceService leaveBalanceService;
+
+    @GetMapping("/{id}/leave-balance")
+    public com.maxwell.chronos.dto.LeaveBalanceDTO getLeaveBalance(@PathVariable Long id, @RequestParam int year, @AuthenticationPrincipal Jwt jwt) {
+        return leaveBalanceService.getBalance(id, year, userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username")));
+    }
+
+    @PutMapping("/{id}/leave-allowance")
+    public com.maxwell.chronos.dto.LeaveBalanceDTO updateLeaveAllowance(@PathVariable Long id,
+            @Valid @RequestBody com.maxwell.chronos.dto.LeaveAllowanceRequest request, @AuthenticationPrincipal Jwt jwt) {
+        return leaveBalanceService.update(id, request, userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username")));
+    }
+
+    public record JoiningDateRequest(java.time.LocalDate joiningDate) {}
+
+    @PatchMapping("/{id}/joining-date")
+    public UserDTO updateJoiningDate(@PathVariable Long id, @RequestBody JoiningDateRequest request,
+                                    @AuthenticationPrincipal Jwt jwt) {
+        return userService.updateJoiningDate(id, request.joiningDate(),
+                userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username")));
+    }
 
     @GetMapping("/{id}")
     public ResponseEntity<UserDTO> getUser(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
@@ -33,8 +55,14 @@ public class UserController {
     }
 
     @GetMapping
-    public ResponseEntity<List<com.maxwell.chronos.dto.EmployeeDirectoryDTO>> getAllActiveUsers() {
+    public ResponseEntity<List<com.maxwell.chronos.dto.EmployeeDirectoryDTO>> getAllActiveUsers(@AuthenticationPrincipal Jwt jwt) {
+        var requester = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
+        if (requester == null) return ResponseEntity.status(403).build();
         var users = userService.getEmployeeDirectory();
+        if (!requester.isAdmin() && !requester.isSuperAdmin()) {
+            var visibleIds = projectService.visibleEmployeeIds(requester);
+            users = users.stream().filter(user -> visibleIds.contains(user.id()) || requester.getId().equals(user.id())).toList();
+        }
         return ResponseEntity.ok(users);
     }
 

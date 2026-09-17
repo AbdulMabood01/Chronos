@@ -1,3 +1,4 @@
+import ProjectBudget from '../components/ProjectBudget';
 import ScreenTitle from '../components/ScreenTitle';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -34,7 +35,7 @@ export default function ProjectHoursDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const canView = user?.canReviewProjects || ['ADMIN', 'SUPER_ADMIN'].includes(user?.role);
-  const canPlan = canView && user?.role !== 'SUPER_ADMIN';
+  const canPlan = user?.role === 'ADMIN';
 
   const selectedOption = options.find((option) => option.value === selectedPeriod) || options[0];
 
@@ -136,6 +137,7 @@ export default function ProjectHoursDashboard() {
                   <span>Approved {hours(project.approvedHours)}</span>
                 </div>
               </div>
+              <ProjectBudget budget={project.budgetHours} logged={project.lifetimeLoggedHours} />
               <div className="table-container">
                 <table className="data-table">
                   <thead>

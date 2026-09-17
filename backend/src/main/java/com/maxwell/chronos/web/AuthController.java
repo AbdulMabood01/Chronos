@@ -25,6 +25,7 @@ public class AuthController {
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
                 .jobTitle(user.getJobTitle())
+                .joiningDate(user.getJoiningDate())
                 .dateOfBirth(user.getDateOfBirth())
                 .ssnLast4(user.isSuperAdmin() ? null : user.getSsnLast4())
                 .profileImageUrl(user.getProfileImageUrl())
@@ -44,6 +45,7 @@ public class AuthController {
                 .profileCompleted(Boolean.TRUE.equals(user.getProfileCompleted()))
                 .role(user.getRole().toString())
                 .canReviewProjects(projectService.canReviewProjects(user.getId()))
+                .canManageProjects(projectService.canManageProjects(user.getId()))
                 .isActive(user.getIsActive())
                 .build();
     }

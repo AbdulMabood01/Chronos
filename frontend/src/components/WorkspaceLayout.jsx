@@ -12,20 +12,23 @@ export default function WorkspaceLayout({ children, darkBackground, onToggleBack
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButton = useRef(null);
   const reviewer = user?.canReviewProjects || ['ADMIN', 'SUPER_ADMIN'].includes(user?.role);
+  const projectManager = user?.canManageProjects || ['ADMIN', 'SUPER_ADMIN'].includes(user?.role);
   const operations = ['ADMIN', 'SUPER_ADMIN'].includes(user?.role);
   const superAdmin = user?.role === 'SUPER_ADMIN';
   const primary = [
     ['/dashboard', 'Overview', 'grid'],
     ...(!superAdmin ? [['/timesheets', 'Timesheets', 'clock'], ['/vacation', 'Time off', 'calendar']] : []),
     ['/requests', 'Letters & requests', 'file'],
+    ...(reviewer && !projectManager ? [['/admin', 'Approvals', 'check']] : []),
     ['/notifications', 'Inbox', 'bell'],
   ];
   const management = [
-    ...(reviewer ? [['/admin', 'Approvals', 'check']] : []),
-    ...(operations ? [['/projects', 'Projects', 'briefcase'], ['/reports', 'Reports', 'chart']] : []),
-    ...(reviewer && !operations ? [['/project-hours', 'Project hours', 'chart']] : []),
-    ...(superAdmin ? [['/users', 'People', 'users'], ['/audit', 'Audit log', 'file']] : []),
-    ...(operations ? [['/settings', 'Settings', 'settings']] : []),
+    ...(projectManager ? [['/admin', 'Approvals', 'check']] : []),
+    ...(reviewer ? [['/missing-timesheets', 'Missing timesheets', 'clock'], ['/team-leave-calendar', 'Team leave calendar', 'calendar']] : []),
+    ...(projectManager ? [['/projects', 'Projects', 'briefcase']] : []),
+    ...(operations ? [['/reports', 'Reports', 'chart']] : []),
+    ...(projectManager && !operations ? [['/project-hours', 'Project hours', 'chart']] : []),
+    ...(superAdmin ? [['/users', 'People', 'users'], ['/audit', 'Audit log', 'file'], ['/settings', 'Settings', 'settings']] : []),
   ];
   const current = [...primary, ...management].find(([path]) => location.pathname === path || location.pathname.startsWith(path + '/'));
   const title = current?.[1] || (location.pathname.startsWith('/timesheet/') ? 'Timesheet details' : 'My profile');

@@ -36,13 +36,13 @@ public class NotificationService {
     }
 
     public List<NotificationDTO> getUserNotifications(Long userId) {
-        return notificationRepository.findByUserId(userId).stream()
+        return notificationRepository.findByUserIdOrderByCreatedAtDescIdDesc(userId).stream()
                 .map(this::toDTO)
                 .collect(Collectors.toList());
     }
 
     public List<NotificationDTO> getUnreadNotifications(Long userId) {
-        return notificationRepository.findByUserIdAndIsReadFalse(userId).stream()
+        return notificationRepository.findByUserIdAndIsReadFalseOrderByCreatedAtDescIdDesc(userId).stream()
                 .map(this::toDTO)
                 .collect(Collectors.toList());
     }

@@ -22,7 +22,7 @@ class ApprovedReportTest {
     private final ProjectAssignmentRepository assignments = mock(ProjectAssignmentRepository.class);
     private final ReportService service = new ReportService(sheets, submissions, assignments, mock(VacationRequestRepository.class));
     private final User employee = User.builder().id(1L).employeeId("MW-0104").firstName("Jordan").lastName("Rivera")
-            .jobTitle("Senior Software Engineer").hourlyRate(new BigDecimal("999")).build();
+            .jobTitle("Senior Software Engineer").build();
     private final Project project = Project.builder().id(4L).code("ATLAS").name("Enterprise Platform Modernization").build();
     private final Timesheet sheet = Timesheet.builder().id(2L).user(employee).year(2026).month(9).status(TimesheetStatus.APPROVED).build();
     private final TimesheetProjectSubmission submission = TimesheetProjectSubmission.builder().id(3L).timesheet(sheet)

@@ -1,10 +1,32 @@
+import LeaveBalancePreview from '../components/LeaveBalancePreview';
 import ScreenTitle, { RecordSummary } from '../components/ScreenTitle';
 import { formatDate } from '../utils/dates';
 import React, { useEffect, useMemo, useState } from 'react';
-import { vacationAPI } from '../api';
-import { differenceInCalendarDays, parseISO } from 'date-fns';
+import { userAPI, vacationAPI } from '../api';
+import { eachDayOfInterval, isWeekend, parseISO } from 'date-fns';
 import { LoadingIndicator } from '../components/Hourglass';
 import '../styles.css';
+import { useAuth } from '../AuthContext';
+import LeaveBalancePanel from '../components/LeaveBalancePanel';
+
+const leaveTypes = [
+  ['VACATION', 'Vacation'],
+  ['SICK', 'Sick Leave'],
+  ['PERSONAL', 'Personal Day'],
+  ['MATERNITY', 'Maternity Leave'],
+  ['PATERNITY', 'Paternity Leave'],
+  ['PARENTAL', 'Parental Leave'],
+  ['BEREAVEMENT', 'Bereavement Leave'],
+  ['ADOPTION', 'Adoption Leave'],
+  ['JURY_DUTY', 'Jury Duty'],
+  ['MILITARY', 'Military Leave'],
+  ['FAMILY_CARE', 'Family Care Leave'],
+  ['RELIGIOUS', 'Religious Leave'],
+  ['UNPAID_LEAVE', 'Unpaid Leave'],
+  ['OTHER', 'Other'],
+];
+
+const paidBalanceKeyByType = Object.fromEntries(leaveTypes.filter(([type]) => type !== 'UNPAID_LEAVE').map(([type]) => [type, type === 'SICK' ? 'sick' : type === 'BEREAVEMENT' ? 'bereavement' : 'vacation']));
 
 const emptyForm = {
   startDate: '',
@@ -13,8 +35,13 @@ const emptyForm = {
   notes: '',
 };
 
+function workingDaysBetween(startDate, endDate) {
+  if (!startDate || !endDate || startDate > endDate) return 0;
+  return eachDayOfInterval({ start: parseISO(startDate), end: parseISO(endDate) }).filter(day => !isWeekend(day)).length;
+}
 
 export default function VacationRequests() {
+  const { user } = useAuth();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -27,8 +54,7 @@ export default function VacationRequests() {
   }, []);
 
   const requestedDays = useMemo(() => {
-    if (!formData.startDate || !formData.endDate) return 0;
-    return Math.max(0, differenceInCalendarDays(parseISO(formData.endDate), parseISO(formData.startDate)) + 1);
+    return workingDaysBetween(formData.startDate, formData.endDate);
   }, [formData.endDate, formData.startDate]);
 
   const loadRequests = async () => {
@@ -42,6 +68,43 @@ export default function VacationRequests() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const buildUnpaidLeaveWarning = async (request) => {
+    const typeLabel = leaveTypes.find(([value]) => value === request.vacationType)?.[1] || request.vacationType.replaceAll('_', ' ');
+    if (request.vacationType === 'UNPAID_LEAVE') {
+      return `All ${Number(request.hours)} requested hours will be unpaid leave. Continue?`;
+    }
+    const balanceKey = paidBalanceKeyByType[request.vacationType];
+    if (!balanceKey) return '';
+
+    const latestRequests = (await vacationAPI.getMyRequests()).data || [];
+    const warnings = [];
+    const firstYear = Number(request.startDate.slice(0, 4));
+    const lastYear = Number(request.endDate.slice(0, 4));
+    for (let year = firstYear; year <= lastYear; year++) {
+      const start = `${year}-01-01`;
+      const end = `${year}-12-31`;
+      const daysInYear = (item) => workingDaysBetween(
+        item.startDate < start ? start : item.startDate,
+        item.endDate > end ? end : item.endDate
+      );
+      const requestedHours = daysInYear(request) * 8;
+      if (!requestedHours) continue;
+      const balance = (await userAPI.getLeaveBalance(user.id, year)).data;
+      const bucket = balance?.[balanceKey];
+      if (!bucket) throw new Error('Leave balance is unavailable');
+      // Approved leave is already included in the server's remaining balance.
+      const pendingHours = latestRequests
+        .filter((item) => item.id !== request.id && paidBalanceKeyByType[item.vacationType] === balanceKey && item.status === 'SUBMITTED')
+        .reduce((sum, item) => sum + daysInYear(item) * 8, 0);
+      const remainingHours = Math.max(0, Number(bucket.remainingDays) * 8 - pendingHours);
+      const unpaidHours = Math.max(0, requestedHours - remainingHours);
+      if (unpaidHours > 0) {
+        warnings.push(`${year}: ${requestedHours} hours requested, ${remainingHours} paid hours remaining after pending requests. ${unpaidHours} hours (${unpaidHours / 8} days) of this request will be unpaid leave.`);
+      }
+    }
+    return warnings.length ? `${typeLabel}\n${warnings.join('\n')}\nContinue?` : '';
   };
 
   const startNewRequest = () => {
@@ -100,11 +163,14 @@ export default function VacationRequests() {
 
   const handleSubmitForApproval = async (requestId) => {
     try {
+      const request = requests.find((item) => item.id === requestId);
+      const warning = request ? await buildUnpaidLeaveWarning(request) : '';
+      if (warning && !window.confirm(warning)) return;
       await vacationAPI.submitRequest(requestId);
       await loadRequests();
       setError('');
     } catch (err) {
-      setError('Failed to submit request');
+      setError(err.response?.data?.message || 'Failed to submit request');
     }
   };
 
@@ -147,6 +213,7 @@ export default function VacationRequests() {
       </div>
 
       <RecordSummary items={[{ label: 'Total requests', value: requests.length, icon: 'calendar' }, { label: 'Awaiting approval', value: requests.filter(r => r.status === 'SUBMITTED').length, icon: 'clock' }, { label: 'Approved days', value: approvedDays.toFixed(1), icon: 'check' }]} />
+      {user?.id && <div className="card"><LeaveBalancePanel userId={user.id} /></div>}
       {error && <div className="error-message" role="alert">{error}</div>}
 
       <div className="vacation-layout">
@@ -154,7 +221,7 @@ export default function VacationRequests() {
           <div className="panel-heading">
             <div>
               <h2>{editingRequest ? 'Edit Vacation Request' : 'Create Vacation Request'}</h2>
-              <p>{requestedDays} calendar day{requestedDays === 1 ? '' : 's'} selected</p>
+              <p>{requestedDays} working day{requestedDays === 1 ? '' : 's'} selected ({requestedDays * 8} hours)</p>
             </div>
             {editingRequest && <span className={`status-badge status-${editingRequest.status.toLowerCase()}`}>{editingRequest.status}</span>}
           </div>
@@ -187,10 +254,7 @@ export default function VacationRequests() {
                 value={formData.vacationType}
                 onChange={(e) => setFormData({ ...formData, vacationType: e.target.value })}
               >
-                <option value="VACATION">Vacation</option>
-                <option value="SICK">Sick Leave</option>
-                <option value="PERSONAL">Personal Day</option>
-                <option value="OTHER">Other</option>
+                {leaveTypes.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
             </div>
             <div className="form-group">
@@ -208,6 +272,8 @@ export default function VacationRequests() {
               rows="4"
             />
           </div>
+
+          <LeaveBalancePreview userId={user?.id} form={formData} requests={requests} editingId={editingRequest?.id} />
 
           {editingRequest?.rejectionReason && (
             <div className="inline-alert">

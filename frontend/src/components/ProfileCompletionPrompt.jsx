@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAuth } from '../AuthContext';
 import ProfileForm from './ProfileForm';
+import './ProfileCompletionPrompt.css';
 
 export default function ProfileCompletionPrompt() {
   const { user, updateProfile } = useAuth();

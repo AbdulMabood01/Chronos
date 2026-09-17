@@ -1,9 +1,14 @@
 import ScreenTitle, { RecordSearch } from '../components/ScreenTitle';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
+import EmploymentDetails from '../components/EmploymentDetails';
+import EmployeeProfile from '../components/EmployeeProfile';
+import Icon from '../components/Icon';
+import LeaveBalancePanel from '../components/LeaveBalancePanel';
 import { useAuth } from '../AuthContext';
 import { userAPI } from '../api';
 import { LoadingIndicator } from '../components/Hourglass';
 import '../styles.css';
+import './UserManagement.css';
 
 export default function UserManagement() {
   const { user } = useAuth();
@@ -11,6 +16,17 @@ export default function UserManagement() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const [profileUser, setProfileUser] = useState(null);
+  const profileHeading = useRef(null);
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  const [leaveSaving, setLeaveSaving] = useState(false);
+  const [employmentSaving, setEmploymentSaving] = useState(false);
+  useEffect(() => { if (profileUser) profileHeading.current?.focus(); }, [profileUser?.id]);
+  const closeProfile = () => { if (!leaveSaving && !employmentSaving) { setProfileUser(null); setLeaveOpen(false); } };
+  const saveProfileUser = updated => {
+    setUsers(current => current.map(item => item.id === updated.id ? updated : item));
+    setProfileUser(updated);
+  };
   const visibleRecords = users.filter(record => [record.firstName,record.lastName,record.email,record.employeeId,record.role].join(' ').toLowerCase().includes(search.toLowerCase()));
   const canManageUsers = user?.role === 'SUPER_ADMIN';
   const canManageRoles = user?.role === 'SUPER_ADMIN';
@@ -27,12 +43,14 @@ export default function UserManagement() {
   }), [users]);
 
   const loadUsers = async () => {
+    setLoading(true);
     try {
       const response = await userAPI.getAllUsersAsAdmin();
       setUsers(response.data || []);
       setError('');
     } catch (err) {
-      setError('Failed to load users');
+      setError(err.response?.status === 403 ? 'Your account does not have access to User Management.'
+        : err.response?.data?.message || 'Unable to load users. Please retry; if this continues, check the backend service.');
       console.error(err);
     } finally {
       setLoading(false);
@@ -81,8 +99,29 @@ export default function UserManagement() {
     return <div className="page-container"><div className="loading-panel"><LoadingIndicator label="Loading users..." /></div></div>;
   }
 
+  if (profileUser) return (
+    <div className="page-container user-management-page employee-workspace">
+      <header className="employee-workspace-header">
+        <div><span className="eyebrow">PEOPLE & EMPLOYMENT</span><h1 ref={profileHeading} tabIndex={-1}>{profileUser.firstName} {profileUser.lastName}</h1><p>Personal information, employment details, and leave in one place.</p></div>
+        <button type="button" className="button button-secondary" disabled={leaveSaving || employmentSaving} onClick={closeProfile}>Back to users</button>
+      </header>
+      <div className="employee-workspace-columns">
+        <EmployeeProfile user={profileUser} />
+        <div className="employee-workspace-management">
+          <EmploymentDetails key={profileUser.id} user={profileUser} editable onSaved={saveProfileUser} onSavingChange={setEmploymentSaving} />
+          {profileUser.role !== 'SUPER_ADMIN' && <section className="employee-section" aria-label="Leave allowance management">
+            <div className="employee-section-heading"><div><span className="eyebrow">TIME OFF</span><h2>Leave allowance</h2><p>Manage annual entitlements and extra days.</p></div>
+              <button type="button" className="button button-primary" aria-expanded={leaveOpen} aria-controls="profile-leave-allowance" disabled={leaveSaving} onClick={() => setLeaveOpen(!leaveOpen)}>{leaveOpen ? 'Hide allowance' : 'Leave allowance'}</button>
+            </div>
+            {leaveOpen && <div id="profile-leave-allowance"><LeaveBalancePanel userId={profileUser.id} editable onSavingChange={setLeaveSaving} /></div>}
+          </section>}
+        </div>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="page-container admin-page">
+    <div className="page-container admin-page user-management-page">
       <div className="header-bar">
         <div>
           <ScreenTitle title="User Management" icon="users" eyebrow="PEOPLE & ACCESS" />
@@ -92,7 +131,7 @@ export default function UserManagement() {
 
       <RecordSearch value={search} onChange={setSearch} placeholder="Search people by name, email or role" label="Search people by name, email or role" />
       {search && <p className="filter-count">{visibleRecords.length} matching records</p>}
-      {error && <div className="error-message" role="alert">{error}</div>}
+      {error && <div className="error-message" role="alert">{error} <button type="button" className="button button-secondary" onClick={loadUsers}>Retry</button></div>}
 
       <div className="admin-stats user-stats">
         <div>
@@ -116,6 +155,7 @@ export default function UserManagement() {
               <th>Employee</th>
               <th>Role</th>
               <th>Status</th>
+              <th>Profile</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -147,8 +187,14 @@ export default function UserManagement() {
                   </span>
                 </td>
                 <td>
+                  <button type="button" className="profile-action-button" onClick={() => setProfileUser(targetUser)} aria-label={`View and update ${targetUser.firstName} ${targetUser.lastName}'s profile`} title="View and update profile">
+                    <Icon name="edit" size={15} />
+                    <span>Profile</span>
+                  </button>
+                </td>
+                <td>
                   <div className="action-buttons wrap-actions">
-                    {targetUser.isActive ? (
+                    {targetUser.role !== 'SUPER_ADMIN' && (targetUser.isActive ? (
                       <button className="button button-small button-danger" onClick={() => handleDeactivate(targetUser.id)}>
                         Deactivate
                       </button>
@@ -156,7 +202,7 @@ export default function UserManagement() {
                       <button className="button button-small button-success" onClick={() => handleReactivate(targetUser.id)}>
                         Reactivate
                       </button>
-                    )}
+                    ))}
                   </div>
                 </td>
               </tr>

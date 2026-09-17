@@ -1,0 +1,24 @@
+.profile-overview { padding: 20px; border: 1px solid var(--border-color); border-radius: 12px; background: var(--surface-muted); }
+.profile-overview-heading { display: flex; align-items: start; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.profile-overview-heading h3 { margin: 0 0 6px; font-size: 16px; color: var(--text-primary); }
+.profile-overview p { margin: 0; font-size: 12px; line-height: 1.6; color: var(--text-secondary); }
+.profile-overview-count { color: var(--primary-color); font-size: 12px; font-weight: 650; white-space: nowrap; }
+.profile-overview progress { display: block; width: 100%; height: 5px; margin: 16px 0; accent-color: var(--primary-color); }
+.profile-section-nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.profile-section-link { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; padding: 14px 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--surface-color); color: var(--text-secondary); text-align: left; cursor: pointer; }
+.profile-section-link:hover { border-color: var(--primary-color); background: var(--surface-tint); }
+.profile-section-icon { display: flex; color: var(--primary-color); }
+.profile-section-copy { flex: 1; min-width: 0; }
+.profile-section-copy strong { display: block; color: var(--text-primary); font-size: 12px; font-weight: 600; }
+.profile-section-copy small { display: block; margin-top: 5px; color: var(--text-secondary); font-size: 11px; }
+.profile-section-status { font-size: 10px; }
+.profile-section-status.is-complete { color: var(--primary-color); }
+.profile-section-link > svg { flex-shrink: 0; }
+.profile-overview-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; }
+.profile-overview-footer .button { flex-shrink: 0; }
+.profile-modal-card .profile-section-nav { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 800px) {
+  .profile-section-nav { grid-template-columns: minmax(0, 1fr); }
+  .profile-overview-footer { align-items: start; flex-direction: column; }
+}
+@media (max-width: 600px) { .profile-overview { padding: 14px; } }

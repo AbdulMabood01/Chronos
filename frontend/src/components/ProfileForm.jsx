@@ -1,3 +1,4 @@
+import ProfileChecklist from './ProfileChecklist';
 import React, { useState } from 'react';
 import { LoadingIndicator } from './Hourglass';
 import './ProfileForm.css';
@@ -133,6 +134,8 @@ export default function ProfileForm({ user, onSave, submitLabel = 'Save Profile'
   return (
     <form className="form profile-form" onSubmit={handleSubmit}>
       {error && <div className="error-message">{error}</div>}
+
+      <ProfileChecklist profile={formData} />
 
       <div className="profile-photo-section">
         <div className="profile-photo-preview" aria-label="Profile photo preview">

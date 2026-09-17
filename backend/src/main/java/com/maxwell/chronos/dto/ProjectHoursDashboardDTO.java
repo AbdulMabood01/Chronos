@@ -13,6 +13,8 @@ import java.util.List;
 @AllArgsConstructor
 @Builder
 public class ProjectHoursDashboardDTO {
+    private BigDecimal budgetHours;
+    private BigDecimal lifetimeLoggedHours;
     private Long projectId;
     private String projectCode;
     private String projectName;

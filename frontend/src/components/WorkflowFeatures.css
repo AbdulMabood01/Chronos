@@ -1,0 +1,52 @@
+.workflow-panel { margin-block: 1.25rem; padding: 1.25rem; border: 1px solid var(--border-color, #ded7dc); border-radius: 16px; background: var(--surface-color); }
+.workflow-panel h3 { margin-top: 0; }
+.workflow-panel p { line-height: 1.6; }
+.workflow-controls { display: flex; align-items: end; flex-wrap: wrap; gap: .8rem; }
+.workflow-controls label { display: grid; gap: .4rem; font-weight: 600; }
+.workflow-controls select, .workflow-controls input { padding: .65rem; border: 1px solid var(--border-color, #ded7dc); border-radius: 8px; background: var(--surface-color); color: inherit; }
+.copy-preview { list-style: none; padding: 0; max-width: 560px; }
+.copy-preview li { display: flex; justify-content: space-between; gap: 1rem; padding: .55rem 0; border-bottom: 1px solid var(--border-color, #ded7dc); }
+.leave-preview-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: .8rem; }
+.leave-preview-grid div { padding: .9rem; border-radius: 10px; background: var(--surface-tint); }
+.leave-preview-grid dt { font-size: .85rem; }
+.leave-preview-grid dd { font-size: 1.35rem; font-weight: 700; margin: .4rem 0 0; }
+.correction-panel { border-left: 4px solid #b36a25; }
+@media (max-width: 600px) { .workflow-controls > * { width: 100%; } .workflow-panel { padding: 1rem; } }
+
+.workflow-panel { min-width: 0; }
+.workflow-panel .table-container { overflow-x: auto; }
+.workflow-panel .panel-heading { flex-wrap: wrap; gap: 1rem; }
+
+.workflow-panel p { margin-block: .45rem; }
+
+.profile-checklist progress, .budget-panel progress { width: 100%; height: .7rem; accent-color: var(--primary-color); }
+.profile-checklist ul { list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: .7rem; margin-top: 1rem; }
+.profile-checklist li { padding: .65rem; border: 1px solid var(--border-color); border-radius: 8px; }
+.profile-checklist li strong { display: block; color: var(--primary-dark); font-size: .8rem; }
+.checklist-link { border: 0; background: none; color: var(--primary-dark); font: inherit; text-align: left; text-decoration: underline; cursor: pointer; }
+.budget-panel { margin: 1rem 0 1.5rem; padding: 1rem; border: 1px solid var(--border-color); border-left: 4px solid var(--primary-color); border-radius: 12px; background: var(--surface-muted); }
+.budget-heading { display: flex; justify-content: space-between; gap: 1rem; margin-bottom: .7rem; }
+.budget-panel p { margin: .6rem 0; line-height: 1.5; }
+.budget-near { border-left-color: #b77916; }
+.budget-near progress { accent-color: #b77916; }
+.budget-over { border-left-color: var(--danger-color); }
+.budget-over progress { accent-color: var(--danger-color); }
+.history-title { margin: 1rem 0; }
+.approval-timeline { list-style: none; padding-left: 1rem; margin: 1rem 0; border-left: 3px solid var(--primary-color); }
+.approval-timeline li { padding: .5rem 0 1rem .7rem; }
+.history-reason { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface-tint); padding: .7rem; border-radius: 8px; }
+.team-calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .45rem; margin: 1rem 0; }
+.team-calendar-weekday { text-align: center; font-size: .8rem; color: var(--text-secondary); }
+.team-calendar-day { display: flex; flex-direction: column; gap: .6rem; min-height: 78px; padding: .7rem; border: 1px solid var(--border-color); border-radius: 9px; color: var(--text-primary); background: var(--surface-color); text-align: left; cursor: pointer; }
+.team-calendar-day.has-absence { background: var(--surface-tint); }
+.team-calendar-day strong { font-size: .8rem; color: var(--primary-dark); }
+.team-calendar-day[aria-pressed="true"] { outline: 2px solid var(--primary-color); outline-offset: 1px; }
+.team-day-detail { padding: 1rem; border-radius: 12px; background: var(--surface-muted); }
+.team-day-detail ul { list-style: none; }
+.team-day-detail li { display: flex; justify-content: space-between; flex-wrap: wrap; gap: .5rem; padding: .65rem 0; }
+@media (max-width: 600px) { .team-calendar-grid { gap: .2rem; } .team-calendar-day { padding: .35rem .2rem; min-height: 58px; } .team-calendar-day strong { font-size: .65rem; } }
+
+.project-hours-list { grid-template-columns: minmax(0, 1fr); }
+.project-hours-list > .admin-panel { min-width: 0; }
+.project-hours-list .table-container { overflow-x: auto; }
+.project-hours-list .panel-heading { flex-wrap: wrap; gap: 1rem; }

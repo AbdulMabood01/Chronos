@@ -18,7 +18,17 @@ import java.util.List;
 @RequiredArgsConstructor
 public class VacationController {
     private final VacationService vacationService;
+    private final com.maxwell.chronos.service.TeamCalendarService teamCalendarService;
+
+    @GetMapping("/team-calendar")
+    public ResponseEntity<List<com.maxwell.chronos.service.TeamCalendarService.Absence>> teamCalendar(
+            @RequestParam int year, @RequestParam int month, @AuthenticationPrincipal Jwt jwt) {
+        var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
+        return ResponseEntity.ok(teamCalendarService.getCalendar(year, month, user));
+    }
+
     private final UserService userService;
+    private final com.maxwell.chronos.service.ProjectService projectService;
 
     @PostMapping
     public ResponseEntity<VacationRequestDTO> createVacationRequest(
@@ -119,6 +129,7 @@ public class VacationController {
         }
 
         try {
+            if (!user.isAdmin() && !user.isSuperAdmin() && !projectService.canReviewProjects(user.getId())) return ResponseEntity.status(403).build();
             List<VacationRequestDTO> requests = vacationService.getPendingVacationRequests(user);
             return ResponseEntity.ok(requests);
         } catch (IllegalArgumentException e) {

@@ -62,7 +62,7 @@ public class TimesheetReminderService {
                         .year(period.getYear())
                         .month(period.getMonthValue())
                         .status(TimesheetStatus.DRAFT)
-                        .billRate(user.getEffectiveHourlyRate())
+                        .billRate(java.math.BigDecimal.ZERO)
                         .billRateUpdatedAt(LocalDateTime.now())
                         .build()));
 

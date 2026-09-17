@@ -23,10 +23,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(UserController.class)
 @Import(SecurityConfig.class)
 class AccountAccessTest {
+    @MockitoBean com.maxwell.chronos.service.LeaveBalanceService leaveBalances;
     @Autowired MockMvc mvc;
     @MockitoBean JwtDecoder decoder;
     @MockitoBean UserRepository users;
     @MockitoBean UserService service;
+    @MockitoBean com.maxwell.chronos.service.ProjectService projects;
     User employee;
 
     @BeforeEach void setup() {
@@ -42,6 +44,17 @@ class AccountAccessTest {
 
     @Test void anonymousUserCannotReadDirectory() throws Exception {
         mvc.perform(get("/users")).andExpect(status().isUnauthorized());
+    }
+
+    @Test void directoryOnlyReturnsEmployeesFromVisibleProjects() throws Exception {
+        when(projects.visibleEmployeeIds(employee)).thenReturn(java.util.Set.of(2L));
+        when(service.getEmployeeDirectory()).thenReturn(java.util.List.of(
+                new com.maxwell.chronos.dto.EmployeeDirectoryDTO(2L, "E2", "Team", "Member", "team@example.com", null, UserRole.EMPLOYEE, true),
+                new com.maxwell.chronos.dto.EmployeeDirectoryDTO(3L, "E3", "Other", "Member", "other@example.com", null, UserRole.EMPLOYEE, true)));
+        mvc.perform(get("/users").with(token())).andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].id").value(2));
+        employee.setRole(UserRole.ADMIN);
+        mvc.perform(get("/users").with(token())).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(2));
     }
 
     @Test void employeeCannotReadAnotherProfile() throws Exception {

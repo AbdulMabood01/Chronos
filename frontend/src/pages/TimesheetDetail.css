@@ -46,9 +46,43 @@
   border-radius: 12px;
   box-shadow: 0 8px 24px #142b4530;
 }
+.timesheet-page > .action-bar .workflow-panel {
+  flex: 1 0 100%;
+  order: 10;
+  margin-block: .25rem 0;
+}
 .daily-notes-dialog { margin: auto; width: min(520px, calc(100vw - 2rem)); max-height: 85vh; overflow: auto; color: var(--text-color); }
 .daily-notes-dialog::backdrop { background: #10233799; backdrop-filter: blur(3px); }
 .daily-notes-dialog textarea { display: block; width: 100%; margin-top: .75rem; box-sizing: border-box; }
+.timesheet-review .timesheet-page-header {
+  padding: 1.5rem;
+  border: 1px solid var(--border-color);
+  border-left: 4px solid var(--primary-color);
+  border-radius: 16px;
+  background: linear-gradient(120deg, var(--surface-tint), var(--surface-color));
+}
+.timesheet-review .summary-tile {
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  box-shadow: none;
+}
+.timesheet-review .timesheet-summary-grid > .gross-pay-tile {
+  background: var(--surface-tint);
+  border-color: var(--border-color);
+  box-shadow: none;
+}
+.timesheet-review .gross-pay-tile span { color: var(--text-secondary); }
+.timesheet-review .gross-pay-tile strong { color: var(--primary-dark); }
+.timesheet-review .calendar-day { position: relative; border-radius: 10px; }
+.timesheet-review .approved-day-hours strong { color: var(--primary-dark); font-size: 1.5rem; }
+.timesheet-review .notes-button { margin-top: .5rem; opacity: .65; }
+.timesheet-review .notes-button.has-notes,
+.timesheet-review .notes-button:hover,
+.timesheet-review .notes-button:focus-visible { opacity: 1; }
+.timesheet-review .button { box-shadow: none; }
+.timesheet-review .button-success { background: var(--primary-dark); border-color: var(--primary-dark); }
+.timesheet-review .button-danger { background: var(--surface-color); color: #843f4b; border-color: #843f4b; }
+.timesheet-review > .action-bar:not(:empty) { justify-content: flex-end; box-shadow: 0 4px 16px #142b4512; }
 @media (prefers-reduced-motion: reduce) {
   .timesheet-page button { transition: none; }
   .timesheet-page button:hover:not(:disabled), .timesheet-page button:active:not(:disabled) { transform: none; }

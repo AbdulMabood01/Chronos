@@ -6,7 +6,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -46,19 +45,12 @@ public class UserDTO {
     private String lastName;
     private String jobTitle;
     private LocalDate dateOfBirth;
+    private LocalDate joiningDate;
     private String ssnLast4;
     private String profileImageUrl;
     private Boolean profileCompleted;
     private String email;
     private UserRole role;
-    private BigDecimal hourlyRate;
-    private BigDecimal defaultHourlyRate;
-    private BigDecimal adminOverrideHourlyRate;
-    private BigDecimal effectiveHourlyRate;
-    private Boolean rateOverridden;
-    private String rateOverriddenByName;
-    private LocalDateTime rateOverriddenAt;
-    private String rateOverrideReason;
     private Boolean isActive;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

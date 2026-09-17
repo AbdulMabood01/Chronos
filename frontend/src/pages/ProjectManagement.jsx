@@ -66,7 +66,6 @@ function setupWarnings(project) {
   if (!project?.projectManagerId) warnings.push('No PM');
   if (!project?.projectManagerHoursApproverId) warnings.push('No PM approver');
   if (!(project?.assignments || []).some((assignment) => assignment.isActive)) warnings.push('No active team');
-  if (project?.projectManagerId && project.projectManagerId === project.projectManagerHoursApproverId) warnings.push('PM self-approval');
   return warnings;
 }
 
@@ -110,8 +109,10 @@ export default function ProjectManagement() {
   const [plannedHourDrafts, setPlannedHourDrafts] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const favoritesKey = 'chronos:project-favorites:' + user?.id;
+  const [favorites, setFavorites] = useState([]);
 
-  const canView = ['ADMIN', 'SUPER_ADMIN'].includes(user?.role);
+  const canView = user?.canReviewProjects || ['ADMIN', 'SUPER_ADMIN'].includes(user?.role);
   const canManage = user?.role === 'ADMIN';
   const selectedOption = options.find((option) => option.value === selectedPeriod) || options[0];
   const activeUsers = useMemo(() => users.filter((item) => item.isActive), [users]);
@@ -131,6 +132,15 @@ export default function ProjectManagement() {
     if (!canView) return;
     loadData();
   }, [canView, selectedPeriod]);
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(favoritesKey) || '[]');
+      setFavorites(Array.isArray(saved) ? saved.map(String) : []);
+    } catch {
+      setFavorites([]);
+    }
+  }, [favoritesKey]);
 
   const seedDrafts = (loadedProjects, loadedDashboard) => {
     const hourDrafts = {};
@@ -159,7 +169,7 @@ export default function ProjectManagement() {
     try {
       const [projectRes, userRes, dashboardRes] = await Promise.all([
         projectAPI.getProjects(),
-        userAPI.getAllUsers(),
+        canManage ? userAPI.getAllUsers() : Promise.resolve({ data: [] }),
         projectAPI.getHoursDashboard(selectedOption.year, selectedOption.month),
       ]);
       const loadedProjects = projectRes.data || [];
@@ -249,7 +259,18 @@ export default function ProjectManagement() {
   const searchText = projectSearch.trim().toLowerCase();
   const visibleProjects = filteredProjects.filter((project) =>
     !searchText || `${project.name} ${project.code}`.toLowerCase().includes(searchText)
-  );
+  ).sort((a, b) => Number(favorites.includes(String(b.id))) - Number(favorites.includes(String(a.id))) || String(a.code).localeCompare(String(b.code)));
+
+  const toggleFavorite = (projectId) => {
+    const id = String(projectId);
+    const next = favorites.includes(id) ? favorites.filter((item) => item !== id) : [...favorites, id];
+    setFavorites(next);
+    try {
+      localStorage.setItem(favoritesKey, JSON.stringify(next));
+    } catch {
+      setError('Your browser could not save favorites.');
+    }
+  };
 
   const handleProjectSearch = (value) => {
     setProjectSearch(value);
@@ -264,10 +285,6 @@ export default function ProjectManagement() {
     if (!canManage) return;
     if (!form.projectManagerId || !form.projectManagerHoursApproverId) {
       setError('Project Manager and PM Hours Approver are required');
-      return;
-    }
-    if (String(form.projectManagerId) === String(form.projectManagerHoursApproverId)) {
-      setError('Project Manager cannot approve their own hours');
       return;
     }
     const payload = {
@@ -287,8 +304,7 @@ export default function ProjectManagement() {
         setProjectSearch(savedProject.code + ' - ' + savedProject.name);
         setActiveTab('team');
         setAssignDraft(String(payload.projectManagerId));
-        const manager = activeUsers.find((member) => String(member.id) === String(payload.projectManagerId));
-        setAssignBillRate(manager?.effectiveHourlyRate ?? manager?.hourlyRate ?? '');
+        setAssignBillRate('');
         setAssignStartDate('');
         setAssignEndDate('');
         setAssignHours('');
@@ -494,14 +510,25 @@ export default function ProjectManagement() {
           <div className="project-section-heading"><div><span>YOUR WORKSPACE</span><h2>Select a project</h2></div><p>{visibleProjects.length} project{visibleProjects.length === 1 ? '' : 's'}</p></div>
           <p className="pc-muted">Open a project to review progress, manage its team, and plan hours.</p>
           <div className="pc-project-grid">
-            {visibleProjects.map((project) => (
-              <button className="pc-project-card" key={project.id} type="button" onClick={() => selectProject(project)}>
-                <span className="pc-card-top"><span className="pc-project-code">{project.code}</span><span className={statusClass(project.status)}>{labelize(project.status)}</span></span>
-                <strong>{project.name}</strong>
-                <span className="pc-muted">{project.projectManagerName || 'Project manager not assigned'}</span>
-                <span className="pc-card-footer"><span><Icon name="users" size={16} /> {(project.assignments || []).filter((item) => item.isActive).length} members</span><Icon name="arrow" size={18} /></span>
-              </button>
-            ))}
+            {visibleProjects.map((project) => {
+              const isFavorite = favorites.includes(String(project.id));
+              return (
+                <article className="pc-project-card" key={project.id}>
+                  <div className="pc-card-top">
+                    <span className="pc-project-code">{project.code}</span>
+                    <button type="button" className={`pc-favorite-button${isFavorite ? ' active' : ''}`} aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'} aria-pressed={isFavorite} onClick={() => toggleFavorite(project.id)}>
+                      <Icon name="heart" size={17} />
+                    </button>
+                    <span className={statusClass(project.status)}>{labelize(project.status)}</span>
+                  </div>
+                  <button className="pc-project-open" type="button" onClick={() => selectProject(project)}>
+                    <strong>{project.name}</strong>
+                    <span className="pc-muted">{project.projectManagerName || 'Project manager not assigned'}</span>
+                    <span className="pc-card-footer"><span><Icon name="users" size={16} /> {(project.assignments || []).filter((item) => item.isActive).length} members</span><Icon name="arrow" size={18} /></span>
+                  </button>
+                </article>
+              );
+            })}
           </div>
           {!visibleProjects.length && <div className="pc-empty"><Icon name="briefcase" size={32} /><h3>No projects found</h3><p>Try another name or change the status filter.</p></div>}
         </section>
@@ -606,9 +633,8 @@ export default function ProjectManagement() {
                   required
                   value={assignDraft}
                   onChange={(event) => {
-                    const selectedUser = activeUsers.find((item) => String(item.id) === event.target.value);
                     setAssignDraft(event.target.value);
-                    setAssignBillRate(selectedUser?.effectiveHourlyRate ?? selectedUser?.hourlyRate ?? assignBillRate);
+                    setAssignBillRate('');
                   }}
                 >
                   <option value="">Select employee</option>
@@ -741,7 +767,6 @@ export default function ProjectManagement() {
               <div className="form-group">
                 <label htmlFor="projectmanagement-field-5">Project Manager</label>
                 <select id="projectmanagement-field-5" required value={form.projectManagerId} onChange={(event) => {
-                  const selectedUser = activeUsers.find((item) => String(item.id) === event.target.value);
                   const managerAssignment = (selectedProject?.assignments || []).find((assignment) => String(assignment.userId) === event.target.value);
                   setForm({
                     ...form,
@@ -749,6 +774,7 @@ export default function ProjectManagement() {
                   });
                 }}>
                   <option value="">Select PM</option>
+                  {!canManage && selectedProject?.projectManagerId && <option value={selectedProject.projectManagerId}>{selectedProject.projectManagerName || selectedProject.projectManagerId}</option>}
                   {activeUsers.map((item) => <option key={item.id} value={item.id}>{item.firstName} {item.lastName}</option>)}
                 </select>
               </div>
@@ -756,6 +782,7 @@ export default function ProjectManagement() {
                 <label htmlFor="projectmanagement-field-6">PM Hours Approver</label>
                 <select id="projectmanagement-field-6" required value={form.projectManagerHoursApproverId} onChange={(event) => setForm({ ...form, projectManagerHoursApproverId: event.target.value })}>
                   <option value="">Select approver</option>
+                  {!canManage && selectedProject?.projectManagerHoursApproverId && <option value={selectedProject.projectManagerHoursApproverId}>{selectedProject.projectManagerHoursApproverName || selectedProject.projectManagerHoursApproverId}</option>}
                   {activeUsers.map((item) => <option key={item.id} value={item.id}>{item.firstName} {item.lastName}</option>)}
                 </select>
               </div>

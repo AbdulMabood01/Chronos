@@ -10,6 +10,8 @@ import java.util.List;
 
 @Repository
 public interface VacationRequestRepository extends JpaRepository<VacationRequest, Long> {
+    List<VacationRequest> findByStatusInAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
+            List<VacationStatus> statuses, LocalDate endDate, LocalDate startDate);
     List<VacationRequest> findByUserId(Long userId);
     List<VacationRequest> findByStatus(VacationStatus status);
     List<VacationRequest> findByUserIdAndStatus(Long userId, VacationStatus status);
