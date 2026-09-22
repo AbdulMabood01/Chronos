@@ -226,12 +226,26 @@ jobs:
           format: json
           output: trivy-results.json
           skip-dirs: .git,frontend/node_modules
+      - name: Scan packaged Java libraries
+        if: ${{ !cancelled() }}
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: rootfs
+          scan-ref: backend/target
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: '1'
+          format: json
+          output: trivy-packaged-results.json
       - name: Store security report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: security-report-${{ github.run_attempt }}
-          path: trivy-results.json
+          path: |
+            trivy-results.json
+            trivy-packaged-results.json
           retention-days: 14
 
   checks:
