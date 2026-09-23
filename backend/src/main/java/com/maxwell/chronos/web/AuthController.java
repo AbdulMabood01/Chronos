@@ -1,7 +1,7 @@
 package com.maxwell.chronos.web;
 
 import com.maxwell.chronos.dto.AuthResponse;
-import com.maxwell.chronos.service.DevJwtService;
+
 import com.maxwell.chronos.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -31,6 +31,7 @@ public class AuthController {
                 .profileImageUrl(user.getProfileImageUrl())
                 .phoneNumber(user.getPhoneNumber())
                 .personalEmail(user.getPersonalEmail())
+                .timezone(user.getTimezone())
                 .addressLine1(user.getAddressLine1())
                 .addressLine2(user.getAddressLine2())
                 .city(user.getCity())
@@ -50,27 +51,12 @@ public class AuthController {
                 .build();
     }
 
-    @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@AuthenticationPrincipal Jwt jwt) {
-        String email = jwt.getClaimAsString("preferred_username");
-        String firstName = jwt.getClaimAsString("given_name");
-        String lastName = jwt.getClaimAsString("family_name");
-        String entraId = jwt.getClaimAsString("sub");
-
-        var user = userService.findOrCreateByEntraId(entraId, email, firstName, lastName);
-        if (!user.getIsActive()) {
-            return ResponseEntity.status(403).body(null);
-        }
-
-        return ResponseEntity.ok(toAuthResponse(user));
-    }
-
     @GetMapping("/me")
     public ResponseEntity<AuthResponse> getCurrentUser(@AuthenticationPrincipal Jwt jwt) {
         String email = jwt.getClaimAsString("preferred_username");
         var user = userService.findUserEntityByEmail(email);
 
-        if (user == null || !user.getIsActive()) {
+        if (user == null || !"ACTIVE".equals(user.getAccountStatus())) {
             return ResponseEntity.status(403).body(null);
         }
 

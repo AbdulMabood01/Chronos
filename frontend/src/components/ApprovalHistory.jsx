@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { timesheetAPI } from '../api';
 import './WorkflowFeatures.css';
-const labels = { TIMESHEET_SUBMITTED: 'Submitted for approval', TIMESHEET_APPROVED: 'Approved', TIMESHEET_REJECTED: 'Rejected', TIMESHEET_REOPENED: 'Reopened' };
+const labels = { TIMESHEET_SUBMITTED: 'Submitted for approval', TIMESHEET_APPROVED: 'Approved', TIMESHEET_REJECTED: 'Rejected', TIMESHEET_REOPENED: 'Reopened', PROJECT_MANAGER_CHANGED: 'Approval responsibility transferred' };
 export default function ApprovalHistory({ timesheetId, projectId, revision }) {
   const [open, setOpen] = useState(false);
   const [events, setEvents] = useState([]);

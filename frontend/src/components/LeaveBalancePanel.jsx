@@ -54,7 +54,7 @@ export default function LeaveBalancePanel({ userId, editable = false, onSavingCh
     {message && <p role="status" className="leave-status-message">{message}</p>}
     {loading && <p role="status" className="leave-loading">Loading balances...</p>}
     {balance && <>
-      {!balance.configured && <p className="leave-policy-note">No allowance set for {year}. Super Admin can assign vacation, sick, and bereavement days.</p>}
+      {!balance.configured && <p className="leave-policy-note">No allowance set for {year}. An Admin can assign vacation, sick, and bereavement days.</p>}
       <div className="leave-balance-grid">{['vacation', 'sick', 'bereavement'].filter(type => balance[type]).map(type => <div className="leave-balance-tile" key={type}>
         <h3>{type === 'vacation' ? 'Vacation' : type === 'sick' ? 'Sick leave' : 'Bereavement leave'}</h3>
         <strong>{Number(balance[type].remainingDays).toFixed(1)} <small>days remaining</small></strong>

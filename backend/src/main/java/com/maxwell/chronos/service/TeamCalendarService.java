@@ -21,7 +21,7 @@ public class TeamCalendarService {
     public record Absence(Long id, Long userId, String userName, LocalDate startDate, LocalDate endDate) {}
 
     public List<Absence> getCalendar(int year, int month, User requester) {
-        if (requester == null || (!requester.isAdmin() && !requester.isSuperAdmin() && !projects.canReviewProjects(requester.getId())))
+        if (requester == null || (!requester.isAdmin() && !requester.isSuperAdmin() && !projects.canManageProjects(requester.getId())))
             throw new AccessDeniedException("Team calendar requires manager permission");
         YearMonth period = YearMonth.of(year, month);
         boolean allTeams = requester.isAdmin() || requester.isSuperAdmin();

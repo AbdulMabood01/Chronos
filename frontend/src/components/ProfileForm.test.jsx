@@ -6,6 +6,15 @@ import ProfileForm from './ProfileForm';
 
 afterEach(cleanup);
 
+it('loads and saves the employee reminder timezone', async () => {
+  const save = vi.fn().mockResolvedValue({});
+  render(<ProfileForm user={{ ...profile, timezone: 'America/New_York' }} onSave={save} />);
+  expect(screen.getByLabelText('Timezone').value).toBe('America/New_York');
+  fireEvent.change(screen.getByLabelText('Timezone'), { target: { value: 'Europe/London' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save Profile' }));
+  await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ timezone: 'Europe/London' })));
+});
+
 it('loads, updates and clears optional contact details in the saved profile', async () => {
   const save = vi.fn().mockResolvedValue({});
   render(<ProfileForm user={{ ...profile, role: 'EMPLOYEE', addressLine1: '12 Main St', bloodGroup: 'O+', emergencyContactName: 'Alex', emergencyContactPhone: '+1 555 0100' }} onSave={save} />);

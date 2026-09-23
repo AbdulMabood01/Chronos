@@ -29,7 +29,7 @@ public class SettingsController {
             @AuthenticationPrincipal Jwt jwt) {
         var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
         if (!canManageSettings(user)) {
-            throw new org.springframework.security.access.AccessDeniedException("Only Super Admin can manage settings");
+            throw new org.springframework.security.access.AccessDeniedException("Only Admin can manage settings");
         }
         return java.util.Map.of("updated", systemSettingsService.applyLeaveDefaults(input.year(), input.confirmed(), user));
     }

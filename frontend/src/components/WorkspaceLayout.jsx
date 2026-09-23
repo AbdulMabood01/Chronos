@@ -17,20 +17,24 @@ export default function WorkspaceLayout({ children, darkBackground, onToggleBack
   const superAdmin = user?.role === 'SUPER_ADMIN';
   const primary = [
     ['/dashboard', 'Overview', 'grid'],
+    ['/announcements', 'Announcements', 'bell'],
     ...(!superAdmin ? [['/timesheets', 'Timesheets', 'clock'], ['/vacation', 'Time off', 'calendar']] : []),
     ['/requests', 'Letters & requests', 'file'],
+    ...(!superAdmin ? [['/workplace-reports', 'Reports', 'file']] : []),
     ...(reviewer && !projectManager ? [['/admin', 'Approvals', 'check']] : []),
     ['/notifications', 'Inbox', 'bell'],
   ];
   const management = [
     ...(projectManager ? [['/admin', 'Approvals', 'check']] : []),
-    ...(reviewer ? [['/missing-timesheets', 'Missing timesheets', 'clock'], ['/team-leave-calendar', 'Team leave calendar', 'calendar']] : []),
+    ...(projectManager ? [['/missing-timesheets', 'Missing timesheets', 'clock'], ['/team-leave-calendar', 'Team leave calendar', 'calendar']] : []),
     ...(projectManager ? [['/projects', 'Projects', 'briefcase']] : []),
-    ...(operations ? [['/reports', 'Reports', 'chart']] : []),
+    ...(superAdmin ? [['/reports', 'Reports', 'file']] : []),
+    ...(operations ? [['/time-reports', 'Time & leave reports', 'chart']] : []),
     ...(projectManager && !operations ? [['/project-hours', 'Project hours', 'chart']] : []),
     ...(superAdmin ? [['/users', 'People', 'users'], ['/audit', 'Audit log', 'file'], ['/settings', 'Settings', 'settings']] : []),
   ];
-  const current = [...primary, ...management].find(([path]) => location.pathname === path || location.pathname.startsWith(path + '/'));
+  const development = [['/feedback', 'Feedback', 'users'], ['/performance-reviews', 'Performance Reviews', 'file']];
+  const current = [...primary, ...development, ...management].find(([path]) => location.pathname === path || location.pathname.startsWith(path + '/'));
   const title = current?.[1] || (location.pathname.startsWith('/timesheet/') ? 'Timesheet details' : 'My profile');
   useEffect(() => {
     let active = true;
@@ -56,6 +60,7 @@ export default function WorkspaceLayout({ children, darkBackground, onToggleBack
       <Link to="/dashboard" className="workspace-brand" aria-label="Maxwell Chronos home"><BrandLogo/><span>CHRONOS<span>EMPLOYEE WORKSPACE</span></span></Link>
       <nav aria-label="Main navigation" className="workspace-navigation">
         <p className="nav-section-label">Workspace</p>{navItems(primary)}
+        <p className="nav-section-label management-label">Feedback &amp; Performance Reviews</p>{navItems(development)}
         {management.length > 0 && <><p className="nav-section-label management-label">Management</p>{navItems(management)}</>}
       </nav>
       <div className="sidebar-bottom">

@@ -21,6 +21,10 @@ import java.util.Set;
 @AllArgsConstructor
 @Builder
 public class User {
+    @Builder.Default
+    @Column(nullable = false, length = 100)
+    private String timezone = "America/Chicago";
+
     @Column(length = 40)
     private String phoneNumber;
 
@@ -100,6 +104,14 @@ public class User {
 
     @Column(unique = true, length = 255)
     private String entraId;
+
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    @Column(length = 100)
+    private String passwordHash;
+
+    public String getAccountStatus() {
+        return !Boolean.TRUE.equals(isActive) ? "INACTIVE" : passwordHash == null ? "INVITED" : "ACTIVE";
+    }
 
     @CreationTimestamp
     @Column(nullable = false, updatable = false)

@@ -2,6 +2,17 @@ import axios from 'axios';
 
 const API_BASE_URL = '/api';
 
+export const announcementAPI = {
+  list: (management = false) => apiClient.get('/announcements', { params: { management }, background: true }),
+  open: (id, management = false) => apiClient.post(`/announcements/${id}/open`, null, { params: { management } }),
+  save: (id, data) => id ? apiClient.put(`/announcements/${id}`, data) : apiClient.post('/announcements', data),
+  status: (id, status, version) => apiClient.post(`/announcements/${id}/status`, null, { params: { status, version } }),
+  remove: (id, version) => apiClient.delete(`/announcements/${id}`, { params: { version } }),
+  acknowledge: (id, version) => apiClient.post(`/announcements/${id}/acknowledge`, null, { params: { version } }),
+  tracking: id => apiClient.get(`/announcements/${id}/tracking`),
+  attachment: (id, management = false) => apiClient.get(`/announcements/${id}/attachment`, { params: { management }, responseType: 'blob' }),
+};
+
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -17,33 +28,36 @@ function dispatchApiActivityEvent(name) {
 
 // Add token to requests if available
 apiClient.interceptors.request.use((config) => {
-  dispatchApiActivityEvent('chronos:api-start');
+  if (!config.background) dispatchApiActivityEvent('chronos:api-start');
   const token = localStorage.getItem('authToken');
-  if (token) {
+  if (token && !config.publicAuth) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 }, (error) => {
-  dispatchApiActivityEvent('chronos:api-end');
+  if (!error.config?.background) dispatchApiActivityEvent('chronos:api-end');
   return Promise.reject(error);
 });
 
 apiClient.interceptors.response.use((response) => {
-  dispatchApiActivityEvent('chronos:api-end');
+  if (!response.config?.background) dispatchApiActivityEvent('chronos:api-end');
   return response;
 }, (error) => {
-  dispatchApiActivityEvent('chronos:api-end');
+  if (!error.config?.background) dispatchApiActivityEvent('chronos:api-end');
   return Promise.reject(error);
 });
 
 export const authAPI = {
-  login: () => apiClient.post('/auth/login'),
+  login: (email, password) => apiClient.post('/auth/login', { email, password }, { publicAuth: true }),
+  validateInvitation: (token) => apiClient.post('/auth/invitations/validate', { token }, { publicAuth: true }),
+  activate: (token, password) => apiClient.post('/auth/activate', { token, password }, { publicAuth: true }),
   getCurrentUser: () => apiClient.get('/auth/me'),
-  devLogin: (email, firstName, lastName) =>
-    apiClient.post('/auth/dev-login', null, { params: { email, firstName, lastName } }),
 };
 
 export const userAPI = {
+  createEmployee: (data) => apiClient.post('/users', data),
+  sendInvitation: (id) => apiClient.post('/users/' + id + '/invitation'),
+  revokeInvitation: (id) => apiClient.delete('/users/' + id + '/invitation'),
   updateJoiningDate: (id, joiningDate) => apiClient.patch(`/users/${id}/joining-date`, { joiningDate: joiningDate || null }),
   getUser: (id) => apiClient.get(`/users/${id}`),
   getAllUsers: () => apiClient.get('/users'),
@@ -95,6 +109,7 @@ export const vacationAPI = {
 };
 
 export const projectAPI = {
+  getHealth: () => apiClient.get('/projects/health', { background: true }),
   getProjects: () => apiClient.get('/projects'),
   getAssignedProjects: (year, month) => apiClient.get('/projects/assigned', {
     params: year && month ? { year, month } : {},
@@ -176,3 +191,21 @@ export const reportsAPI = {
 };
 
 export default apiClient;
+
+export const feedbackReviewsAPI = {
+  employees: query => apiClient.get('/feedback-reviews/employees', { params: { query } }),
+  feedback: given => apiClient.get('/feedback-reviews/feedback', { params: { given } }),
+  submit: data => apiClient.post('/feedback-reviews/feedback', data),
+  reviews: employeeId => apiClient.get('/feedback-reviews/reviews', { params: { employeeId } }),
+  save: (id, data) => id ? apiClient.put(`/feedback-reviews/reviews/${id}`, data) : apiClient.post('/feedback-reviews/reviews', data),
+  publish: (id, version) => apiClient.post(`/feedback-reviews/reviews/${id}/publish`, null, { params: { version } }),
+  audit: id => apiClient.get(`/feedback-reviews/reviews/${id}/audit`),
+};
+
+export const employeeReportsAPI = {
+  submit: (data) => apiClient.post('/employee-reports', data, { headers: { 'Content-Type': undefined } }),
+  list: (params) => apiClient.get('/employee-reports', { params, background: true }),
+  detail: (id) => apiClient.get(`/employee-reports/${id}`),
+  review: (id, data) => apiClient.patch(`/employee-reports/${id}`, data),
+  download: (id, attachmentId) => apiClient.get(`/employee-reports/${id}/attachments/${attachmentId}`, { responseType: 'blob' }),
+};

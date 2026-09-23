@@ -124,7 +124,7 @@ public class VacationService {
             throw new IllegalArgumentException("User cannot submit another user's vacation request");
         }
         if (vacation.getUser().isSuperAdmin()) {
-            throw new org.springframework.security.access.AccessDeniedException("SuperAdmin cannot submit vacation requests");
+            throw new org.springframework.security.access.AccessDeniedException("Admin cannot submit vacation requests");
         }
 
         if (!vacation.isEditable()) {

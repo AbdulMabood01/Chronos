@@ -23,48 +23,15 @@ const knownSettings = {
   },
   'timesheet.reminders.enabled': {
     title: 'Timesheet Reminders',
-    description: 'Controls whether the weekday reminder job sends in-app reminders.',
+    description: 'Send email and in-app reminders on Fridays and month-end at 8:00 PM in each employee profile timezone.',
     type: 'boolean',
     fallback: 'true',
-  },
-  'timesheet.reminders.initial_days_before_month_end': {
-    title: 'First Reminder Lead Time',
-    description: 'How many days before month-end the first reminder should go out.',
-    type: 'number',
-    fallback: '7',
-    suffix: 'days',
-  },
-  'timesheet.reminders.final_working_week_daily': {
-    title: 'Daily Final Week Nudges',
-    description: 'Sends reminders during the final working week until the timesheet is submitted.',
-    type: 'boolean',
-    fallback: 'true',
-  },
-  'timesheet.reminders.frequency': {
-    title: 'Reminder Frequency',
-    description: 'Policy label for reminder cadence. Current reminder job uses final-week rules above.',
-    type: 'select',
-    fallback: 'DAILY',
-    options: ['DAILY', 'WEEKLY'],
-  },
-  'timesheet.reminders.notification_method': {
-    title: 'Notification Method',
-    description: 'Policy label for reminder delivery. Current supported delivery is in-app notification.',
-    type: 'select',
-    fallback: 'IN_APP',
-    options: ['IN_APP'],
   },
 };
 
 const primaryKeys = ['company_name'];
 const leaveKeys = ['vacation_days_per_year', 'sick_days_per_year', 'bereavement_days_per_year'];
-const reminderKeys = [
-  'timesheet.reminders.enabled',
-  'timesheet.reminders.initial_days_before_month_end',
-  'timesheet.reminders.final_working_week_daily',
-  'timesheet.reminders.frequency',
-  'timesheet.reminders.notification_method',
-];
+const reminderKeys = ['timesheet.reminders.enabled'];
 
 export default function Settings() {
   const { user } = useAuth();
@@ -80,7 +47,6 @@ export default function Settings() {
   const canManageSettings = user?.role === 'SUPER_ADMIN';
   const settingMap = settings.reduce((acc, item) => ({ ...acc, [item.key]: item }), {});
   const enabledSetting = settingMap['timesheet.reminders.enabled']?.value ?? knownSettings['timesheet.reminders.enabled'].fallback;
-  const finalWeekSetting = settingMap['timesheet.reminders.final_working_week_daily']?.value ?? knownSettings['timesheet.reminders.final_working_week_daily'].fallback;
   const advancedSettings = settings.filter((item) => !knownSettings[item.key]);
 
   useEffect(() => {
@@ -226,7 +192,7 @@ export default function Settings() {
       <RecordSummary items={[
         { label: 'Configured settings', value: settings.length, icon: 'settings' },
         { label: 'Reminders', value: String(enabledSetting).toLowerCase() === 'true' ? 'On' : 'Off', icon: 'bell' },
-        { label: 'Final week nudges', value: String(finalWeekSetting).toLowerCase() === 'true' ? 'On' : 'Off', icon: 'clock' },
+        { label: 'Delivery time', value: '8:00 PM local', icon: 'clock' },
       ]} />
 
       <section className="settings-section" aria-label="Leave policy">
@@ -242,7 +208,7 @@ export default function Settings() {
         <div>
           <span className="eyebrow">REMINDER ENGINE</span>
           <h2>Keep month-end timesheets moving automatically.</h2>
-          <p>Reminders run on weekdays at 9:00 AM. SuperAdmins are excluded from reminder delivery.</p>
+          <p>Email and in-app reminders are sent at 8:00 PM on Fridays and the last day of each month, using the timezone in each employee profile. Only active users with unsubmitted timesheets are reminded. Admins are excluded.</p>
         </div>
         <div className="settings-hero-status">
           <strong>{String(enabledSetting).toLowerCase() === 'true' ? 'Active' : 'Paused'}</strong>

@@ -67,7 +67,8 @@ public class TimesheetService {
                 .filter(event -> event.getAction() == com.maxwell.chronos.enums.AuditAction.TIMESHEET_REOPENED).toList());
         var actions = java.util.Set.of(com.maxwell.chronos.enums.AuditAction.TIMESHEET_SUBMITTED,
                 com.maxwell.chronos.enums.AuditAction.TIMESHEET_APPROVED, com.maxwell.chronos.enums.AuditAction.TIMESHEET_REJECTED,
-                com.maxwell.chronos.enums.AuditAction.TIMESHEET_REOPENED);
+                com.maxwell.chronos.enums.AuditAction.TIMESHEET_REOPENED,
+                com.maxwell.chronos.enums.AuditAction.PROJECT_MANAGER_CHANGED);
         return history.stream().filter(event -> actions.contains(event.getAction()))
                 .sorted(Comparator.comparing(com.maxwell.chronos.dto.AuditLogDTO::getCreatedAt,
                         Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(com.maxwell.chronos.dto.AuditLogDTO::getId, Comparator.reverseOrder()))
@@ -130,7 +131,7 @@ public class TimesheetService {
 
     public List<MissingTimesheet> getMissingTimesheets(int year, int month, User reviewer) {
         YearMonth period = YearMonth.of(year, month);
-        if (reviewer == null || (!reviewer.isAdmin() && !reviewer.isSuperAdmin() && !projectService.canReviewProjects(reviewer.getId())))
+        if (reviewer == null || (!reviewer.isAdmin() && !reviewer.isSuperAdmin() && !projectService.canManageProjects(reviewer.getId())))
             throw new org.springframework.security.access.AccessDeniedException("Manager permission required");
         var result = new java.util.ArrayList<MissingTimesheet>();
         var visibleProjects = projectService.visibleProjectIds(reviewer);
@@ -259,7 +260,7 @@ public class TimesheetService {
                 .orElseThrow(() -> new IllegalArgumentException("Reopening user not found"));
 
         if (!reopeningUser.isSuperAdmin()) {
-            throw new IllegalArgumentException("Only Super Admin can reopen timesheets");
+            throw new IllegalArgumentException("Only Admin can reopen timesheets");
         }
 
         Timesheet timesheet = timesheetRepository.findForUpdate(timesheetId)
@@ -477,8 +478,7 @@ public class TimesheetService {
         List<TimesheetProjectSubmission> submitted = projectSubmissionRepository.findByStatus(TimesheetStatus.SUBMITTED);
         List<TimesheetProjectSubmission> changeRequests = projectSubmissionRepository.findByStatus(TimesheetStatus.CHANGE_REQUESTED);
         return java.util.stream.Stream.concat(submitted.stream(), changeRequests.stream())
-                .filter(submission -> canReviewProjectSubmission(submission, reviewer)
-                        && !submission.getTimesheet().getUser().getId().equals(reviewer.getId()))
+                .filter(submission -> canReviewProjectSubmission(submission, reviewer))
                 .map(this::toProjectSubmissionDTO)
                 .collect(Collectors.toList());
     }
@@ -523,6 +523,8 @@ public class TimesheetService {
         }
 
         submission.setApprovedBillRate(null);
+        submission.setAssignedApprover(project.getProjectManager() != null && project.getProjectManager().getId().equals(userId)
+                ? project.getProjectManagerHoursApprover() : project.getProjectManager());
         submission.setStatus(TimesheetStatus.SUBMITTED);
         submission.setSubmittedAt(java.time.LocalDateTime.now());
         submission.setApprovedAt(null);
@@ -550,9 +552,6 @@ public class TimesheetService {
                 .orElseThrow(() -> new IllegalArgumentException("Project timesheet not found"));
 
         requireProjectSubmissionReviewer(submission, approvingUser);
-        if (submission.getTimesheet().getUser().getId().equals(approvingUserId)) {
-            throw new IllegalArgumentException("Users cannot approve their own timesheets");
-        }
         if (!TimesheetStatus.SUBMITTED.equals(submission.getStatus())
                 && !TimesheetStatus.CHANGE_REQUESTED.equals(submission.getStatus())) {
             throw new IllegalArgumentException("Only submitted project timesheets can be approved");
@@ -658,15 +657,8 @@ public class TimesheetService {
 
     private void notifyReviewersOfProjectSubmission(TimesheetProjectSubmission submission) {
         Set<Long> notified = new java.util.HashSet<>();
-        User manager = submission.getProject().getProjectManager();
-        User submitter = submission.getTimesheet().getUser();
-        User managerHoursApprover = submission.getProject().getProjectManagerHoursApprover();
-        if (manager != null && manager.getId().equals(submitter.getId()) && managerHoursApprover != null
-                && !managerHoursApprover.getId().equals(submitter.getId())) {
-            notifyProjectSubmissionTo(submission, managerHoursApprover, notified);
-        } else if (manager != null && !manager.getId().equals(submitter.getId())) {
-            notifyProjectSubmissionTo(submission, manager, notified);
-        }
+        User approver = submission.getAssignedApprover();
+        if (approver != null) notifyProjectSubmissionTo(submission, approver, notified);
     }
 
     private void notifyProjectSubmissionTo(TimesheetProjectSubmission submission, User user, Set<Long> notified) {
@@ -712,11 +704,15 @@ public class TimesheetService {
     private boolean canReviewProjectSubmission(TimesheetProjectSubmission submission, User reviewer) {
         User submitter = submission.getTimesheet().getUser();
         Long projectId = submission.getProject().getId();
-        if (submitter.getId().equals(reviewer.getId())) {
-            return false;
-        }
         if (reviewer.isSuperAdmin()) {
             return false;
+        }
+        if (submitter.getId().equals(reviewer.getId()) && submission.getProject().getProjectManager() != null
+                && submission.getProject().getProjectManager().getId().equals(reviewer.getId())) {
+            return true;
+        }
+        if (submission.getAssignedApprover() != null) {
+            return submission.getAssignedApprover().getId().equals(reviewer.getId());
         }
         boolean submitterManagesProject = submission.getProject().getProjectManager() != null
                 && submission.getProject().getProjectManager().getId().equals(submitter.getId());
@@ -752,7 +748,7 @@ public class TimesheetService {
 
     private void requireCanSubmit(User user) {
         if (user.isSuperAdmin()) {
-            throw new org.springframework.security.access.AccessDeniedException("SuperAdmin cannot submit timesheets");
+            throw new org.springframework.security.access.AccessDeniedException("Admin cannot submit timesheets");
         }
     }
 
@@ -1004,13 +1000,15 @@ public class TimesheetService {
         BigDecimal totalHours = submission.getTotalHours() != null ? submission.getTotalHours() : BigDecimal.ZERO;
         boolean submitterManagesProject = project.getProjectManager() != null
                 && project.getProjectManager().getId().equals(timesheet.getUser().getId());
-        User routedApprover = submitterManagesProject ? project.getProjectManagerHoursApprover() : project.getProjectManager();
+        User routedApprover = submission.getAssignedApprover() != null ? submission.getAssignedApprover()
+                : submitterManagesProject ? project.getProjectManagerHoursApprover() : project.getProjectManager();
         return TimesheetProjectSubmissionDTO.builder()
                 .id(submission.getId())
                 .timesheetId(timesheet.getId())
                 .projectId(projectId)
                 .projectCode(project.getCode())
                 .projectName(project.getName())
+                .projectManagerId(project.getProjectManager() != null ? project.getProjectManager().getId() : null)
                 .projectManagerName(project.getProjectManager() != null ? project.getProjectManager().getFullName() : null)
                 .projectManagerHoursApproverName(project.getProjectManagerHoursApprover() != null ? project.getProjectManagerHoursApprover().getFullName() : null)
                 .routedApproverName(routedApprover != null ? routedApprover.getFullName() : null)

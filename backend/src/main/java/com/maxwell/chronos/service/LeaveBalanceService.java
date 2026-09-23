@@ -34,10 +34,10 @@ public class LeaveBalanceService {
 
     public LeaveBalanceDTO update(Long userId, LeaveAllowanceRequest input, User requester) {
         if (requester == null || !requester.isSuperAdmin())
-            throw new org.springframework.security.access.AccessDeniedException("Only Super Admin can set leave allowances");
+            throw new org.springframework.security.access.AccessDeniedException("Only Admin can set leave allowances");
         validateYear(input.year());
         var employee = users.findForUpdate(userId).orElseThrow(() -> new IllegalArgumentException("User not found"));
-        if (employee.isSuperAdmin()) throw new IllegalArgumentException("Leave allowances apply to employees and admins");
+        if (employee.isSuperAdmin()) throw new IllegalArgumentException("Leave allowances apply to employees and Project Admins");
         var value = allowances.findByUserIdAndYear(userId, input.year()).orElseGet(LeaveAllowance::new);
         value.setUserId(userId); value.setYear(input.year());
         value.setVacationDays(input.vacationDays()); value.setSickDays(input.sickDays());

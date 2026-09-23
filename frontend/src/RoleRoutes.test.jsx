@@ -3,7 +3,7 @@ import React from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import App from './App';
-import { notificationAPI } from './api';
+import { notificationAPI, employeeReportsAPI } from './api';
 vi.mock('./api');
 vi.mock('./AuthContext', () => ({
   AuthProvider: ({ children }) => children,
@@ -16,8 +16,26 @@ beforeEach(() => {
   currentUser.canReviewProjects = false;
   currentUser.canManageProjects = false;
   notificationAPI.getUnreadCount.mockResolvedValue({ data: 0 });
+  employeeReportsAPI.list.mockResolvedValue({ data: [] });
 });
 afterEach(cleanup);
+
+it.each(['/reports', '/employee-reports'])('opens HR management from the Super Admin reports route %s', async path => {
+  window.history.replaceState({}, '', path);
+  render(<App />);
+  await screen.findByRole('heading', { name: 'Employee reports' });
+  expect(screen.getByRole('link', { name: 'Reports' }).getAttribute('href')).toBe('/reports');
+  expect(screen.getByRole('link', { name: 'Time & leave reports' }).getAttribute('href')).toBe('/time-reports');
+  expect(screen.queryByRole('button', { name: 'Submit confidential report' })).toBeNull();
+});
+
+it('blocks project admins from the HR reports URL', async () => {
+  currentUser.role = 'ADMIN';
+  window.history.replaceState({}, '', '/reports');
+  render(<App />);
+  await screen.findByText('Dashboard content');
+  expect(window.location.pathname).toBe('/dashboard');
+});
 
 it.each(['/timesheets', '/vacation'])('redirects SuperAdmin away from personal route %s', async (path) => {
   window.history.replaceState({}, '', path);
@@ -42,15 +60,15 @@ it('shows approvals and project hours to an employee with project permissions', 
   expect(screen.getByRole('link', { name: 'Projects' })).toBeTruthy();
 });
 
-it('shows team management to an approver without project management access', () => {
+it('shows approvals without team management to an approver without project management access', () => {
   currentUser.role = 'EMPLOYEE';
   currentUser.canReviewProjects = true;
   currentUser.canManageProjects = false;
   window.history.replaceState({}, '', '/dashboard');
   render(<App />);
-  expect(screen.getByText('Management')).toBeTruthy();
-  expect(screen.getByRole('link', { name: 'Missing timesheets' })).toBeTruthy();
-  expect(screen.getByRole('link', { name: 'Team leave calendar' })).toBeTruthy();
+  expect(screen.queryByText('Management')).toBeNull();
+  expect(screen.queryByRole('link', { name: 'Missing timesheets' })).toBeNull();
+  expect(screen.queryByRole('link', { name: 'Team leave calendar' })).toBeNull();
   expect(screen.getByRole('link', { name: 'Approvals' })).toBeTruthy();
   expect(screen.queryByRole('link', { name: 'Projects' })).toBeNull();
   expect(screen.queryByRole('link', { name: 'Project hours' })).toBeNull();
@@ -66,7 +84,7 @@ it.each(['/projects', '/project-hours'])('blocks project management URL for an a
   expect(window.location.pathname).toBe('/dashboard');
 });
 
-it.each(['/projects', '/project-hours', '/admin', '/missing-timesheets', '/team-leave-calendar', '/settings', '/users', '/reports', '/audit'])('hides management and blocks employee URL %s', async path => {
+it.each(['/projects', '/project-hours', '/admin', '/missing-timesheets', '/team-leave-calendar', '/settings', '/users', '/reports', '/audit', '/employee-reports'])('hides management and blocks employee URL %s', async path => {
   currentUser.role = 'EMPLOYEE';
   window.history.replaceState({}, '', path);
   render(<App />);

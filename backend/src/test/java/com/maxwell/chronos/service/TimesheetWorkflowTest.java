@@ -113,7 +113,7 @@ class TimesheetWorkflowTest {
         project.setIsActive(true);
         var manager = User.builder().id(6L).role(UserRole.EMPLOYEE).build();
         project.setProjectManager(manager);
-        when(projectService.canReviewProjects(6L)).thenReturn(true);
+        when(projectService.canManageProjects(6L)).thenReturn(true);
         when(projectService.visibleProjectIds(manager)).thenReturn(Set.of(3L));
         when(projectService.visibleProjectIds(admin)).thenReturn(Set.of(3L));
         var assignment = assignments.findByProjectIdAndUserId(3L, 1L).orElseThrow();
@@ -213,15 +213,58 @@ class TimesheetWorkflowTest {
         assertThrows(IllegalArgumentException.class, () -> service.getProjectTimesheet(4L, 30L, manager));
     }
 
-    @Test void managersOwnHoursRequireDesignatedApproverAndNeverSelfApproval() {
+    @Test void managersOwnHoursRouteToDesignatedApprover() {
         project.setProjectManager(employee);
         submission.setStatus(TimesheetStatus.SUBMITTED);
         when(users.findById(1L)).thenReturn(Optional.of(employee));
-        assertThrows(IllegalArgumentException.class, () -> service.approveProjectSubmission(5L, 1L));
         var approver = User.builder().id(6L).role(UserRole.EMPLOYEE).build();
         project.setProjectManagerHoursApprover(approver);
         when(users.findById(6L)).thenReturn(Optional.of(approver));
         when(projectService.canApproveProjectManagerHours(3L, 6L)).thenReturn(true);
+        assertEquals(TimesheetStatus.APPROVED, service.approveProjectSubmission(5L, 6L).getStatus());
+    }
+
+    @Test void managerCanApproveOwnHoursWhenDesignatedAndSeeThemInQueue() {
+        project.setProjectManager(employee);
+        project.setProjectManagerHoursApprover(employee);
+        submission.setAssignedApprover(employee);
+        submission.setStatus(TimesheetStatus.SUBMITTED);
+        when(users.findById(1L)).thenReturn(Optional.of(employee));
+        when(projectService.canReviewProjects(1L)).thenReturn(true);
+        when(submissions.findByStatus(TimesheetStatus.SUBMITTED)).thenReturn(List.of(submission));
+        assertEquals(1, service.getPendingProjectSubmissions(employee).size());
+        assertEquals(TimesheetStatus.APPROVED, service.approveProjectSubmission(5L, 1L).getStatus());
+        assertEquals(employee, submission.getApprovedBy());
+    }
+
+    @Test void pmOwnHoursAppearInQueueEvenWhenAssignedToAnotherApprover() {
+        project.setProjectManager(employee);
+        project.setProjectManagerHoursApprover(admin);
+        submission.setAssignedApprover(admin);
+        submission.setStatus(TimesheetStatus.SUBMITTED);
+        when(users.findById(1L)).thenReturn(Optional.of(employee));
+        when(projectService.canReviewProjects(1L)).thenReturn(true);
+        when(submissions.findByStatus(TimesheetStatus.SUBMITTED)).thenReturn(List.of(submission));
+        assertEquals(1, service.getPendingProjectSubmissions(employee).size());
+        assertEquals(1L, service.getPendingProjectSubmissions(employee).get(0).getProjectManagerId());
+        assertEquals(TimesheetStatus.APPROVED, service.approveProjectSubmission(5L, 1L).getStatus());
+        assertEquals(employee, submission.getApprovedBy());
+    }
+
+    @Test void approverWithoutPmAssignmentCannotAccessMissingTimesheets() {
+        assertThrows(org.springframework.security.access.AccessDeniedException.class,
+                () -> service.getMissingTimesheets(2026, 9, employee));
+    }
+
+    @Test void storedApproverControlsReviewUntilExplicitTransfer() {
+        var original = User.builder().id(6L).role(UserRole.EMPLOYEE).build();
+        var replacement = User.builder().id(7L).role(UserRole.EMPLOYEE).build();
+        project.setProjectManager(replacement);
+        submission.setAssignedApprover(original);
+        submission.setStatus(TimesheetStatus.SUBMITTED);
+        when(users.findById(6L)).thenReturn(Optional.of(original));
+        when(users.findById(7L)).thenReturn(Optional.of(replacement));
+        assertThrows(IllegalArgumentException.class, () -> service.approveProjectSubmission(5L, 7L));
         assertEquals(TimesheetStatus.APPROVED, service.approveProjectSubmission(5L, 6L).getStatus());
     }
 

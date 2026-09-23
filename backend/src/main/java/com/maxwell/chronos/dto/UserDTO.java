@@ -14,6 +14,8 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 public class UserDTO {
+    private String accountStatus;
+    private String timezone;
     private String phoneNumber;
 
     private String personalEmail;

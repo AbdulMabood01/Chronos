@@ -364,9 +364,10 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
     && projectSubmission
     && (autoEditableStatuses.includes(projectSubmission.status) || (editMode && editButtonStatuses.includes(projectSubmission.status)));
   const canStartEdit = false;
-  const canApprove = (user?.role !== 'SUPER_ADMIN' && projectSubmission?.routedApproverId === user?.id)
-    && !isReadOnlyPastMonth && ['SUBMITTED', 'CHANGE_REQUESTED'].includes(projectSubmission?.status) && !isOwner;
-  const canReject = canApprove;
+  const canApprove = (user?.role !== 'SUPER_ADMIN' && (projectSubmission?.routedApproverId === user?.id
+    || (isOwner && projectSubmission?.projectManagerId === user?.id)))
+    && !isReadOnlyPastMonth && ['SUBMITTED', 'CHANGE_REQUESTED'].includes(projectSubmission?.status);
+  const canReject = canApprove && !isOwner;
   const canReopen = user?.role === 'SUPER_ADMIN' && !isReadOnlyPastMonth && (timesheet?.status === 'APPROVED' || timesheet?.status === 'LOCKED');
   const totalHours = useMemo(() => days.reduce((sum, day) => sum + (parseFloat(day.hours) || 0), 0), [days]);
 
@@ -972,12 +973,12 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
             >
               Approve
             </button>
-            <button
+            {canReject && <button
               className="button button-danger"
               onClick={handleReject}
             >
               Reject
-            </button>
+            </button>}
           </>
         )}
 

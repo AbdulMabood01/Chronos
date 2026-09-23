@@ -17,7 +17,7 @@ class TeamCalendarServiceTest {
     final User alice = User.builder().id(2L).firstName("Alice").lastName("Smith").role(UserRole.EMPLOYEE).build();
     final User bob = User.builder().id(3L).firstName("Bob").lastName("Jones").role(UserRole.EMPLOYEE).build();
     @Test void managerSeesOnlyTeamAbsencesIncludingCrossMonthLeave() {
-        when(projects.canReviewProjects(1L)).thenReturn(true);
+        when(projects.canManageProjects(1L)).thenReturn(true);
         when(projects.visibleProjectIds(manager)).thenReturn(Set.of(4L));
         var project = Project.builder().id(4L).projectManager(manager).build();
         when(assignments.findAll()).thenReturn(List.of(ProjectAssignment.builder().project(project).user(alice).isActive(true)
@@ -34,6 +34,7 @@ class TeamCalendarServiceTest {
         assertEquals(2,service.getCalendar(2026,9,manager).size());
     }
     @Test void unrelatedEmployeesCannotReadCalendar() {
+        when(projects.canReviewProjects(1L)).thenReturn(true);
         assertThrows(org.springframework.security.access.AccessDeniedException.class, () -> service.getCalendar(2026,9,manager));
         verifyNoInteractions(requests);
     }

@@ -14,6 +14,9 @@ import java.time.LocalDate;
 @NoArgsConstructor
 @AllArgsConstructor
 public class UpdateProfileRequest {
+    @Size(max = 100)
+    private String timezone;
+
     @Size(max = 40)
     private String phoneNumber;
 

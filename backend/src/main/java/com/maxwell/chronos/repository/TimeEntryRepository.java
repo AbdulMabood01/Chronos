@@ -10,6 +10,9 @@ import java.util.Optional;
 
 @Repository
 public interface TimeEntryRepository extends JpaRepository<TimeEntry, Long> {
+    @org.springframework.data.jpa.repository.Query("select e from TimeEntry e join fetch e.project join fetch e.timesheet t join fetch t.user where e.project.id in :ids and e.entryDate <= :today")
+    List<TimeEntry> findForHealth(@org.springframework.data.repository.query.Param("ids") java.util.Set<Long> ids,
+            @org.springframework.data.repository.query.Param("today") LocalDate today);
     @org.springframework.data.jpa.repository.Query("select coalesce(sum(e.hours), 0) from TimeEntry e where e.timesheet.user.id = :userId and e.project.id = :projectId and e.entryDate <= :throughDate and not exists (select s.id from TimesheetProjectSubmission s where s.timesheet = e.timesheet and s.project = e.project and s.status in :approvedStatuses)")
     java.math.BigDecimal sumLoggedHoursToDate(@org.springframework.data.repository.query.Param("userId") Long userId,
         @org.springframework.data.repository.query.Param("projectId") Long projectId,

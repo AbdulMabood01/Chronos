@@ -1,3 +1,4 @@
+import EmployeeOnboarding from '../components/EmployeeOnboarding';
 import ScreenTitle, { RecordSearch } from '../components/ScreenTitle';
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import EmploymentDetails from '../components/EmploymentDetails';
@@ -15,6 +16,8 @@ export default function UserManagement() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [invitationBusy, setInvitationBusy] = useState(null);
+  const [notice, setNotice] = useState('');
   const [search, setSearch] = useState('');
   const [profileUser, setProfileUser] = useState(null);
   const profileHeading = useRef(null);
@@ -55,6 +58,16 @@ export default function UserManagement() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleInvitation = async (id, revoke = false) => {
+    setInvitationBusy(id); setError(''); setNotice('');
+    try {
+      if (revoke) await userAPI.revokeInvitation(id);
+      else await userAPI.sendInvitation(id);
+      setNotice(revoke ? 'Invitation revoked.' : 'Invitation email sent. Any earlier link is now invalid.');
+    } catch (err) { setError(err.response?.data?.message || 'Unable to update invitation.'); }
+    finally { setInvitationBusy(null); }
   };
 
   const handleDeactivate = async (id) => {
@@ -129,6 +142,8 @@ export default function UserManagement() {
         </div>
       </div>
 
+      <EmployeeOnboarding onCreated={loadUsers} />
+      {notice && <p role="status">{notice}</p>}
       <RecordSearch value={search} onChange={setSearch} placeholder="Search people by name, email or role" label="Search people by name, email or role" />
       {search && <p className="filter-count">{visibleRecords.length} matching records</p>}
       {error && <div className="error-message" role="alert">{error} <button type="button" className="button button-secondary" onClick={loadUsers}>Retry</button></div>}
@@ -174,16 +189,16 @@ export default function UserManagement() {
                       disabled={targetUser.id === user.id}
                     >
                       <option value="EMPLOYEE">Employee</option>
-                      <option value="ADMIN">Admin</option>
-                      <option value="SUPER_ADMIN">Super Admin</option>
+                      <option value="ADMIN">Project Admin</option>
+                      <option value="SUPER_ADMIN">Admin</option>
                     </select>
                   ) : (
-                    targetUser.role.replace('_', ' ')
+                    targetUser.role === 'SUPER_ADMIN' ? 'Admin' : targetUser.role === 'ADMIN' ? 'Project Admin' : targetUser.role.replace('_', ' ')
                   )}
                 </td>
                 <td>
                   <span className={`status-badge ${targetUser.isActive ? 'status-approved' : 'status-rejected'}`}>
-                    {targetUser.isActive ? 'Active' : 'Inactive'}
+                    {targetUser.accountStatus || (targetUser.isActive ? 'Active' : 'Inactive')}
                   </span>
                 </td>
                 <td>
@@ -194,6 +209,10 @@ export default function UserManagement() {
                 </td>
                 <td>
                   <div className="action-buttons wrap-actions">
+                    {targetUser.accountStatus === 'INVITED' && <>
+                      <button className="button button-small" disabled={invitationBusy !== null} onClick={() => handleInvitation(targetUser.id)}>Send / resend invitation</button>
+                      <button className="button button-small" disabled={invitationBusy !== null} onClick={() => handleInvitation(targetUser.id, true)}>Revoke invitation</button>
+                    </>}
                     {targetUser.role !== 'SUPER_ADMIN' && (targetUser.isActive ? (
                       <button className="button button-small button-danger" onClick={() => handleDeactivate(targetUser.id)}>
                         Deactivate

@@ -11,6 +11,22 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class ProfilePermissionsTest {
+    @Test void timezoneIsSavedReturnedAndValidated() {
+        var users = mock(UserRepository.class);
+        var service = new UserService(users, mock(AuditService.class));
+        var user = User.builder().id(1L).email("employee@example.com").role(UserRole.EMPLOYEE).build();
+        when(users.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
+        when(users.save(user)).thenReturn(user);
+        var request = new UpdateProfileRequest();
+        request.setTimezone("Asia/Kolkata");
+        assertEquals("Asia/Kolkata", service.updateOwnProfile(user.getEmail(), request).getTimezone());
+        request.setTimezone(null);
+        assertEquals("Asia/Kolkata", service.updateOwnProfile(user.getEmail(), request).getTimezone());
+        request.setTimezone("Invalid/Timezone");
+        assertThrows(IllegalArgumentException.class, () -> service.updateOwnProfile(user.getEmail(), request));
+        assertEquals("Asia/Kolkata", user.getTimezone());
+    }
+
     @Test void optionalDetailsAreSavedClearedAndExcludedFromGeneralUserResponses() throws Exception {
         var users = mock(UserRepository.class);
         var service = new UserService(users, mock(AuditService.class));

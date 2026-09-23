@@ -6,12 +6,10 @@ import com.maxwell.chronos.dto.UserDTO;
 import com.maxwell.chronos.enums.UserRole;
 import com.maxwell.chronos.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -20,9 +18,6 @@ import java.util.stream.Collectors;
 public class UserService {
     private final UserRepository userRepository;
     private final AuditService auditService;
-
-    @Value("${chronos.initialSuperAdminEmail:}")
-    private String initialSuperAdminEmail;
 
     public UserDTO findById(Long id) {
         return userRepository.findById(id)
@@ -42,55 +37,6 @@ public class UserService {
 
     public User findUserEntityById(Long id) {
         return userRepository.findById(id).orElse(null);
-    }
-
-    public User findOrCreateByEntraId(String entraId, String email, String firstName, String lastName) {
-        Optional<User> existing = userRepository.findByEntraId(entraId);
-        if (existing.isPresent()) {
-            return existing.get();
-        }
-
-        User user = User.builder()
-                .employeeId(generateEmployeeId())
-                .firstName(firstName)
-                .lastName(lastName)
-                .email(email)
-                .entraId(entraId)
-                .role(isInitialSuperAdmin(email) ? UserRole.SUPER_ADMIN : UserRole.EMPLOYEE)
-                .isActive(true)
-                .profileCompleted(false)
-                .build();
-
-        User saved = userRepository.save(user);
-        auditService.logAction(saved.getId(), "USER_CREATED", "User", saved.getId(), 
-                "Email: " + email + ", Role: " + saved.getRole());
-
-        return saved;
-    }
-
-    // Local-development-only: finds or creates a user by email instead of a real Entra ID.
-    public User findOrCreateByEmailForDev(String email, String firstName, String lastName) {
-        Optional<User> existing = userRepository.findByEmail(email);
-        if (existing.isPresent()) {
-            return existing.get();
-        }
-
-        User user = User.builder()
-                .employeeId(generateEmployeeId())
-                .firstName(firstName)
-                .lastName(lastName)
-                .email(email)
-                .entraId("dev:" + email)
-                .role(isInitialSuperAdmin(email) ? UserRole.SUPER_ADMIN : UserRole.EMPLOYEE)
-                .isActive(true)
-                .profileCompleted(false)
-                .build();
-
-        User saved = userRepository.save(user);
-        auditService.logAction(saved.getId(), "USER_CREATED", "User", saved.getId(),
-                "Email: " + email + ", Role: " + saved.getRole());
-
-        return saved;
     }
 
     public List<com.maxwell.chronos.dto.EmployeeDirectoryDTO> getEmployeeDirectory() {
@@ -146,7 +92,7 @@ public class UserService {
 
         if (oldRole == UserRole.SUPER_ADMIN && newRole != UserRole.SUPER_ADMIN
                 && userRepository.findByRole(UserRole.SUPER_ADMIN).size() <= 1) {
-            throw new IllegalArgumentException("Cannot demote the last remaining Super Admin");
+            throw new IllegalArgumentException("Cannot demote the last remaining Admin");
         }
 
         user.setRole(newRole);
@@ -158,7 +104,7 @@ public class UserService {
 
     public UserDTO updateJoiningDate(Long id, java.time.LocalDate joiningDate, User requester) {
         if (requester == null || !requester.isSuperAdmin())
-            throw new org.springframework.security.access.AccessDeniedException("Only Super Admin can edit joining dates");
+            throw new org.springframework.security.access.AccessDeniedException("Only Admin can edit joining dates");
         User employee = userRepository.findForUpdate(id).orElseThrow(() -> new IllegalArgumentException("User not found"));
         employee.setJoiningDate(joiningDate);
         auditService.logAction(requester.getId(), "USER_PROFILE_UPDATED", "User", id, "Joining date: " + joiningDate);
@@ -166,11 +112,15 @@ public class UserService {
     }
 
     public UserDTO updateOwnProfile(String email, UpdateProfileRequest request) {
+        String timezone = request.getTimezone();
+        if (timezone != null && !java.time.ZoneId.getAvailableZoneIds().contains(timezone)) {
+            throw new IllegalArgumentException("Choose a valid timezone");
+        }
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
         if (user.isSuperAdmin() && clean(request.getSsnLast4()) != null) {
-            throw new org.springframework.security.access.AccessDeniedException("SSN is not available for SuperAdmin profiles");
+            throw new org.springframework.security.access.AccessDeniedException("SSN is not available for Admin profiles");
         }
 
         String firstName = clean(request.getFirstName());
@@ -190,6 +140,9 @@ public class UserService {
         user.setProfileImageUrl(clean(request.getProfileImageUrl()));
         user.setPhoneNumber(clean(request.getPhoneNumber()));
         user.setPersonalEmail(clean(request.getPersonalEmail()));
+        if (timezone != null) {
+            user.setTimezone(timezone);
+        }
         user.setAddressLine1(clean(request.getAddressLine1()));
         user.setAddressLine2(clean(request.getAddressLine2()));
         user.setCity(clean(request.getCity()));
@@ -228,20 +181,6 @@ public class UserService {
         return user != null && user.isSuperAdmin();
     }
 
-    public boolean isSuperAdminEmailMatch(String email, String configuredEmail) {
-        return email != null && configuredEmail != null && email.equals(configuredEmail);
-    }
-
-    private boolean isInitialSuperAdmin(String email) {
-        return isSuperAdminEmailMatch(email, initialSuperAdminEmail);
-    }
-
-    private String generateEmployeeId() {
-        // Simple employee ID generation - could be more sophisticated
-        long count = userRepository.count();
-        return "EMP" + String.format("%06d", count + 1);
-    }
-
     private String clean(String value) {
         if (value == null) {
             return null;
@@ -252,6 +191,8 @@ public class UserService {
 
     private UserDTO toDTO(User user) {
         return UserDTO.builder()
+                .accountStatus(user.getAccountStatus())
+                .timezone(user.getTimezone())
                 .id(user.getId())
                 .employeeId(user.getEmployeeId())
                 .firstName(user.getFirstName())

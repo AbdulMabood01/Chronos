@@ -41,7 +41,7 @@ class RolePermissionsApiTest {
 
     @BeforeEach void setup() {
         user = User.builder().id(1L).email("admin@example.com").entraId("subject")
-                .role(UserRole.SUPER_ADMIN).isActive(true).ssnLast4("1234").build();
+                .role(UserRole.SUPER_ADMIN).isActive(true).passwordHash("test-account-hash").ssnLast4("1234").build();
         when(users.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
         when(userService.findUserEntityByEmail(user.getEmail())).thenReturn(user);
     }

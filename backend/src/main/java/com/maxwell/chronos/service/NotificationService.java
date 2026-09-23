@@ -41,6 +41,18 @@ public class NotificationService {
                 .collect(Collectors.toList());
     }
 
+    public void markApprovalReassigned(Long submissionId) {
+        var notifications = notificationRepository.findByEntityIdAndEntityTypeAndNotificationType(
+                submissionId, "TimesheetProjectSubmission", "TIMESHEET_SUBMITTED");
+        notifications.forEach(notification -> {
+            notification.setIsRead(true);
+            notification.setNotificationType("APPROVAL_REASSIGNED");
+            notification.setTitle("Approval reassigned");
+            notification.setMessage("This approval was reassigned during a project handover. Check the approval queue for your current responsibilities.");
+        });
+        notificationRepository.saveAll(notifications);
+    }
+
     public List<NotificationDTO> getUnreadNotifications(Long userId) {
         return notificationRepository.findByUserIdAndIsReadFalseOrderByCreatedAtDescIdDesc(userId).stream()
                 .map(this::toDTO)

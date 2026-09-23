@@ -24,11 +24,12 @@ class ProjectPermissionsTest {
     @Mock TimesheetProjectSubmissionRepository submissions;
     @Mock UserRepository users;
     @Mock AuditService audit;
+    @Mock NotificationService notifications;
     @InjectMocks ProjectService service;
     User superAdmin = User.builder().id(1L).role(UserRole.SUPER_ADMIN).build();
-    User admin = User.builder().id(2L).role(UserRole.ADMIN).build();
-    User manager = User.builder().id(3L).role(UserRole.EMPLOYEE).build();
-    User approver = User.builder().id(4L).role(UserRole.EMPLOYEE).build();
+    User admin = User.builder().id(2L).role(UserRole.ADMIN).isActive(true).build();
+    User manager = User.builder().id(3L).role(UserRole.EMPLOYEE).isActive(true).build();
+    User approver = User.builder().id(4L).role(UserRole.EMPLOYEE).isActive(true).build();
 
     @Test void managerVisibilityExcludesUnrelatedProjectsAndEmployees() {
         var managed = Project.builder().id(10L).code("MANAGED").projectManager(manager).build();
@@ -117,7 +118,7 @@ class ProjectPermissionsTest {
     }
 
     @Test void managerSeesOnlyManagedApprovedOrAssignedProjects() {
-        when(projects.existsByProjectManagerIdOrProjectManagerHoursApproverId(3L, 3L)).thenReturn(true);
+        when(projects.existsByProjectManagerId(3L)).thenReturn(true);
         var managed = Project.builder().id(10L).code("A").projectManager(manager).build();
         var assigned = Project.builder().id(11L).code("B").build();
         var other = Project.builder().id(12L).code("C").build();
@@ -125,6 +126,49 @@ class ProjectPermissionsTest {
         when(assignments.findByUserId(3L)).thenReturn(List.of(ProjectAssignment.builder().project(assigned).isActive(true).build()));
         assertEquals(List.of(10L, 11L), service.getProjects(manager).stream().map(p -> p.getId()).toList());
         assertEquals(List.of(10L, 11L), service.getProjectHoursDashboard(2026, 9, manager).stream().map(p -> p.getProjectId()).toList());
+    }
+
+    @Test void handoverTransfersPendingApprovalsButPreservesCompletedHistory() {
+        var project = Project.builder().id(10L).code("P1").name("Project").projectManager(manager).projectManagerHoursApprover(approver).build();
+        var sheet = Timesheet.builder().user(manager).build();
+        var pending = TimesheetProjectSubmission.builder().id(20L).project(project).timesheet(sheet)
+                .status(TimesheetStatus.SUBMITTED).assignedApprover(approver).build();
+        var completed = TimesheetProjectSubmission.builder().id(21L).project(project).timesheet(sheet)
+                .status(TimesheetStatus.APPROVED).assignedApprover(approver).approvedBy(approver).build();
+        when(projects.findById(10L)).thenReturn(Optional.of(project));
+        when(projects.save(any())).thenAnswer(call -> call.getArgument(0));
+        when(users.findById(2L)).thenReturn(Optional.of(admin));
+        when(users.findById(4L)).thenReturn(Optional.of(approver));
+        when(submissions.findByProjectId(10L)).thenReturn(List.of(pending, completed));
+        var request = SaveProjectRequest.builder().code("P1").name("Project").projectManagerId(2L).projectManagerHoursApproverId(4L).build();
+        service.saveProject(10L, request, admin);
+        assertEquals(admin, pending.getAssignedApprover());
+        assertEquals(approver, completed.getAssignedApprover());
+        assertEquals(approver, completed.getApprovedBy());
+        assertEquals(TimesheetStatus.APPROVED, completed.getStatus());
+        verify(notifications).markApprovalReassigned(20L);
+        verify(notifications).createNotification(eq(2L), eq("TIMESHEET_SUBMITTED"), anyString(), anyString(), eq(20L), eq("TimesheetProjectSubmission"));
+        verify(submissions, never()).save(completed);
+    }
+
+    @Test void inactiveAndSuperAdminCannotBeSelectedAsReviewers() {
+        var request = SaveProjectRequest.builder().code("P1").name("Project").projectManagerId(3L).projectManagerHoursApproverId(4L).build();
+        when(users.findById(3L)).thenReturn(Optional.of(manager));
+        when(users.findById(4L)).thenReturn(Optional.of(approver));
+        approver.setIsActive(false);
+        assertThrows(IllegalArgumentException.class, () -> service.saveProject(null, request, admin));
+        approver.setIsActive(true);
+        approver.setRole(UserRole.SUPER_ADMIN);
+        assertThrows(IllegalArgumentException.class, () -> service.saveProject(null, request, admin));
+        verify(projects, never()).save(any());
+    }
+
+    @Test void designatedApproverWithoutPmAssignmentCannotReadManagementPages() {
+        when(projects.existsByProjectManagerIdOrProjectManagerHoursApproverId(4L, 4L)).thenReturn(true);
+        assertTrue(service.canReviewProjects(4L));
+        assertThrows(AccessDeniedException.class, () -> service.getProjects(approver));
+        assertThrows(IllegalArgumentException.class, () -> service.getProjectHoursDashboard(2026, 9, approver));
+        verify(projects, never()).findAll();
     }
 
     @Test void regularEmployeeCannotReadManagementProjects() {

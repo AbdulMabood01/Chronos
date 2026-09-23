@@ -1,4 +1,5 @@
 import ScreenTitle from '../components/ScreenTitle';
+import { ProjectHealthOverview, useProjectHealth } from '../components/ProjectHealth';
 import { formatDate } from '../utils/dates';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -32,6 +33,7 @@ export default function AdminDashboard() {
   const [rejectReason, setRejectReason] = useState('');
   const isReviewer = user?.canReviewProjects || ['ADMIN', 'SUPER_ADMIN'].includes(user?.role);
   const canReviewLetters = user?.role === 'SUPER_ADMIN';
+  const healthState = useProjectHealth(['ADMIN', 'SUPER_ADMIN'].includes(user?.role), pendingTimesheets);
 
   useEffect(() => {
     if (!isReviewer) return;
@@ -81,6 +83,7 @@ export default function AdminDashboard() {
       submittedAt: task.submittedAt,
       status: task.status,
       kind: 'timesheet',
+      isOwn: task.userId === user?.id,
     })),
     ...pendingVacations.map((task) => ({
       id: `vacation-${task.id}`,
@@ -104,7 +107,7 @@ export default function AdminDashboard() {
       status: task.status,
       kind: 'letter',
     })),
-  ].sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0)), [pendingTimesheets, pendingVacations, pendingLetters]);
+  ].sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0)), [pendingTimesheets, pendingVacations, pendingLetters, user?.id]);
 
   const approveTask = async (task) => {
     try {
@@ -186,6 +189,8 @@ export default function AdminDashboard() {
 
       {error && <div className="error-message">{error} <button type="button" onClick={loadPendingItems}>Retry</button></div>}
 
+      {['ADMIN', 'SUPER_ADMIN'].includes(user?.role) && <ProjectHealthOverview state={healthState} onOpen={id => navigate(`/projects?projectId=${id}`)} />}
+
       <section className="admin-panel admin-approval-section admin-pending-section">
         <div className="panel-heading">
           <div>
@@ -230,9 +235,9 @@ export default function AdminDashboard() {
                       <button className="button button-small button-success" onClick={() => approveTask(task)}>
                         Approve
                       </button>
-                      <button className="button button-small button-danger" onClick={() => rejectTask(task)}>
+                      {!task.isOwn && <button className="button button-small button-danger" onClick={() => rejectTask(task)}>
                         Reject
-                      </button>
+                      </button>}
                     </>
                   )}
                 </div>

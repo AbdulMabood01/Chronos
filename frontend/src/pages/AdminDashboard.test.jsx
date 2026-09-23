@@ -7,10 +7,13 @@ import AdminDashboard from './AdminDashboard';
 import { letterRequestAPI, timesheetAPI, vacationAPI } from '../api';
 
 vi.mock('../api');
-vi.mock('../AuthContext', () => ({ useAuth: () => ({ user: { id: 1, role: 'SUPER_ADMIN' } }) }));
+const currentUser = { id: 1, role: 'SUPER_ADMIN' };
+vi.mock('../AuthContext', () => ({ useAuth: () => ({ user: currentUser }) }));
 
 beforeEach(() => {
   vi.resetAllMocks();
+  currentUser.role = 'SUPER_ADMIN';
+  currentUser.canReviewProjects = false;
   timesheetAPI.getPendingProjectSubmissions.mockResolvedValue({ data: [] });
   letterRequestAPI.getPendingRequests.mockResolvedValue({ data: [] });
   vacationAPI.getPendingRequests.mockResolvedValue({
@@ -39,4 +42,21 @@ it('shows the backend reason when vacation approval is blocked', async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
 
   await waitFor(() => expect(screen.getByText(/Vacation conflicts with submitted or finalized hours/)).toBeTruthy());
+});
+
+
+it('shows a PM their own pending submission on the Approvals screen', async () => {
+  currentUser.role = 'EMPLOYEE';
+  currentUser.canReviewProjects = true;
+  timesheetAPI.getPendingProjectSubmissions.mockResolvedValue({ data: [{
+    id: 22, timesheetId: 12, projectId: 4, projectCode: 'ATLAS', projectName: 'Atlas',
+    userId: 1, userName: 'PM Own Hours', status: 'SUBMITTED', month: 9, year: 2026,
+    totalHours: 8, routedApproverId: 9, projectManagerId: 1,
+  }] });
+  timesheetAPI.approveProjectSubmission.mockResolvedValue({ data: {} });
+  render(<MemoryRouter><AdminDashboard /></MemoryRouter>);
+  expect(await screen.findByText('PM Own Hours')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+  await waitFor(() => expect(timesheetAPI.approveProjectSubmission).toHaveBeenCalledWith(22));
 });

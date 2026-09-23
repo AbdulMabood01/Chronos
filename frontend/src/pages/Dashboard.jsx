@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { letterRequestAPI, notificationAPI, timesheetAPI, vacationAPI } from '../api';
 import AdminDashboard from './AdminDashboard';
+import { AnnouncementPanel } from './Announcements';
 import { format } from 'date-fns';
 import '../styles.css';
 import Icon from '../components/Icon';
@@ -54,13 +55,14 @@ export default function Dashboard() {
   const readyLettersCount = letterRequests.filter((request) => request.status === 'APPROVED').length;
 
   if (user?.role === 'SUPER_ADMIN') {
-    return <AdminDashboard />;
+    return <><div className="page-container"><AnnouncementPanel /></div><AdminDashboard /></>;
   }
 
   return (
     <div className="page-container employee-home">
       <div className="home-page-heading"><div><span className="eyebrow">YOUR WORKSPACE</span><h1>A little clarity for your day.</h1></div><span className="home-date">{format(now, 'EEEE, MMMM d')}</span></div>
       {error && <div className="error-message" role="alert">We couldn't load your workspace summary. Open Timesheets or Requests to view your records.</div>}
+      <AnnouncementPanel />
       <section className="employee-hero">
         <div className="hero-copy"><span className="hero-kicker"><span/>MAKE TIME FOR WHAT MATTERS</span>
           <h2>Welcome back,<br/>{user?.firstName || 'there'}.</h2>

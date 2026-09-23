@@ -1,4 +1,5 @@
 import ValidationMessage from '../components/ValidationMessage';
+import { ProjectHealthCard, ProjectHealthOverview, useProjectHealth } from '../components/ProjectHealth';
 import ScreenTitle from '../components/ScreenTitle';
 import Icon from '../components/Icon';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -114,8 +115,10 @@ export default function ProjectManagement() {
 
   const canView = user?.canReviewProjects || ['ADMIN', 'SUPER_ADMIN'].includes(user?.role);
   const canManage = user?.role === 'ADMIN';
+  const healthState = useProjectHealth(canView, projects);
   const selectedOption = options.find((option) => option.value === selectedPeriod) || options[0];
   const activeUsers = useMemo(() => users.filter((item) => item.isActive), [users]);
+  const eligibleReviewers = activeUsers.filter((item) => item.role !== 'SUPER_ADMIN');
   const selectedProject = isCreatingProject ? null : projects.find((project) => project.id === selectedProjectId) || null;
   const selectedDashboard = dashboardProjects.find((project) => project.projectId === selectedProject?.id);
   const dashboardEmployeesByUserId = useMemo(() => {
@@ -177,6 +180,11 @@ export default function ProjectManagement() {
       setProjects(loadedProjects);
       setUsers(userRes.data || []);
       setDashboardProjects(loadedDashboard);
+      const linkedId = new URLSearchParams(window.location.search).get('projectId');
+      if (!selectedProjectId && linkedId) {
+        const linkedProject = loadedProjects.find(project => String(project.id) === linkedId);
+        if (linkedProject) selectProject(linkedProject);
+      }
       seedDrafts(loadedProjects, loadedDashboard);
       if (selectedProjectId && !loadedProjects.some((project) => project.id === selectedProjectId)) {
         setSelectedProjectId(null);
@@ -466,6 +474,7 @@ export default function ProjectManagement() {
       </div>
 
       <ValidationMessage message={error} onDismiss={() => setError('')} />
+      {!selectedProject && !isCreatingProject && ['ADMIN', 'SUPER_ADMIN'].includes(user?.role) && <ProjectHealthOverview state={healthState} onOpen={id => selectProject(projects.find(project => project.id === id))} />}
 
       <section className="admin-panel project-selector-panel">
         <div className="project-search-field">
@@ -542,6 +551,8 @@ export default function ProjectManagement() {
           </div>
           <span className={statusClass(selectedProject?.status || form.status)}>{labelize(selectedProject?.status || form.status)}</span>
         </div>
+
+        {selectedProject && <ProjectHealthCard state={healthState} health={healthState.projects.find(project => project.projectId === selectedProject.id)} />}
 
         <div className="project-tabs">
           {projectTabs.map((tab) => (
@@ -621,7 +632,7 @@ export default function ProjectManagement() {
               <strong>Offboard {offboarding.userName}?</strong>
               <p>This ends their active membership immediately and freezes assigned hours at their total approved hours to date. Their history is retained.</p>
               {offboarding.pendingApproval && <p role="alert">Please approve or reject pending hours before offboarding this employee.</p>}
-              {offboarding.userId === selectedProject.projectManagerId && <label>Secondary PM<select value={replacementManagerId} onChange={(event) => setReplacementManagerId(event.target.value)}><option value="">Select a replacement project manager</option>{Array.from(new Map([...activeAssignments, ...activeUsers.filter((member) => member.role === 'ADMIN').map((member) => ({ userId: member.id, userName: member.name || member.fullName || [member.firstName, member.lastName].filter(Boolean).join(' ') || member.email }))].map((member) => [member.userId, member])).values()).filter((member) => member.userId !== offboarding.userId && member.userId !== selectedProject.projectManagerHoursApproverId).map((member) => <option key={member.userId} value={member.userId}>{member.userName}</option>)}</select><span>Choose an active team member or admin. This person becomes the project manager.</span></label>}
+              {offboarding.userId === selectedProject.projectManagerId && <label>Replacement PM<select value={replacementManagerId} onChange={(event) => setReplacementManagerId(event.target.value)}><option value="">Select a replacement project manager</option>{Array.from(new Map([...activeAssignments, ...activeUsers.filter((member) => member.role === 'ADMIN').map((member) => ({ userId: member.id, userName: member.name || member.fullName || [member.firstName, member.lastName].filter(Boolean).join(' ') || member.email }))].map((member) => [member.userId, member])).values()).filter((member) => member.userId !== offboarding.userId).map((member) => <option key={member.userId} value={member.userId}>{member.userName}</option>)}</select><span>Choose an active team member or admin. This person becomes the project manager.</span></label>}
               <div className="compact-actions"><button type="button" className="button button-primary" disabled={savingAssignment || offboarding.pendingApproval || (offboarding.userId === selectedProject.projectManagerId && !replacementManagerId)} onClick={() => endAssignment(offboarding.userId)}>Confirm offboarding</button><button type="button" className="button button-secondary" disabled={savingAssignment} onClick={() => setOffboarding(null)}>Cancel</button></div>
             </dialog>}
             <div className="pc-team-summary"><span><Icon name="users" size={18} /><strong>{activeAssignments.length}</strong> active members</span><span><strong>{historicalAssignments.length}</strong> ended assignments</span><span>PM: <strong>{selectedProject.projectManagerName || 'Not assigned'}</strong></span></div>
@@ -762,10 +773,10 @@ export default function ProjectManagement() {
               </div>
 
             </div>
-            <div className="pc-form-section-title"><Icon name="users" size={19} /><div><h4>Ownership & approval routing</h4><p>Choose a project manager and a different person to approve their hours. Onboard the PM through Team, like any other member.</p></div></div>
+            <div className="pc-form-section-title"><Icon name="users" size={19} /><div><h4>Ownership & approval routing</h4><p>Team hours go to the primary PM. Choose who approves the PM’s own hours; the primary PM can also approve their own hours. Onboard the PM through Team to log hours.</p></div></div>
             <div className="form-row pc-routing-row">
               <div className="form-group">
-                <label htmlFor="projectmanagement-field-5">Project Manager</label>
+                <label htmlFor="projectmanagement-field-5">Primary Project Manager</label>
                 <select id="projectmanagement-field-5" required value={form.projectManagerId} onChange={(event) => {
                   const managerAssignment = (selectedProject?.assignments || []).find((assignment) => String(assignment.userId) === event.target.value);
                   setForm({
@@ -775,25 +786,33 @@ export default function ProjectManagement() {
                 }}>
                   <option value="">Select PM</option>
                   {!canManage && selectedProject?.projectManagerId && <option value={selectedProject.projectManagerId}>{selectedProject.projectManagerName || selectedProject.projectManagerId}</option>}
-                  {activeUsers.map((item) => <option key={item.id} value={item.id}>{item.firstName} {item.lastName}</option>)}
+                  {eligibleReviewers.map((item) => <option key={item.id} value={item.id}>{item.firstName} {item.lastName}</option>)}
                 </select>
               </div>
               <div className="form-group">
-                <label htmlFor="projectmanagement-field-6">PM Hours Approver</label>
+                <label htmlFor="projectmanagement-field-6">Approver for the PM’s own hours</label>
                 <select id="projectmanagement-field-6" required value={form.projectManagerHoursApproverId} onChange={(event) => setForm({ ...form, projectManagerHoursApproverId: event.target.value })}>
                   <option value="">Select approver</option>
                   {!canManage && selectedProject?.projectManagerHoursApproverId && <option value={selectedProject.projectManagerHoursApproverId}>{selectedProject.projectManagerHoursApproverName || selectedProject.projectManagerHoursApproverId}</option>}
-                  {activeUsers.map((item) => <option key={item.id} value={item.id}>{item.firstName} {item.lastName}</option>)}
+                  {eligibleReviewers.map((item) => <option key={item.id} value={item.id}>{item.firstName} {item.lastName}</option>)}
                 </select>
               </div>
             </div>
+            {selectedProject && (String(form.projectManagerId) !== String(selectedProject.projectManagerId) || String(form.projectManagerHoursApproverId) !== String(selectedProject.projectManagerHoursApproverId)) && (
+              <div role="status">
+                <strong>Approval handover</strong>
+                <p>Primary PM: {selectedProject.projectManagerName} to {eligibleReviewers.find((item) => String(item.id) === String(form.projectManagerId))?.firstName || 'Select PM'}.</p>
+                <p>{selectedProject.pendingApprovalCount || 0} pending submissions will be checked and transferred where the responsible approver changes. Incoming approvers will be notified. Completed approvals keep their history.</p>
+                <p>The outgoing PM stays on the team. To end their membership, use Team and Offboard, which includes a replacement PM step. Onboard the incoming PM through Team if they need to log hours.</p>
+              </div>
+            )}
             <div className="pc-form-section-title"><Icon name="file" size={19} /><div><h4>Additional context</h4><p>Give the team a short description of the project and its purpose.</p></div></div>
             <div className="form-group">
               <label htmlFor="projectmanagement-field-7">Description</label>
               <textarea id="projectmanagement-field-7" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
             </div>
             {canManage && <div className="compact-actions">
-              <button className="button button-primary" type="submit">{selectedProject ? 'Save Project' : 'Create Project'}</button>
+              <button className="button button-primary" type="submit">{selectedProject ? (String(form.projectManagerId) !== String(selectedProject.projectManagerId) || String(form.projectManagerHoursApproverId) !== String(selectedProject.projectManagerHoursApproverId) ? 'Save and transfer pending approvals' : 'Save Project') : 'Create Project'}</button>
               <button className="button button-secondary" type="button" onClick={cancelProjectEdit}>Cancel</button>
             </div>}
           </div>

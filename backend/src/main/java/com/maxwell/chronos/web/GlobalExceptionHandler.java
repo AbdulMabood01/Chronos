@@ -11,6 +11,16 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleStatus(org.springframework.web.server.ResponseStatusException ex) {
+        return ResponseEntity.status(ex.getStatusCode()).body(ErrorResponse.builder().error("Request failed")
+                .message(ex.getReason()).status(ex.getStatusCode().value()).build());
+    }
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ErrorResponse> handleServiceUnavailable(IllegalStateException ex) {
+        return ResponseEntity.status(503).body(ErrorResponse.builder().error("Service unavailable")
+                .message("Unable to complete the request. Check service configuration and retry.").status(503).build());
+    }
     @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
     public ResponseEntity<ErrorResponse> handleForbidden(org.springframework.security.access.AccessDeniedException ex) {
         return ResponseEntity.status(403).body(ErrorResponse.builder().error("Forbidden")

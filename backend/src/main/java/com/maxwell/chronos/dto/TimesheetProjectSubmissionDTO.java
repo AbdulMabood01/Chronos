@@ -20,6 +20,7 @@ public class TimesheetProjectSubmissionDTO {
     private Long projectId;
     private String projectCode;
     private String projectName;
+    private Long projectManagerId;
     private String projectManagerName;
     private String projectManagerHoursApproverName;
     private String routedApproverName;

@@ -20,17 +20,18 @@ export const AuthProvider = ({ children }) => {
         setUser(response.data);
       }
     } catch (err) {
-      console.error('Auth check failed:', err);
+
       localStorage.removeItem('authToken');
     } finally {
       setLoading(false);
     }
   };
 
-  const login = async (token) => {
+  const login = async (email, password) => {
     try {
-      localStorage.setItem('authToken', token);
-      const response = await authAPI.login();
+      const credentials = await authAPI.login(email, password);
+      localStorage.setItem('authToken', credentials.data.token);
+      const response = await authAPI.getCurrentUser();
       setUser(response.data);
       setError(null);
       return response.data;

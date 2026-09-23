@@ -212,7 +212,7 @@ public class LetterRequestService {
         User admin = userRepository.findById(adminId)
                 .orElseThrow(() -> new IllegalArgumentException("Admin user not found"));
         if (!admin.isSuperAdmin()) {
-            throw new IllegalArgumentException("Only Super Admin can approve letter requests");
+            throw new IllegalArgumentException("Only Admin can approve letter requests");
         }
         return admin;
     }

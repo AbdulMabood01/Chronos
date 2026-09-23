@@ -26,6 +26,7 @@ public class ProjectDTO {
     private String projectManagerName;
     private Long projectManagerHoursApproverId;
     private String projectManagerHoursApproverName;
+    private long pendingApprovalCount;
     private List<ProjectAssignmentDTO> assignments;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

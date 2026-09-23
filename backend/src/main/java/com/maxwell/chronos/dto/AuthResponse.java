@@ -12,6 +12,7 @@ import java.time.LocalDate;
 @AllArgsConstructor
 @Builder
 public class AuthResponse {
+    private String timezone;
     private String phoneNumber;
 
     private String personalEmail;

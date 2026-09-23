@@ -49,9 +49,10 @@ public class ProjectService {
     private final TimesheetProjectSubmissionRepository projectSubmissionRepository;
     private final UserRepository userRepository;
     private final AuditService auditService;
+    private final NotificationService notificationService;
 
     public List<ProjectDTO> getProjects(User requester) {
-        if (requester == null || (!requester.isSuperAdmin() && !requester.isAdmin() && !canReviewProjects(requester.getId()))) {
+        if (requester == null || (!requester.isSuperAdmin() && !requester.isAdmin() && !canManageProjects(requester.getId()))) {
             throw new org.springframework.security.access.AccessDeniedException("Project view permission required");
         }
         return visibleProjects(requester).stream()
@@ -82,6 +83,8 @@ public class ProjectService {
         Project project = projectId == null ? Project.builder().isActive(true).status(ProjectStatus.ACTIVE).build()
                 : projectRepository.findById(projectId).orElseThrow(() -> new IllegalArgumentException("Project not found"));
 
+        Long previousManagerId = project.getProjectManager() == null ? null : project.getProjectManager().getId();
+        Long previousApproverId = project.getProjectManagerHoursApprover() == null ? null : project.getProjectManagerHoursApprover().getId();
         String code = clean(request.getCode());
         String name = clean(request.getName());
         if (code == null || name == null) {
@@ -119,6 +122,7 @@ public class ProjectService {
         if (request.getProjectManagerId() != null) {
             User manager = userRepository.findById(request.getProjectManagerId())
                     .orElseThrow(() -> new IllegalArgumentException("Project manager not found"));
+            requireEligibleReviewer(manager);
             project.setProjectManager(manager);
         } else {
             project.setProjectManager(null);
@@ -127,12 +131,17 @@ public class ProjectService {
         if (request.getProjectManagerHoursApproverId() != null) {
             User approver = userRepository.findById(request.getProjectManagerHoursApproverId())
                     .orElseThrow(() -> new IllegalArgumentException("Project manager hours approver not found"));
+            requireEligibleReviewer(approver);
             project.setProjectManagerHoursApprover(approver);
         } else {
             project.setProjectManagerHoursApprover(null);
         }
 
         Project saved = projectRepository.save(project);
+        if (projectId != null && (!Objects.equals(previousManagerId, request.getProjectManagerId())
+                || !Objects.equals(previousApproverId, request.getProjectManagerHoursApproverId()))) {
+            transferPendingApprovals(saved, requester, previousManagerId, previousApproverId);
+        }
         auditService.logAction(requester.getId(), projectId == null ? "PROJECT_CREATED" : "PROJECT_UPDATED",
                 "Project", saved.getId(), "Code: " + saved.getCode());
         return toDTO(saved);
@@ -241,7 +250,7 @@ public class ProjectService {
 
     public List<ProjectHoursDashboardDTO> getProjectHoursDashboard(int year, int month, User requester) {
         validatePeriod(year, month);
-        if (requester == null || (!requester.isSuperAdmin() && !requester.isAdmin() && !canReviewProjects(requester.getId()))) {
+        if (requester == null || (!requester.isSuperAdmin() && !requester.isAdmin() && !canManageProjects(requester.getId()))) {
             throw new IllegalArgumentException("Project dashboard permission required");
         }
 
@@ -294,15 +303,14 @@ public class ProjectService {
                     .orElseThrow(() -> new IllegalArgumentException("Replacement PM not found"));
             if (replacementUser.getRole() != com.maxwell.chronos.enums.UserRole.ADMIN) {
                 ProjectAssignment replacement = assignmentRepository.findByProjectIdAndUserId(projectId, replacementManagerId)
-                        .orElseThrow(() -> new IllegalArgumentException("The secondary PM must be an active project team member or admin"));
+                        .orElseThrow(() -> new IllegalArgumentException("The secondary PM must be an active project team member or Project Admin"));
                 requireActiveAssignment(replacement);
             }
-            if (!Boolean.TRUE.equals(replacementUser.getIsActive()) ||
-                    (project.getProjectManagerHoursApprover() != null && project.getProjectManagerHoursApprover().getId().equals(replacementManagerId))) {
-                throw new IllegalArgumentException("Choose an active secondary PM different from the PM hours approver");
-            }
+            requireEligibleReviewer(replacementUser);
+            Long previousApproverId = project.getProjectManagerHoursApprover() == null ? null : project.getProjectManagerHoursApprover().getId();
             project.setProjectManager(replacementUser);
             projectRepository.save(project);
+            transferPendingApprovals(project, requester, userId, previousApproverId);
         }
         assignment.setPlannedHours(approvedHoursToDate(projectId, userId));
         assignment.setIsActive(false);
@@ -313,6 +321,35 @@ public class ProjectService {
         auditService.logAction(requester.getId(), "PROJECT_UNASSIGNED", "Project", projectId,
                 "Ended assignment for " + assignment.getUser().getFullName());
         return toDTO(assignment.getProject());
+    }
+
+    private void requireEligibleReviewer(User user) {
+        if (!Boolean.TRUE.equals(user.getIsActive()) || user.isSuperAdmin()) {
+            throw new IllegalArgumentException("Choose an active employee or Project Admin as project manager or PM hours approver");
+        }
+    }
+
+    private void transferPendingApprovals(Project project, User requester, Long previousManagerId, Long previousApproverId) {
+        for (var submission : projectSubmissionRepository.findByProjectId(project.getId())) {
+            if (!pendingApproval(submission)) continue;
+            User next = project.getProjectManager().getId().equals(submission.getTimesheet().getUser().getId())
+                    ? project.getProjectManagerHoursApprover() : project.getProjectManager();
+            if (next == null) throw new IllegalArgumentException("Select a PM hours approver before transferring pending approvals");
+            Long previous = submission.getAssignedApprover() != null ? submission.getAssignedApprover().getId()
+                    : Objects.equals(previousManagerId, submission.getTimesheet().getUser().getId()) ? previousApproverId : previousManagerId;
+            submission.setAssignedApprover(next);
+            if (Objects.equals(previous, next.getId())) continue;
+            projectSubmissionRepository.save(submission);
+            auditService.logAction(requester.getId(), "PROJECT_MANAGER_CHANGED", "TimesheetProjectSubmission", submission.getId(),
+                    "Approval transferred from user " + previous + " to user " + next.getId() + " because project ownership or PM hours approver changed");
+            notificationService.markApprovalReassigned(submission.getId());
+            notificationService.createNotification(next.getId(), "TIMESHEET_SUBMITTED", "Approval transferred to you",
+                    "A pending approval for " + project.getCode() + " was transferred to you during a project handover.",
+                    submission.getId(), "TimesheetProjectSubmission");
+        }
+        auditService.logAction(requester.getId(), "PROJECT_MANAGER_CHANGED", "Project", project.getId(),
+                "PM: " + previousManagerId + " -> " + project.getProjectManager().getId()
+                        + "; PM hours approver: " + previousApproverId + " -> " + (project.getProjectManagerHoursApprover() == null ? null : project.getProjectManagerHoursApprover().getId()));
     }
 
     public boolean isAssigned(Long projectId, Long userId) {
@@ -365,7 +402,7 @@ public class ProjectService {
 
     private void requireProjectAdmin(User user) {
         if (user == null || !user.canManageProjects()) {
-            throw new org.springframework.security.access.AccessDeniedException("Admin permission required");
+            throw new org.springframework.security.access.AccessDeniedException("Admin or Project Admin permission required");
         }
     }
 
@@ -412,6 +449,7 @@ public class ProjectService {
                 .isActive(project.getIsActive())
                 .status(project.getStatus())
                 .totalAllocatedHours(project.getTotalAllocatedHours())
+                .pendingApprovalCount(projectSubmissionRepository.findByProjectId(project.getId()).stream().filter(this::pendingApproval).count())
                 .projectManagerId(project.getProjectManager() != null ? project.getProjectManager().getId() : null)
                 .projectManagerName(project.getProjectManager() != null ? project.getProjectManager().getFullName() : null)
                 .projectManagerHoursApproverId(project.getProjectManagerHoursApprover() != null ? project.getProjectManagerHoursApprover().getId() : null)

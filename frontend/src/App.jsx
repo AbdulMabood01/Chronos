@@ -4,7 +4,9 @@ import { AuthProvider, useAuth } from './AuthContext';
 import { GlobalApiLoader, LoadingIndicator } from './components/Hourglass';
 import ProfileCompletionPrompt from './components/ProfileCompletionPrompt';
 import Login from './pages/Login';
+import Activate from './pages/Activate';
 import Dashboard from './pages/Dashboard';
+import Announcements from './pages/Announcements';
 import TimesheetDetail from './pages/TimesheetDetail';
 import VacationRequests from './pages/VacationRequests';
 import EmployeeRequests from './pages/EmployeeRequests';
@@ -17,6 +19,8 @@ import ProjectManagement from './pages/ProjectManagement';
 import ProjectHoursDashboard from './pages/ProjectHoursDashboard';
 import Settings from './pages/Settings';
 import Reports from './pages/Reports';
+import EmployeeReports from './pages/EmployeeReports';
+import { FeedbackPage, PerformanceReviewsPage } from './pages/FeedbackReviews';
 import Profile from './pages/Profile';
 import { MissingTimesheetsPage, TeamLeaveCalendarPage } from './pages/TeamManagement';
 import NotFound from './pages/NotFound';
@@ -42,10 +46,10 @@ function ProtectedRoute({ children }) {
   const reviewer = operations || user.canReviewProjects;
   const projectManager = operations || user.canManageProjects;
   const path = location.pathname;
-  if ((path === '/admin' || path.startsWith('/admin/') || ['/missing-timesheets', '/team-leave-calendar'].includes(path)) && !reviewer
-      || (['/projects', '/project-hours'].some(p => path === p || path.startsWith(p + '/')) && !projectManager)
-      || (path === '/reports' && !operations)
-      || (['/settings', '/users', '/audit'].includes(path) && user.role !== 'SUPER_ADMIN')) {
+  if ((path === '/admin' || path.startsWith('/admin/')) && !reviewer
+      || (['/projects', '/project-hours', '/missing-timesheets', '/team-leave-calendar'].some(p => path === p || path.startsWith(p + '/')) && !projectManager)
+      || (path === '/time-reports' && !operations)
+      || (['/settings', '/users', '/audit', '/employee-reports', '/reports'].some(p => path === p || path.startsWith(p + '/')) && user.role !== 'SUPER_ADMIN')) {
     return <Navigate to="/dashboard" replace />;
   }
   return children;
@@ -60,7 +64,14 @@ function AppContent({ darkBackground, onToggleBackground }) {
 
   return (
     <Routes>
+      <Route path="/announcements" element={<ProtectedRoute><Layout darkBackground={darkBackground} onToggleBackground={onToggleBackground}><Announcements /></Layout></ProtectedRoute>} />
+      <Route path="/feedback" element={<ProtectedRoute><Layout darkBackground={darkBackground} onToggleBackground={onToggleBackground}><FeedbackPage /></Layout></ProtectedRoute>} />
+      <Route path="/performance-reviews" element={<ProtectedRoute><Layout darkBackground={darkBackground} onToggleBackground={onToggleBackground}><PerformanceReviewsPage /></Layout></ProtectedRoute>} />
+      <Route path="/workplace-reports" element={<ProtectedRoute><Layout darkBackground={darkBackground} onToggleBackground={onToggleBackground}><EmployeeReports /></Layout></ProtectedRoute>} />
+      <Route path="/employee-reports" element={<ProtectedRoute><Navigate to="/reports" replace /></ProtectedRoute>} />
+      <Route path="/reports" element={<ProtectedRoute><Layout darkBackground={darkBackground} onToggleBackground={onToggleBackground}><EmployeeReports management /></Layout></ProtectedRoute>} />
       <Route path="/login" element={<Login />} />
+      <Route path="/activate" element={<Activate />} />
       <Route path="/" element={user ? <Navigate to="/dashboard" /> : <Navigate to="/login" />} />
       <Route
         path="/dashboard"
@@ -189,7 +200,7 @@ function AppContent({ darkBackground, onToggleBackground }) {
         }
       />
       <Route
-        path="/reports"
+        path="/time-reports"
         element={
           <ProtectedRoute>
             <Layout darkBackground={darkBackground} onToggleBackground={onToggleBackground}>

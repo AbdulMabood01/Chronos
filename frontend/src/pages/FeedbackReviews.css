@@ -1,0 +1,94 @@
+.feedback-reviews { max-width: 1100px; }
+.feedback-reviews label { display: flex; flex-direction: column; gap: .5rem; margin: 1rem 0; font-weight: 600; }
+.feedback-reviews input,.feedback-reviews select,.feedback-reviews textarea { padding: .75rem; border: 1px solid var(--border-color,#cbd5e1); border-radius: 8px; color: inherit; background: var(--surface,#fff); font: inherit; width: 100%; }
+.feedback-reviews textarea { min-height: 120px; resize: vertical; }
+.feedback-reviews button { padding: .6rem 1rem; border-radius: 8px; border: 1px solid #94a3b8; cursor: pointer; font: inherit; }
+.feedback-reviews button:disabled { opacity: .5; cursor: default; }
+.review-card { padding: 1.5rem; border: 1px solid #94a3b855; border-radius: 12px; margin: 1.25rem 0; }
+.review-tabs,.review-meta,.review-filters { display: flex; flex-wrap: wrap; gap: 1rem; margin: 1rem 0; }
+.review-tabs [aria-pressed=true] { background: #1e40af; color: white; }
+.review-filters label { flex: 1; min-width: 140px; }
+.review-meta { justify-content: space-between; }
+.review-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.review-card section { margin-top: 1.25rem; }
+.review-card section h3 { margin-bottom: .4rem; }
+.feedback-reviews .review-checkbox { flex-direction: row; align-items: center; }
+.review-checkbox input { width: auto; }
+.privacy-notice { border-left: 3px solid #3b82f6; padding: .8rem; }
+.employee-results { padding: 0; list-style: none; max-height: 260px; overflow-y: auto; }
+.employee-results button { width: 100%; text-align: left; margin-bottom: .4rem; }
+.employee-results small { display: block; }
+.theme-dark .feedback-reviews input,.theme-dark .feedback-reviews textarea,.theme-dark .feedback-reviews select { background: #172334; color: #e2e8f0; }
+/* Feedback follows workspace tokens without changing quarterly review styles. */
+.feedback-page { color: var(--text-primary); }
+.feedback-page > .review-tabs { gap: .5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border-color); margin: 1.5rem 0; }
+.feedback-page button { border-color: var(--border-color); background: var(--surface-color); color: var(--text-primary); font-size: 13px; font-weight: 600; min-height: 42px; }
+.feedback-page .review-tabs [aria-pressed=true] { background: var(--surface-tint); color: var(--primary-color); border-color: var(--primary-color); }
+.feedback-page button:hover:not(:disabled) { background: var(--surface-muted); }
+.feedback-page button:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 3px; }
+.feedback-page .feedback-form { margin-top: 1.5rem; }
+.feedback-form h2 { font-size: 18px; margin-bottom: .5rem; }
+.feedback-form fieldset { border: 0; min-width: 0; padding: 0; margin: 0; }
+.feedback-page label { font-size: 13px; }
+.feedback-page input, .feedback-page select, .feedback-page textarea,
+.theme-dark .feedback-page input, .theme-dark .feedback-page select, .theme-dark .feedback-page textarea { background: var(--surface-color); color: var(--text-primary); border-color: var(--border-color); font-size: 13px; line-height: 1.6; }
+.feedback-page input:focus, .feedback-page select:focus, .feedback-page textarea:focus { outline: none; border-color: var(--primary-color); box-shadow: var(--focus-ring); }
+.feedback-recipient { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 1.5rem; padding: .5rem 0 1rem; border-bottom: 1px solid var(--border-color); }
+.feedback-page .employee-search p { overflow-wrap: anywhere; font-size: 13px; line-height: 1.7; }
+.feedback-page .employee-search p button { margin-top: .5rem; }
+.feedback-page .employee-results small { color: var(--text-secondary); overflow-wrap: anywhere; }
+.feedback-prompts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; padding: 1.5rem 0; }
+.feedback-prompt-general { grid-column: 1 / -1; }
+.feedback-page .feedback-prompt { margin: 0; min-width: 0; }
+.feedback-page .feedback-prompt label { display: block; margin: 0 0 .35rem; }
+.feedback-hint { color: var(--text-secondary); font-size: 12px; margin-bottom: .65rem; }
+.feedback-page textarea { display: block; }
+.feedback-privacy { padding: 1rem 1.25rem; border-radius: 8px; background: var(--surface-muted); border: 1px solid var(--border-color); }
+.feedback-page .feedback-privacy label { margin: 0 0 .5rem; }
+.feedback-page input[type=checkbox] { width: 17px; height: 17px; accent-color: var(--primary-color); flex-shrink: 0; }
+.feedback-submit { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem; margin-top: 1.5rem; }
+.feedback-page .button-primary { background: var(--primary-color); color: white; border-color: var(--primary-color); white-space: nowrap; }
+.feedback-page .button-primary:hover:not(:disabled) { background: var(--primary-dark); }
+.feedback-message { padding: 1rem; margin: 1rem 0; border: 1px solid var(--border-color); border-left: 3px solid var(--success-color); border-radius: 8px; background: var(--surface-color); }
+.feedback-error { border-left-color: var(--danger-color); }
+.feedback-limit-error { color: var(--danger-color); font-size: 13px; }
+.feedback-page .review-card { background: var(--surface-color); border-color: var(--border-color); box-shadow: var(--shadow-card); }
+.feedback-page .review-meta { font-size: 13px; align-items: center; }
+.feedback-page .review-meta time, .feedback-page .review-card > p:last-child { color: var(--text-secondary); font-size: 12px; }
+.feedback-page .review-text { line-height: 1.75; margin: 1rem 0; }
+@media (max-width: 640px) {
+  .feedback-page .feedback-form { padding: 1rem; }
+  .feedback-recipient, .feedback-prompts { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+  .feedback-recipient { gap: 0; }
+  .feedback-submit { flex-direction: column; align-items: stretch; gap: 1rem; }
+  .feedback-page > .review-tabs button { flex: 1 1 auto; }
+  .feedback-page .review-filters { gap: .75rem; }
+}
+.performance-directory, .performance-form { margin: 1.5rem 0; }
+.performance-page fieldset { border: 0; padding: 0; min-width: 0; }
+.performance-heading { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.performance-page h2 { font-size: 18px; }
+.performance-page h3 { font-size: 14px; }
+.performance-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 1.5rem; }
+.performance-wide { grid-column: 1 / -1; }
+.performance-list { display: grid; gap: .75rem; }
+.performance-page .performance-list-item { display: grid; grid-template-columns: minmax(0, 2fr) 90px 90px 110px; align-items: center; gap: 1rem; padding: 1rem; text-align: left; }
+.performance-list-item small { display: block; color: var(--text-secondary); font-weight: 400; margin-top: .35rem; overflow-wrap: anywhere; }
+.performance-status { color: var(--primary-color); background: var(--surface-tint); padding: .4rem .6rem; border-radius: 6px; text-align: center; font-size: 12px; }
+@media (max-width: 640px) {
+  .performance-fields { grid-template-columns: minmax(0, 1fr); }
+  .performance-heading { align-items: stretch; flex-direction: column; }
+  .performance-page .performance-list-item { grid-template-columns: minmax(0, 1fr) auto; }
+}
+
+.feedback-page .feedback-history-card .review-meta { margin: 0; padding-bottom: 1rem; border-bottom: 1px solid var(--border-color); }
+.feedback-history-card .review-meta strong { background: var(--surface-tint); color: var(--primary-color); padding: .35rem .65rem; border-radius: 6px; font-size: 12px; }
+.feedback-card-content { display: grid; gap: 1.25rem; padding: 1.25rem 0; }
+.feedback-history-card .feedback-card-section { margin: 0; min-width: 0; }
+.feedback-history-card .feedback-card-section h3 { color: var(--primary-color); font-size: 13px; font-weight: 700; line-height: 1.5; margin: 0 0 .4rem; }
+.feedback-card-section p { color: var(--text-primary); font-size: 14px; line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
+.feedback-page .feedback-history-card > p:last-child { border-top: 1px solid var(--border-color); padding-top: 1rem; line-height: 1.6; overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .feedback-page .feedback-history-card { padding: 1rem; }
+  .feedback-history-card .review-meta { gap: .5rem; }
+}

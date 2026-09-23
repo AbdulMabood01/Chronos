@@ -1,0 +1,59 @@
+.employee-concerns { max-width: 1200px; margin: auto; }
+.concern-card { background: var(--surface-color); color: var(--text-primary); border: 1px solid var(--border-color); box-shadow: var(--shadow-card); border-radius: 12px; padding: 24px; margin: 20px 0; }
+.concern-form label, .concern-filters label { display: flex; flex-direction: column; gap: 7px; margin-bottom: 18px; font-weight: 600; }
+.concern-form input:not([type=checkbox]), .concern-form textarea, .concern-form select, .concern-filters input, .concern-filters select { width: 100%; min-height: 42px; padding: 11px 12px; border: 1px solid var(--border-color); border-radius: 7px; font: inherit; color: var(--text-primary); background: var(--surface-color); box-sizing: border-box; transition: border-color .15s, box-shadow .15s; }
+.concern-form fieldset { border: 0; padding: 0; min-width: 0; }
+.concern-form small { font-weight: normal; }
+.concern-columns, .concern-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.concern-form .concern-check { flex-direction: row; align-items: center; }
+.concern-check input { width: 18px; height: 18px; flex-shrink: 0; }
+.concern-privacy { padding: 18px; border: 1px solid var(--border-color); border-left: 4px solid var(--primary-color); border-radius: 8px; background: var(--surface-tint); margin: 20px 0; line-height: 1.6; }
+.concern-error { background: #fff0ee; color: #9c2626; padding: 15px; border-radius: 6px; }
+.report-reference { display: block; overflow-wrap: anywhere; font-family: monospace; }
+.concern-table { position: relative; overflow-x: auto; }
+.concern-table table { width: 100%; border-collapse: collapse; text-align: left; }
+.concern-table th, .concern-table td { padding: 12px; border-bottom: 1px solid var(--border-color); }
+.concern-table small { display: block; margin-top: 6px; }
+.concern-heading, .concern-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.concern-pagination { margin-top: 20px; justify-content: flex-end; }
+.concern-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.concern-help { color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
+.concern-id { display: block; min-width: 150px; max-width: 200px; overflow-wrap: anywhere; font-size: 11px; }
+.concern-status { display: inline-block; padding: 5px 9px; border-radius: 6px; background: var(--surface-tint); color: var(--primary-color); font-size: 11px; font-weight: 650; white-space: nowrap; }
+.concern-details { scroll-margin-top: 90px; }
+.concern-details h3 { margin: 24px 0 10px; }
+.concern-details h4 { margin: 18px 0 12px; }
+.concern-details > p { margin-bottom: 10px; }
+.concern-timeline { list-style: none; margin: 20px 0 0 10px; padding: 0 0 0 24px; border-left: 2px solid var(--border-color); }
+.concern-timeline li { position: relative; }
+.concern-timeline li::before { content: ''; position: absolute; width: 10px; height: 10px; border: 3px solid var(--surface-color); border-radius: 50%; background: var(--primary-color); left: -33px; top: 19px; }
+.concern-history li { border-bottom: 1px solid var(--border-color); padding: 15px 0; }
+.employee-concerns button:not(.button) { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 38px; padding: 9px 15px; border: 1px solid var(--border-color); border-radius: 7px; background: var(--surface-color); color: var(--text-primary); font: inherit; font-size: 12px; font-weight: 650; cursor: pointer; transition: background .15s, border-color .15s; overflow-wrap: anywhere; }
+.employee-concerns button:not(.button):hover:not(:disabled) { background: var(--surface-tint); border-color: var(--primary-color); color: var(--primary-color); }
+.employee-concerns button:disabled { opacity: .45; cursor: not-allowed; }
+.employee-concerns button:focus-visible, .employee-concerns input:focus-visible, .employee-concerns textarea:focus-visible, .employee-concerns select:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 3px; }
+.concern-form input:focus, .concern-form textarea:focus, .concern-form select:focus, .concern-filters input:focus, .concern-filters select:focus { border-color: var(--primary-color); box-shadow: var(--focus-ring); }
+.concern-form textarea { resize: vertical; }
+.concern-form input[type=checkbox] { accent-color: var(--primary-color); }
+.concern-form input[type=file]::file-selector-button { border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 12px; margin-right: 12px; background: var(--surface-tint); color: var(--primary-color); font: inherit; font-weight: 650; cursor: pointer; }
+.concern-form small, .concern-table small, .concern-progress + small { color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.concern-table th { color: var(--text-secondary); background: var(--surface-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .6px; }
+.concern-submit-bar { position: sticky; bottom: 12px; z-index: 2; display: flex; align-items: center; gap: 28px; flex-wrap: wrap; padding: 18px 20px; margin-top: 24px; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 10px; box-shadow: var(--shadow-soft); }
+.concern-form-progress { flex: 1 1 260px; }
+.concern-submit-bar .button { flex-shrink: 0; margin: 0; }
+.concern-progress { margin-top: 28px; padding: 20px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--surface-muted); }
+.concern-progress-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 10px; font-size: 13px; }
+.concern-progress-heading > span { color: var(--primary-color); font-weight: 700; }
+.employee-concerns progress { display: block; appearance: none; width: 100%; height: 6px; border: 0; border-radius: 99px; overflow: hidden; margin: 10px 0; background: var(--border-color); color: var(--primary-color); accent-color: var(--primary-color); }
+.employee-concerns progress::-webkit-progress-bar { background: var(--border-color); border-radius: 99px; }
+.employee-concerns progress::-webkit-progress-value { background: var(--primary-color); border-radius: 99px; transition: width .2s ease; }
+.employee-concerns progress::-moz-progress-bar { background: var(--primary-color); border-radius: 99px; }
+.concern-progress-steps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); list-style: none; margin: 16px 0 0; padding: 0; gap: 12px; }
+.concern-progress-steps li { display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 12px; }
+.concern-progress-steps li > span { display: grid; place-items: center; flex: 0 0 26px; height: 26px; border-radius: 50%; background: var(--surface-color); border: 1px solid var(--border-color); font-weight: 700; }
+.concern-progress-steps .is-reached { color: var(--primary-color); font-weight: 650; }
+.concern-progress-steps .is-reached > span { background: var(--surface-tint); border-color: var(--primary-color); }
+.concern-progress-steps [aria-current=step] > span { box-shadow: var(--focus-ring); }
+@media (max-width: 650px) { .concern-submit-bar { bottom: 8px; padding: 14px; gap: 12px; } .concern-submit-bar .button { width: 100%; } .concern-progress-steps { grid-template-columns: 1fr; gap: 10px; } .concern-heading { flex-wrap: wrap; } }
+@media (prefers-reduced-motion: reduce) { .employee-concerns progress::-webkit-progress-value { transition: none; } }
+@media (max-width: 650px) { .concern-columns, .concern-filters { grid-template-columns: 1fr; } .concern-card { padding: 16px; } }

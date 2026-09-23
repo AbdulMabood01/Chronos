@@ -33,7 +33,7 @@ class ReportDownloadTest {
 
     @BeforeEach void setup() {
         employee = User.builder().id(1L).email("employee@example.com").entraId("employee-subject")
-                .role(UserRole.EMPLOYEE).isActive(true).build();
+                .role(UserRole.EMPLOYEE).isActive(true).passwordHash("test-account-hash").build();
         when(users.findByEmail(employee.getEmail())).thenReturn(Optional.of(employee));
         when(service.findUserEntityByEmail(employee.getEmail())).thenReturn(employee);
     }

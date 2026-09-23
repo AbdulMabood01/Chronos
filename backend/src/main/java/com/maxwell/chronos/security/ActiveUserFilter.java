@@ -22,10 +22,9 @@ public class ActiveUserFilter extends OncePerRequestFilter {
         if (SecurityContextHolder.getContext().getAuthentication() instanceof JwtAuthenticationToken auth) {
             String email = auth.getToken().getClaimAsString("preferred_username");
             var user = email == null ? null : users.findByEmail(email).orElse(null);
-            boolean onboarding = "/auth/login".equals(request.getServletPath()) && "POST".equals(request.getMethod());
             if (email == null || auth.getToken().getSubject() == null
-                    || (user == null && !onboarding)
-                    || (user != null && (!Boolean.TRUE.equals(user.getIsActive())
+                    || user == null
+                    || (user != null && (!"ACTIVE".equals(user.getAccountStatus())
                         || !auth.getToken().getSubject().equals(user.getEntraId())))) {
                 response.sendError(403, "Account is inactive or unavailable");
                 return;

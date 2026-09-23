@@ -10,6 +10,8 @@ import java.util.Optional;
 
 @Repository
 public interface TimesheetProjectSubmissionRepository extends JpaRepository<TimesheetProjectSubmission, Long> {
+    @org.springframework.data.jpa.repository.Query("select s from TimesheetProjectSubmission s join fetch s.project join fetch s.timesheet t join fetch t.user where s.project.id in :ids")
+    List<TimesheetProjectSubmission> findForHealth(@org.springframework.data.repository.query.Param("ids") java.util.Set<Long> ids);
     @org.springframework.data.jpa.repository.Query("select s.timesheet.id from TimesheetProjectSubmission s where s.id = :id")
     Optional<Long> findTimesheetId(@org.springframework.data.repository.query.Param("id") Long id);
     Optional<TimesheetProjectSubmission> findByTimesheetIdAndProjectId(Long timesheetId, Long projectId);

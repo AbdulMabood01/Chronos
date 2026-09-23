@@ -15,6 +15,7 @@ vi.mock('../api', () => ({
     updateTimeEntry: vi.fn(),
     deleteTimeEntry: vi.fn(),
     submitProjectTimesheet: vi.fn(),
+    approveProjectSubmission: vi.fn(),
     getApprovalHistory: vi.fn(),
   },
   projectAPI: { getAssignedProjects: vi.fn() },
@@ -43,6 +44,27 @@ beforeEach(() => {
   projectAPI.getAssignedProjects.mockResolvedValue({ data: [{ id: 4, code: 'ATLAS', name: 'Atlas' }] });
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+it('lets a project manager enter hours on their own assigned project', async () => {
+  employee.canReviewProjects = true;
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  const date = `${year}-${String(month).padStart(2, '0')}-10`;
+  timesheetAPI.getTimesheetById.mockResolvedValue({ data: { ...sheet, year, month, status: 'DRAFT', timeEntries: [] } });
+  timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, status: 'DRAFT', plannedHours: 160, routedApproverId: 6 } });
+  projectAPI.getAssignedProjects.mockResolvedValue({ data: [{
+    id: 4, code: 'ATLAS', name: 'Atlas', projectManagerId: 1, status: 'ACTIVE', isActive: true,
+    assignments: [{ userId: 1, isActive: true, startDate: `${year}-01-01`, endDate: `${year}-12-31`, plannedHours: 160 }],
+  }] });
+  open();
+  const input = await screen.findByLabelText(`Hours for ${date}`);
+  await waitFor(() => expect(input.disabled).toBe(false));
+  fireEvent.change(input, { target: { value: '8' } });
+  fireEvent.blur(input);
+  await waitFor(() => expect(timesheetAPI.addTimeEntry).toHaveBeenCalledWith(2,
+    expect.objectContaining({ entryDate: date, hours: '8', projectId: 4 })));
+  expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
+});
 describe('daily notes and summary', () => {
   it.each(['ADMIN', 'EMPLOYEE'])('lets a %s reviewer open populated and empty notes without editing', async (role) => {
     HTMLDialogElement.prototype.showModal = vi.fn(function () { this.setAttribute('open', ''); });
@@ -269,4 +291,16 @@ describe('favorites and corrections', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Resubmit for Approval' }));
     await waitFor(() => expect(timesheetAPI.submitProjectTimesheet).toHaveBeenCalledWith(2, '4'));
   });
+});
+
+
+it('lets the current PM approve their own hours even with a different designated approver', async () => {
+  employee.canReviewProjects = true;
+  timesheetAPI.getTimesheetById.mockResolvedValue({ data: { ...sheet, status: 'SUBMITTED' } });
+  timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, status: 'SUBMITTED', routedApproverId: 9, projectManagerId: 1 } });
+  timesheetAPI.approveProjectSubmission.mockResolvedValue({ data: {} });
+  open(false);
+  fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+  await waitFor(() => expect(timesheetAPI.approveProjectSubmission).toHaveBeenCalledWith(3));
+  expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull();
 });

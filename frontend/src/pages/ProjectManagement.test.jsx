@@ -96,8 +96,8 @@ it('creates a project with routing only and leaves onboarding to Team', async ()
   fireEvent.click(await screen.findByRole('button', { name: 'New Project' }));
   fireEvent.change(screen.getByLabelText('Project Code'), { target: { value: 'P2' } });
   fireEvent.change(screen.getAllByLabelText('Project Name')[1], { target: { value: 'New Project' } });
-  fireEvent.change(screen.getByLabelText('Project Manager'), { target: { value: '3' } });
-  fireEvent.change(screen.getByLabelText('PM Hours Approver'), { target: { value: '4' } });
+  fireEvent.change(screen.getByLabelText('Primary Project Manager'), { target: { value: '3' } });
+  fireEvent.change(screen.getByLabelText('Approver for the PM’s own hours'), { target: { value: '4' } });
   fireEvent.click(screen.getByRole('button', { name: 'Create Project' }));
   await waitFor(() => expect(projectAPI.createProject).toHaveBeenCalledWith(expect.objectContaining({ projectManagerId: 3, projectManagerHoursApproverId: 4 })));
   expect(screen.queryByLabelText('PM Start Date')).toBeNull();
@@ -116,8 +116,8 @@ it('allows the project manager to also be the PM hours approver', async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'New Project' }));
   fireEvent.change(screen.getByLabelText('Project Code'), { target: { value: 'P2' } });
   fireEvent.change(screen.getAllByLabelText('Project Name')[1], { target: { value: 'New Project' } });
-  fireEvent.change(screen.getByLabelText('Project Manager'), { target: { value: '3' } });
-  fireEvent.change(screen.getByLabelText('PM Hours Approver'), { target: { value: '3' } });
+  fireEvent.change(screen.getByLabelText('Primary Project Manager'), { target: { value: '3' } });
+  fireEvent.change(screen.getByLabelText('Approver for the PM’s own hours'), { target: { value: '3' } });
   fireEvent.click(screen.getByRole('button', { name: 'Create Project' }));
   await waitFor(() => expect(projectAPI.createProject).toHaveBeenCalledWith(expect.objectContaining({ projectManagerId: 3, projectManagerHoursApproverId: 3 })));
   expect(screen.queryByText('Project Manager cannot approve their own hours')).toBeNull();
@@ -205,14 +205,14 @@ it('freezes ended hours and calculates remaining from lifetime approvals', async
   expect(screen.getByLabelText('Planned hours for Employee').closest('tr').lastElementChild.textContent).toBe('0.00');
 });
 
-it('blocks pending approval and requires a secondary PM', async () => {
+it('blocks pending approval and requires a replacement PM', async () => {
   currentUser.role = 'ADMIN';
   projectAPI.getProjects.mockResolvedValue({ data: [{ ...project, assignments: [{ ...project.assignments[0], pendingApproval: true }] }] });
   await selectProject();
   fireEvent.click(screen.getByRole('button', { name: 'Team' }));
   fireEvent.click(screen.getByRole('button', { name: 'Offboard Employee' }));
   expect(screen.getByText('Please approve or reject pending hours before offboarding this employee.')).toBeTruthy();
-  expect(screen.getByRole('combobox', { name: /Secondary PM/ })).toBeTruthy();
+  expect(screen.getByRole('combobox', { name: /Replacement PM/ })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Confirm offboarding' }).disabled).toBe(true);
 });
 
@@ -223,4 +223,27 @@ it('uses the shared project workspace for a project manager with read-only actio
   fireEvent.click(screen.getByRole('button', { name: 'Team' }));
   expect(screen.getByLabelText('Start date for Employee').closest('fieldset').disabled).toBe(true);
   expect(userAPI.getAllUsers).not.toHaveBeenCalled();
+});
+
+
+it('excludes Super Admin and inactive users from ownership selections and previews a handover', async () => {
+  currentUser.role = 'ADMIN';
+  userAPI.getAllUsers.mockResolvedValue({ data: [
+    { id: 3, firstName: 'Original', lastName: 'PM', role: 'EMPLOYEE', isActive: true },
+    { id: 4, firstName: 'Next', lastName: 'PM', role: 'ADMIN', isActive: true },
+    { id: 5, firstName: 'Super', lastName: 'Admin', role: 'SUPER_ADMIN', isActive: true },
+    { id: 6, firstName: 'Inactive', lastName: 'User', role: 'EMPLOYEE', isActive: false },
+  ] });
+  projectAPI.getProjects.mockResolvedValue({ data: [{ ...project, projectManagerName: 'Original PM', pendingApprovalCount: 2 }] });
+  projectAPI.updateProject.mockResolvedValue({ data: project });
+  await selectProject();
+  fireEvent.click(screen.getByRole('button', { name: 'Project Details' }));
+  const managers = screen.getByLabelText('Primary Project Manager');
+  expect(Array.from(managers.options).map((option) => option.value)).toEqual(['', '3', '4']);
+  expect(Array.from(screen.getByLabelText('Approver for the PM’s own hours').options).map((option) => option.value)).toEqual(['', '3', '4']);
+  fireEvent.change(managers, { target: { value: '4' } });
+  expect(screen.getByText('Approval handover')).toBeTruthy();
+  expect(screen.getByText(/2 pending submissions/)).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Save and transfer pending approvals' }));
+  await waitFor(() => expect(projectAPI.updateProject).toHaveBeenCalledWith(10, expect.objectContaining({ projectManagerId: 4, projectManagerHoursApproverId: 4 })));
 });

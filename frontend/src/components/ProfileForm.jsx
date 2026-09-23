@@ -5,6 +5,7 @@ import './ProfileForm.css';
 
 const MAX_PROFILE_PHOTO_BYTES = 650 * 1024;
 const PROFILE_PHOTO_SIZE = 512;
+const timezones = Intl.supportedValuesOf?.('timeZone') || ['America/Chicago', 'America/New_York', 'America/Denver', 'America/Los_Angeles', 'Europe/London', 'Asia/Kolkata', 'UTC'];
 const additionalSections = [["Contact details",[["phoneNumber","Phone number","tel","tel"],["personalEmail","Personal email","email","email"]]],["Address",[["addressLine1","Address line 1","text","address-line1"],["addressLine2","Address line 2","text","address-line2"],["city","City","text","address-level2"],["stateProvince","State / Province","text","address-level1"],["postalCode","Postal code","text","postal-code"],["country","Country","text","country-name"]]],["Emergency contact",[["emergencyContactName","Contact name"],["emergencyContactRelationship","Relationship"],["emergencyContactPhone","Contact phone","tel"],["emergencyContactEmail","Contact email","email"]]]];
 const additionalFieldLimits = {"phoneNumber":40,"personalEmail":255,"addressLine1":200,"addressLine2":200,"city":100,"stateProvince":100,"postalCode":20,"country":100,"bloodGroup":3,"emergencyContactName":200,"emergencyContactRelationship":100,"emergencyContactPhone":40,"emergencyContactEmail":255};
 
@@ -20,6 +21,7 @@ const emptyProfile = {
 export default function ProfileForm({ user, onSave, submitLabel = 'Save Profile' }) {
   const [formData, setFormData] = useState({
     ...emptyProfile,
+    timezone: user?.timezone || 'America/Chicago',
     ...Object.fromEntries(Object.keys(additionalFieldLimits).map((field) => [field, user?.[field] || ''])),
     firstName: user?.firstName || '',
     lastName: user?.lastName || '',
@@ -114,6 +116,7 @@ export default function ProfileForm({ user, onSave, submitLabel = 'Save Profile'
     setError('');
     try {
       await onSave({
+        timezone: formData.timezone,
         ...Object.fromEntries(Object.keys(additionalFieldLimits).map((field) => [field, formData[field].trim()])),
         firstName: formData.firstName,
         lastName: formData.lastName,
@@ -223,6 +226,17 @@ export default function ProfileForm({ user, onSave, submitLabel = 'Save Profile'
           />
         </div>}
       </div>
+
+      <fieldset className="profile-details-section">
+        <legend>Reminder preferences</legend>
+        <div className="form-group">
+          <label htmlFor="profile-timezone">Timezone</label>
+          <select id="profile-timezone" value={formData.timezone} onChange={(event) => updateField('timezone', event.target.value)}>
+            {[...new Set([...timezones, 'UTC', formData.timezone])].sort().map((zone) => <option key={zone} value={zone}>{zone.replaceAll('_', ' ')}</option>)}
+          </select>
+          <p>Timesheet reminders arrive at 8:00 PM on Fridays and the last day of each month in this timezone.</p>
+        </div>
+      </fieldset>
 
       <fieldset className="profile-details-section">
         <legend>Personal details</legend>

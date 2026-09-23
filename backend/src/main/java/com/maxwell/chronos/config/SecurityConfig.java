@@ -1,6 +1,6 @@
 package com.maxwell.chronos.config;
 
-import com.maxwell.chronos.security.DevJwtKeys;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -8,7 +8,6 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -24,15 +23,13 @@ public class SecurityConfig {
     @Value("${cors.allowed-origins:http://localhost:5173,http://localhost:3000}")
     private String allowedOrigins;
 
-    @Value("${chronos.jwtSigningKey}")
-    private String jwtSigningKey;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http, JwtDecoder decoder, com.maxwell.chronos.repository.UserRepository users) throws Exception {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(authz -> authz
-                        .requestMatchers("/auth/dev-login").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/auth/login", "/auth/invitations/validate", "/auth/activate").permitAll()
                         .requestMatchers("/health", "/actuator/**").permitAll()
                         .anyRequest().authenticated()
                 )
@@ -41,6 +38,7 @@ public class SecurityConfig {
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(org.springframework.security.config.http.SessionCreationPolicy.STATELESS))
                 .addFilterAfter(new com.maxwell.chronos.security.ActiveUserFilter(users), org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter.class)
+                .addFilterBefore(new com.maxwell.chronos.security.AuthenticationRateLimitFilter(), org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter.class)
                 .csrf(csrf -> csrf.disable());
 
         return http.build();

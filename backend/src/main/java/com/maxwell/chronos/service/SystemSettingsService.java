@@ -32,7 +32,7 @@ public class SystemSettingsService {
 
     public int applyLeaveDefaults(int year, boolean confirmed, com.maxwell.chronos.domain.User requester) {
         if (requester == null || (!requester.isAdmin() && !requester.isSuperAdmin()))
-            throw new org.springframework.security.access.AccessDeniedException("Admin permission required");
+            throw new org.springframework.security.access.AccessDeniedException("Admin or Project Admin permission required");
         if (!confirmed || year < 1900 || year > 9998) throw new IllegalArgumentException("Confirm a valid leave year");
         var vacation = leaveDays(getSetting("vacation_days_per_year").getValue());
         var sick = leaveDays(getSetting("sick_days_per_year").getValue());
