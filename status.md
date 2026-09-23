@@ -124,3 +124,13 @@ These updates summarize the current codebase, including work in progress in the 
 - Used lifetime recorded hours independently of the reporting month; completed-month submission checks avoid flagging current-month drafts as overdue.
 - Disclosed capacity assumptions and unavailable expense budgets, monetary budgets, milestones, and project deadlines instead of creating duplicate manual fields.
 - Verified 26 backend tests, 21 frontend tests, the production build, and desktop/mobile/dark-theme browser behavior including health-error recovery.
+
+## CI Failure Fixes (September 23, 2026)
+
+- Updated profile test selectors to use the person-specific accessible button name.
+- Corrected the team calendar test to distinguish project management permission from hours-review permission, retaining denial for reviewers who are not managers.
+- Split employee copy/resubmit and manager project-favorites browser coverage, and fixed the fixture date so copy-week options remain deterministic.
+- Upgraded Spring Boot to 3.5.16, Tomcat to 10.1.60, PostgreSQL JDBC to 42.7.12, Apache POI to 5.5.1, and PDFBox to 2.0.37. Removed the unused frontend xlsx dependency and its transitive packages.
+- Verified all 179 backend tests, including the CI database integration tests against an isolated PostgreSQL database; all 134 frontend tests; 21 browser scenarios across the full run and focused rerun; and the production frontend build.
+- Verified both CI security scans with Trivy 0.70.0: no HIGH/CRITICAL findings in tracked source/dependencies or the rebuilt backend JAR. Local reports are in backend/target/ci-trivy-results.json and backend/target/ci-trivy-packaged-results.json.
+- Changes are local; a new GitHub Actions run is needed after pushing to confirm the hosted pipeline.

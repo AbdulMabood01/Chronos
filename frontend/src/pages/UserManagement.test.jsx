@@ -11,7 +11,7 @@ afterEach(cleanup);
 it('opens a full profile workspace with employment and leave management', async () => {
   userAPI.getAllUsersAsAdmin.mockResolvedValue({ data: [{ id: 2, firstName: 'Alice', lastName: 'Smith', role: 'EMPLOYEE', isActive: true, dateOfBirth: '1990-01-02', ssnLast4: '0123', addressLine1: '12 Main Street', emergencyContactName: 'Jane Smith', phoneNumber: '555-0100', bloodGroup: 'O+' }] });
   render(<UserManagement />);
-  fireEvent.click(await screen.findByRole('button', { name: 'View profile' }));
+  fireEvent.click(await screen.findByRole('button', { name: "View and update Alice Smith's profile" }));
   expect(screen.queryByRole('dialog')).toBeNull();
   expect(screen.getByRole('region', { name: 'Employee profile' }).textContent).toContain('1990-01-02');
   expect(screen.getByRole('button', { name: 'Save joining date' })).toBeTruthy();
@@ -58,7 +58,7 @@ it('saves employment details and manages leave inside the profile', async () => 
   userAPI.getLeaveBalance.mockResolvedValue({ data: { configured: true, vacation: days, sick: days, bereavement: days } });
   userAPI.updateLeaveAllowance.mockResolvedValue({ data: { configured: true, vacation: { ...days, allowanceDays: 20, remainingDays: 20 }, sick: days, bereavement: days } });
   render(<UserManagement />);
-  fireEvent.click(await screen.findByRole('button', { name: 'View profile' }));
+  fireEvent.click(await screen.findByRole('button', { name: "View and update Alice Smith's profile" }));
   fireEvent.change(screen.getByLabelText('Employment start date'), { target: { value: '2024-01-15' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save joining date' }));
   expect(await screen.findByText('Employment details saved.')).toBeTruthy();
@@ -71,6 +71,6 @@ it('saves employment details and manages leave inside the profile', async () => 
   expect(await screen.findByText('Leave allowance saved.')).toBeTruthy();
   expect(userAPI.updateLeaveAllowance).toHaveBeenCalledWith(2, expect.objectContaining({ vacationDays: 20, reason: 'Annual allocation' }));
   fireEvent.click(screen.getByRole('button', { name: 'Back to users' }));
-  fireEvent.click(screen.getByRole('button', { name: 'View profile' }));
+  fireEvent.click(screen.getByRole('button', { name: "View and update Alice Smith's profile" }));
   expect(screen.getByText('January 15, 2024')).toBeTruthy();
 });

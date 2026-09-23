@@ -16,7 +16,7 @@ test('profile workspace separates details and management on desktop and fits mob
     await route.fulfill({ json: data });
   });
   await page.goto('/users');
-  await page.getByRole('button', { name: 'View profile' }).click();
+  await page.getByRole('button', { name: "View and update Alice Smith's profile" }).click();
   await expect(page.getByRole('heading', { name: 'Alice Smith', exact: true })).toBeVisible();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   const personal = await page.getByRole('region', { name: 'Employee profile', exact: true }).boundingBox();

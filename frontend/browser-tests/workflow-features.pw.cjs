@@ -3,7 +3,8 @@ const fs = require('fs');
 const path = require('path');
 const output = path.resolve(__dirname, '../../backend/target/ui-preview');
 async function setup(page, role = 'EMPLOYEE') {
-  const now = new Date(), year = now.getFullYear(), month = now.getMonth() + 1;
+  const now = new Date('2026-09-23T12:00:00Z'), year = now.getFullYear(), month = now.getMonth() + 1;
+  await page.clock.setFixedTime(now);
   const prefix = year + '-' + String(month).padStart(2, '0');
   const sheet = { id: 2, userId: 1, year, month, status: 'REJECTED', timeEntries: [{ id: 10, projectId: 4, projectCode: 'ATLAS', entryDate: prefix + '-07', hours: 8 }], vacationDays: [] };
   let status = 'REJECTED';
@@ -12,7 +13,7 @@ async function setup(page, role = 'EMPLOYEE') {
     const url = new URL(route.request().url()), method = route.request().method();
     let data = [];
     if (url.pathname.endsWith('/auth/me')) data = { id: 1, firstName: 'Alice', lastName: 'Smith', role, canReviewProjects: role === 'ADMIN', profileCompleted: true };
-    else if (url.pathname.endsWith('/projects/assigned')) data = [{ id: 4, code: 'ATLAS', name: 'Atlas platform', status: 'ACTIVE', assignments: [{ userId: 1, isActive: true, startDate: prefix + '-01', endDate: prefix + '-' + new Date(year, month, 0).getDate() }] }];
+    else if (url.pathname.endsWith('/projects/assigned') || url.pathname === '/api/projects') data = [{ id: 4, code: 'ATLAS', name: 'Atlas platform', status: 'ACTIVE', assignments: [{ userId: 1, isActive: true, startDate: prefix + '-01', endDate: prefix + '-' + new Date(year, month, 0).getDate() }] }];
     else if (url.pathname.endsWith('/timesheets/missing')) data = [{ userId: 8, userName: 'Sam Jones', projectId: 4, projectCode: 'ATLAS', status: 'NOT_STARTED', hours: 0 }];
     else if (url.pathname.endsWith('/copy-week')) {
       const date = url.searchParams.get('weekStart');
@@ -28,11 +29,10 @@ async function setup(page, role = 'EMPLOYEE') {
   fs.mkdirSync(output, { recursive: true });
   return prefix;
 }
-test('employee copies hours, favorites a project and resubmits corrections', async ({ page }) => {
+test('employee copies hours and resubmits corrections', async ({ page }) => {
   const prefix = await setup(page);
   await page.goto('/timesheet/2');
   await expect(page.getByRole('region', { name: 'Requested corrections' })).toBeVisible();
-  await page.getByRole('button', { name: 'Add to favorites' }).click();
   await page.getByLabel('Destination week').selectOption(prefix + '-14');
   await page.getByRole('button', { name: 'Preview copy' }).click();
   await expect(page.getByRole('button', { name: 'Copy hours', exact: true })).toBeEnabled();
@@ -45,8 +45,14 @@ test('employee copies hours, favorites a project and resubmits corrections', asy
   await page.screenshot({ path: path.join(output, 'timesheet-copy-mobile.png'), fullPage: true });
   await page.getByRole('button', { name: 'Resubmit for Approval' }).click();
   await expect(page.getByRole('region', { name: 'Requested corrections' })).toHaveCount(0);
+});
+test('manager favorites a project and keeps the selection after reloading', async ({ page }) => {
+  await setup(page, 'ADMIN');
+  await page.goto('/projects');
+  await page.getByRole('button', { name: 'Add to favorites' }).click();
+  await expect(page.getByRole('button', { name: 'Remove from favorites' })).toHaveAttribute('aria-pressed', 'true');
   await page.reload();
-  await expect(page.getByRole('button', { name: 'Remove from favorites' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Remove from favorites' })).toHaveAttribute('aria-pressed', 'true');
 });
 test('leave request shows balance preview before saving on mobile', async ({ page }) => {
   await setup(page);

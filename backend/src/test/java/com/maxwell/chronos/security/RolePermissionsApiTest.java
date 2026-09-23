@@ -55,6 +55,8 @@ class RolePermissionsApiTest {
         user.setRole(UserRole.EMPLOYEE);
         mvc.perform(get("/vacation/team-calendar").param("year", "2026").param("month", "9").with(token())).andExpect(status().isForbidden());
         when(projects.existsByProjectManagerIdOrProjectManagerHoursApproverId(1L,1L)).thenReturn(true);
+        mvc.perform(get("/vacation/team-calendar").param("year", "2026").param("month", "9").with(token())).andExpect(status().isForbidden());
+        when(projects.existsByProjectManagerId(1L)).thenReturn(true);
         mvc.perform(get("/vacation/team-calendar").param("year", "2026").param("month", "9").with(token())).andExpect(status().isOk());
     }
 
