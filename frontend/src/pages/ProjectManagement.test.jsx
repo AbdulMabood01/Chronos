@@ -6,7 +6,7 @@ import ProjectManagement from './ProjectManagement';
 import { projectAPI, userAPI } from '../api';
 vi.mock('../api');
 vi.mock('../AuthContext', () => ({ useAuth: () => ({ user: currentUser }) }));
-const currentUser = { id: 1, role: 'SUPER_ADMIN' };
+const currentUser = { id: 1, role: 'ADMIN' };
 const project = { id: 10, code: 'P1', name: 'Atlas', status: 'ACTIVE', projectManagerId: 3, projectManagerHoursApproverId: 4,
   assignments: [{ id: 5, userId: 3, userName: 'Employee', isActive: true, startDate: '2026-09-01', endDate: '2026-09-30', billRate: 10, plannedHours: 40 }] };
 
@@ -15,7 +15,7 @@ beforeEach(() => {
   // jsdom does not implement the browser's modal dialog methods.
   HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
   HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); };
-  currentUser.role = 'SUPER_ADMIN';
+  currentUser.role = 'ADMIN';
   currentUser.canReviewProjects = false;
   localStorage.clear();
   projectAPI.getProjects.mockResolvedValue({ data: [project] });
@@ -30,7 +30,7 @@ async function selectProject() {
   fireEvent.click(await screen.findByRole('button', { name: /Atlas/ }));
 }
 
-it('lets SuperAdmin read all project tabs without write controls', async () => {
+it('lets Admin read all project tabs without write controls', async () => {
   await selectProject();
   expect(screen.queryByRole('button', { name: 'New Project' })).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Project Details' }));
@@ -49,7 +49,7 @@ it('lets SuperAdmin read all project tabs without write controls', async () => {
 });
 
 it('shows editable assigned project hours from the assignment instead of monthly dashboard plans', async () => {
-  currentUser.role = 'ADMIN';
+  currentUser.role = 'PROJECT_ADMIN';
   projectAPI.getHoursDashboard.mockResolvedValue({ data: [{ projectId: 10, employees: [{ userId: 3, userName: 'Employee', plannedHours: 0, totalLoggedHours: 12, status: 'SUBMITTED' }] }] });
   await selectProject();
   fireEvent.click(screen.getByRole('button', { name: 'Hours' }));
@@ -60,7 +60,7 @@ it('shows editable assigned project hours from the assignment instead of monthly
 });
 
 it('persists favorites from project cards and sorts favorite projects first', async () => {
-  currentUser.role = 'ADMIN';
+  currentUser.role = 'PROJECT_ADMIN';
   projectAPI.getProjects.mockResolvedValue({ data: [
     { ...project, id: 10, code: 'ATLAS', name: 'Atlas' },
     { ...project, id: 11, code: 'ZEBRA', name: 'Zebra' },
@@ -76,7 +76,7 @@ it('persists favorites from project cards and sorts favorite projects first', as
 });
 
 it('retains Admin project editing', async () => {
-  currentUser.role = 'ADMIN';
+  currentUser.role = 'PROJECT_ADMIN';
   await selectProject();
   expect(screen.getByRole('button', { name: 'New Project' })).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: 'Project Details' }));
@@ -86,7 +86,7 @@ it('retains Admin project editing', async () => {
 });
 
 it('creates a project with routing only and leaves onboarding to Team', async () => {
-  currentUser.role = 'ADMIN';
+  currentUser.role = 'PROJECT_ADMIN';
   userAPI.getAllUsers.mockResolvedValue({ data: [
     { id: 3, firstName: 'Project', lastName: 'Manager', isActive: true, hourlyRate: 70 },
     { id: 4, firstName: 'Hours', lastName: 'Approver', isActive: true, hourlyRate: 80 },
@@ -97,7 +97,7 @@ it('creates a project with routing only and leaves onboarding to Team', async ()
   fireEvent.change(screen.getByLabelText('Project Code'), { target: { value: 'P2' } });
   fireEvent.change(screen.getAllByLabelText('Project Name')[1], { target: { value: 'New Project' } });
   fireEvent.change(screen.getByLabelText('Primary Project Manager'), { target: { value: '3' } });
-  fireEvent.change(screen.getByLabelText('Approver for the PM’s own hours'), { target: { value: '4' } });
+  fireEvent.change(screen.getByLabelText('Approver for the PMï¿½s own hours'), { target: { value: '4' } });
   fireEvent.click(screen.getByRole('button', { name: 'Create Project' }));
   await waitFor(() => expect(projectAPI.createProject).toHaveBeenCalledWith(expect.objectContaining({ projectManagerId: 3, projectManagerHoursApproverId: 4 })));
   expect(screen.queryByLabelText('PM Start Date')).toBeNull();
@@ -107,7 +107,7 @@ it('creates a project with routing only and leaves onboarding to Team', async ()
 });
 
 it('allows the project manager to also be the PM hours approver', async () => {
-  currentUser.role = 'ADMIN';
+  currentUser.role = 'PROJECT_ADMIN';
   userAPI.getAllUsers.mockResolvedValue({ data: [
     { id: 3, firstName: 'Project', lastName: 'Manager', isActive: true, hourlyRate: 70 },
   ] });
@@ -117,7 +117,7 @@ it('allows the project manager to also be the PM hours approver', async () => {
   fireEvent.change(screen.getByLabelText('Project Code'), { target: { value: 'P2' } });
   fireEvent.change(screen.getAllByLabelText('Project Name')[1], { target: { value: 'New Project' } });
   fireEvent.change(screen.getByLabelText('Primary Project Manager'), { target: { value: '3' } });
-  fireEvent.change(screen.getByLabelText('Approver for the PM’s own hours'), { target: { value: '3' } });
+  fireEvent.change(screen.getByLabelText('Approver for the PMï¿½s own hours'), { target: { value: '3' } });
   fireEvent.click(screen.getByRole('button', { name: 'Create Project' }));
   await waitFor(() => expect(projectAPI.createProject).toHaveBeenCalledWith(expect.objectContaining({ projectManagerId: 3, projectManagerHoursApproverId: 3 })));
   expect(screen.queryByText('Project Manager cannot approve their own hours')).toBeNull();
@@ -137,7 +137,7 @@ it('sums all resource assignments instead of the manual allocation or monthly pl
 });
 
 it('saves resource hours for the project without a monthly period', async () => {
-  currentUser.role = 'ADMIN';
+  currentUser.role = 'PROJECT_ADMIN';
   projectAPI.updatePlannedHours.mockResolvedValue({ data: project });
   await selectProject();
   fireEvent.click(screen.getByRole('button', { name: 'Hours' }));
@@ -161,7 +161,7 @@ it('restores saved resource hours when the project assignment has no hours', asy
 });
 
 it('requires all onboarding fields and sends hours with the assignment', async () => {
-  currentUser.role = 'ADMIN';
+  currentUser.role = 'PROJECT_ADMIN';
   userAPI.getAllUsers.mockResolvedValue({ data: [{ id: 9, firstName: 'New', lastName: 'Member', isActive: true }] });
   projectAPI.assignEmployee.mockResolvedValue({ data: project });
   await selectProject();
@@ -178,7 +178,7 @@ it('requires all onboarding fields and sends hours with the assignment', async (
 
 it('confirms offboarding and removes the Hours status column', async () => {
   projectAPI.getProjects.mockResolvedValue({ data: [{ ...project, projectManagerId: 8 }] });
-  currentUser.role = 'ADMIN';
+  currentUser.role = 'PROJECT_ADMIN';
   projectAPI.removeEmployee.mockResolvedValue({ data: project });
   await selectProject();
   fireEvent.click(screen.getByRole('button', { name: 'Hours' }));
@@ -194,7 +194,7 @@ it('confirms offboarding and removes the Hours status column', async () => {
 });
 
 it('freezes ended hours and calculates remaining from lifetime approvals', async () => {
-  currentUser.role = 'ADMIN';
+  currentUser.role = 'PROJECT_ADMIN';
   projectAPI.getProjects.mockResolvedValue({ data: [{ ...project, assignments: [{ ...project.assignments[0], isActive: false, plannedHours: 35, approvedHoursToDate: 35 }] }] });
   await selectProject();
   expect(screen.getByRole('img', { name: /Total project hours: 35.00/ })).toBeTruthy();
@@ -206,7 +206,7 @@ it('freezes ended hours and calculates remaining from lifetime approvals', async
 });
 
 it('blocks pending approval and requires a replacement PM', async () => {
-  currentUser.role = 'ADMIN';
+  currentUser.role = 'PROJECT_ADMIN';
   projectAPI.getProjects.mockResolvedValue({ data: [{ ...project, assignments: [{ ...project.assignments[0], pendingApproval: true }] }] });
   await selectProject();
   fireEvent.click(screen.getByRole('button', { name: 'Team' }));
@@ -226,12 +226,12 @@ it('uses the shared project workspace for a project manager with read-only actio
 });
 
 
-it('excludes Super Admin and inactive users from ownership selections and previews a handover', async () => {
-  currentUser.role = 'ADMIN';
+it('excludes Admin and inactive users from ownership selections and previews a handover', async () => {
+  currentUser.role = 'PROJECT_ADMIN';
   userAPI.getAllUsers.mockResolvedValue({ data: [
     { id: 3, firstName: 'Original', lastName: 'PM', role: 'EMPLOYEE', isActive: true },
-    { id: 4, firstName: 'Next', lastName: 'PM', role: 'ADMIN', isActive: true },
-    { id: 5, firstName: 'Super', lastName: 'Admin', role: 'SUPER_ADMIN', isActive: true },
+    { id: 4, firstName: 'Next', lastName: 'PM', role: 'PROJECT_ADMIN', isActive: true },
+    { id: 5, firstName: 'Super', lastName: 'Admin', role: 'ADMIN', isActive: true },
     { id: 6, firstName: 'Inactive', lastName: 'User', role: 'EMPLOYEE', isActive: false },
   ] });
   projectAPI.getProjects.mockResolvedValue({ data: [{ ...project, projectManagerName: 'Original PM', pendingApprovalCount: 2 }] });
@@ -240,7 +240,7 @@ it('excludes Super Admin and inactive users from ownership selections and previe
   fireEvent.click(screen.getByRole('button', { name: 'Project Details' }));
   const managers = screen.getByLabelText('Primary Project Manager');
   expect(Array.from(managers.options).map((option) => option.value)).toEqual(['', '3', '4']);
-  expect(Array.from(screen.getByLabelText('Approver for the PM’s own hours').options).map((option) => option.value)).toEqual(['', '3', '4']);
+  expect(Array.from(screen.getByLabelText('Approver for the PMï¿½s own hours').options).map((option) => option.value)).toEqual(['', '3', '4']);
   fireEvent.change(managers, { target: { value: '4' } });
   expect(screen.getByText('Approval handover')).toBeTruthy();
   expect(screen.getByText(/2 pending submissions/)).toBeTruthy();

@@ -16,16 +16,19 @@ public class TimesheetReminderEmailService {
     private final ObjectProvider<JavaMailSender> senderProvider;
     private final String from;
     private final String appUrl;
+    private final EmailAlertService alerts;
 
     public TimesheetReminderEmailService(ObjectProvider<JavaMailSender> senderProvider,
             @Value("${chronos.mail.from:}") String from,
-            @Value("${chronos.app-url:http://localhost:5173}") String appUrl) {
+            @Value("${chronos.app-url:http://localhost:5173}") String appUrl, EmailAlertService alerts) {
         this.senderProvider = senderProvider;
         this.from = from;
         this.appUrl = appUrl;
+        this.alerts = alerts;
     }
 
     public void sendReminder(User user, YearMonth period) {
+        if (!alerts.preferences(user.getId()).allows(EmailAlertService.Category.TIMESHEETS)) return;
         JavaMailSender sender = senderProvider.getIfAvailable();
         if (sender == null || from.isBlank()) {
             throw new IllegalStateException("Configure spring.mail.host and chronos.mail.from to send timesheet reminders");

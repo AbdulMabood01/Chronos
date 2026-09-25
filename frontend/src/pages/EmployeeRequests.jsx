@@ -6,6 +6,7 @@ import { useAuth } from '../AuthContext';
 import { letterRequestAPI } from '../api';
 import { LoadingIndicator } from '../components/Hourglass';
 import logoUrl from '../assets/Logo.png';
+import managerSignatureUrl from '../assets/manager-signature.png';
 import '../styles.css';
 
 const REQUEST_TYPES = {
@@ -104,14 +105,14 @@ export default function EmployeeRequests() {
     let letterBody;
 
     if (formData.requestType === 'TRAVEL') {
-      letterBody = `This letter is issued at the request of ${fullName} in connection with planned travel.\n\nThis is to confirm that ${fullName} is currently employed with Maxwell Network Inc as ${title} and has been employed with the company since ${startDate}.\n\nBased on the information submitted for review, ${fullName} plans to travel${formData.destinationCountry ? ` to ${formData.destinationCountry}` : ''} from ${formData.travelStartDate || '[travel start date]'} to ${formData.travelEndDate || '[travel end date]'}. The company has no restriction on this travel during the stated period, provided all applicable company policies and work obligations are satisfied.\n\n${fullName} is expected to continue employment with Maxwell Network Inc following the travel period. This letter is provided for presentation to the appropriate requesting authority, airline, consulate, border official, or other concerned party.`;
+      letterBody = `At the request of ${fullName}, this letter confirms their current employment with Maxwell Network Inc as ${title}. Their employment began on ${startDate}.\n\nAccording to the information provided with their request, ${fullName} plans to travel${formData.destinationCountry ? ` to ${formData.destinationCountry}` : ''} from ${formData.travelStartDate || '[travel start date]'} through ${formData.travelEndDate || '[travel end date]'}.\n\n${fullName} remains an active employee and is expected to resume their work responsibilities after the stated travel period. This letter confirms employment and the travel dates supplied to us; it does not replace any required travel authorization.`;
     } else if (formData.requestType === 'VACATION') {
-      letterBody = `This letter is issued at the request of ${fullName} for vacation confirmation purposes.\n\nThis is to confirm that ${fullName} is currently employed with Maxwell Network Inc as ${title} and has been employed with the company since ${startDate}.\n\n${fullName} has requested vacation leave from ${formData.vacationStartDate || '[vacation start date]'} through ${formData.vacationEndDate || '[vacation end date]'}. The request has been submitted through the company's administrative workflow and is subject to final approval.\n\nThis letter may be used to confirm the employee's current employment status and the vacation dates submitted for administrative review. ${fullName} is expected to resume regular work responsibilities after the approved vacation period.`;
+      letterBody = `At the request of ${fullName}, this letter confirms their current employment with Maxwell Network Inc as ${title}. Their employment began on ${startDate}.\n\n${fullName} has provided vacation dates of ${formData.vacationStartDate || '[vacation start date]'} through ${formData.vacationEndDate || '[vacation end date]'}. These dates are recorded with the company for administrative review and remain subject to the applicable leave approval process.\n\n${fullName} is expected to resume their regular work responsibilities following any approved leave. Please contact our Human Resources department if further employment verification is needed.`;
     } else {
-      letterBody = `This letter is issued at the request of ${fullName} for employment verification purposes.\n\nThis is to confirm that ${fullName} is currently employed with Maxwell Network Inc. ${fullName} holds the position of ${title} and has been employed with the company since ${startDate}.\n\nThis confirmation is based on the information available in the company's employment records as of the date of this letter. The employee remains in active status with the organization.\n\nPlease accept this letter as official confirmation of current employment. Any additional verification may be directed to Maxwell Network Inc Administration.`;
+      letterBody = `At the request of ${fullName}, this letter confirms their current employment with Maxwell Network Inc.\n\n${fullName} has been employed since ${startDate} and currently holds the position of ${title}. Our records show that their employment is active as of the date of this letter.\n\nThis verification reflects our employment records and is provided for the recipient's use. For further confirmation, please contact our Human Resources department using the details on this letter.`;
     }
 
-    return `Maxwell Network Inc\n\nTo whomsoever it may be concerned.\n\nSubject: ${type}\n\n${letterBody}\n\nBest Regards,\nSyed Hussain\nManager\n\n${EMPLOYER_INFORMATION}\n\n${COMPANY_FOOTER}`;
+    return `Maxwell Network Inc\n\nTo whom it may concern,\n\nSubject: ${type}\n\n${letterBody}\n\nBest Regards,\nSyed Hussain\nManager\n\n${EMPLOYER_INFORMATION}\n\n${COMPANY_FOOTER}`;
   }, [formData]);
 
   const loadRequests = async () => {
@@ -350,12 +351,10 @@ export default function EmployeeRequests() {
               {preview.split(EMPLOYER_INFORMATION)[0].split('\n').slice(1).map((line, index) => (
                 line
                   ? (
-                      <p
-                        className={line.toLowerCase().startsWith('to whomsoever') ? 'letter-salutation' : ''}
-                        key={`${line}-${index}`}
-                      >
-                        {line}
-                      </p>
+                      <React.Fragment key={`${line}-${index}`}>
+                        {line === 'Best Regards,' && <img className="letter-manager-signature" src={managerSignatureUrl} alt="Manager signature" />}
+                        <p className={line.toLowerCase().startsWith('to whom') ? 'letter-salutation' : ''}>{line}</p>
+                      </React.Fragment>
                     )
                   : <br key={`break-${index}`} />
               ))}

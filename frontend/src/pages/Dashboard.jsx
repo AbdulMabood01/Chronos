@@ -1,87 +1,110 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../AuthContext';
-import { letterRequestAPI, notificationAPI, timesheetAPI, vacationAPI } from '../api';
-import AdminDashboard from './AdminDashboard';
-import { AnnouncementPanel } from './Announcements';
 import { format } from 'date-fns';
-import '../styles.css';
+import { useAuth } from '../AuthContext';
+import { announcementAPI, feedbackReviewsAPI, letterRequestAPI, notificationAPI, projectAPI, timesheetAPI, userAPI, vacationAPI } from '../api';
 import Icon from '../components/Icon';
+import { LoadingIndicator } from '../components/Hourglass';
+import { buildDashboard } from '../utils/dashboard';
 import './Dashboard.css';
+import ActionRow from '../components/DashboardActionRow';
+import EmployeeDashboard from './EmployeeDashboard';
+import TimeSculpture from '../components/TimeSculpture';
+import './ManagementDashboard.css';
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const [timesheet, setTimesheet] = useState(null);
-  const [vacations, setVacations] = useState([]);
-  const [letterRequests, setLetterRequests] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const systemAdmin = user?.role === 'ADMIN';
+  const manager = systemAdmin || user?.role === 'PROJECT_ADMIN' || user?.canManageProjects;
+  const reviewer = manager || user?.canReviewProjects;
+  const [state, setState] = useState({ data: {}, errors: [], loading: true });
+  const [revision, setRevision] = useState(0);
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
-    if (!user || user.role === 'SUPER_ADMIN') return;
-
-    const loadHome = async () => {
-      const now = new Date();
-      try {
-        const [timesheetRes, vacationRes, unreadRes, letterRes] = await Promise.all([
-          timesheetAPI.getTimesheet(now.getFullYear(), now.getMonth() + 1),
-          vacationAPI.getMyRequests(),
-          notificationAPI.getUnreadCount(),
-          letterRequestAPI.getMyRequests(),
-        ]);
-        setTimesheet(timesheetRes.data);
-        setVacations(vacationRes.data || []);
-        setUnreadCount(Number(unreadRes.data || 0));
-        setLetterRequests(letterRes.data || []);
-      } catch (err) {
-        setError(true);
-      } finally {
-        setLoading(false);
-      }
+    if (!user) return;
+    let active = true;
+    const now = new Date();
+    const requests = {
+      announcements: () => announcementAPI.list(),
+      notifications: () => notificationAPI.getUnreadNotifications(),
+      ...(!manager || systemAdmin ? { reviews: () => feedbackReviewsAPI.reviews() } : {}),
+      ...(manager ? {
+        projects: () => projectAPI.getProjects(),
+        health: () => projectAPI.getHealth(),
+      } : {
+        projects: () => projectAPI.getAssignedProjects(),
+        sheets: () => timesheetAPI.getMyTimesheets(),
+        balance: () => userAPI.getLeaveBalance(user.id, now.getFullYear()),
+      }),
+      ...(reviewer && !systemAdmin ? { approvals: () => timesheetAPI.getPendingProjectSubmissions() } : {}),
+      ...(systemAdmin ? {
+        employees: () => userAPI.getAllUsers(),
+        vacations: () => vacationAPI.getPendingRequests(),
+        letters: () => letterRequestAPI.getPendingRequests(),
+      } : {}),
     };
+    const load = async () => {
+      setState({ data: {}, errors: [], loading: true });
+      const keys = Object.keys(requests);
+      const results = await Promise.allSettled(keys.map(key => Promise.resolve().then(requests[key])));
+      if (!active) return;
+      const data = {}, errors = [];
+      results.forEach((result, index) => {
+        const key = keys[index];
+        if (result.status === 'fulfilled' && (key === 'balance' ? result.value?.data && !Array.isArray(result.value.data) : Array.isArray(result.value?.data))) data[key] = result.value.data;
+        else errors.push(key);
+      });
+      setState({ data, errors, loading: false });
+    };
+    load();
+    const refresh = () => setRevision(value => value + 1);
+    window.addEventListener('focus', refresh);
+    return () => { active = false; window.removeEventListener('focus', refresh); };
+  }, [user?.id, user?.role, manager, reviewer, revision]);
 
-    loadHome();
-  }, [user]);
+  const model = buildDashboard(state.data, user, new Date());
+  const attention = expanded ? model.attention : model.attention.slice(0, 3);
+  const news = model.announcements.filter(item => !model.attention.some(action => action.id === `announcement-${item.id}`)).slice(0, 2);
+  const unavailable = state.loading ? 'Loading…' : 'Unavailable';
 
-  const now = new Date();
-  const monthName = format(now, 'MMMM yyyy');
-  const monthProgress = Math.min(100, Math.round((now.getDate() / new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()) * 100));
-  const approvedVacationDays = useMemo(() => vacations
-    .filter((request) => request.status === 'APPROVED' || request.status === 'LOCKED')
-    .reduce((sum, request) => sum + (Number(request.hours || 0) / 8), 0), [vacations]);
-  const activeVacation = vacations.find((request) => ['DRAFT', 'REJECTED'].includes(request.status));
-  const submittedVacationCount = vacations.filter((request) => request.status === 'SUBMITTED').length;
-  const readyLettersCount = letterRequests.filter((request) => request.status === 'APPROVED').length;
+  if (!manager) return <EmployeeDashboard user={user} model={model} state={state} onRefresh={() => setRevision(value => value + 1)} />;
 
-  if (user?.role === 'SUPER_ADMIN') {
-    return <><div className="page-container"><AnnouncementPanel /></div><AdminDashboard /></>;
-  }
-
-  return (
-    <div className="page-container employee-home">
-      <div className="home-page-heading"><div><span className="eyebrow">YOUR WORKSPACE</span><h1>A little clarity for your day.</h1></div><span className="home-date">{format(now, 'EEEE, MMMM d')}</span></div>
-      {error && <div className="error-message" role="alert">We couldn't load your workspace summary. Open Timesheets or Requests to view your records.</div>}
-      <AnnouncementPanel />
-      <section className="employee-hero">
-        <div className="hero-copy"><span className="hero-kicker"><span/>MAKE TIME FOR WHAT MATTERS</span>
-          <h2>Welcome back,<br/>{user?.firstName || 'there'}.</h2>
-          <p>Keep your hours, time off, and requests<br className="desktop-break"/> together. Get on with your best work.</p>
-          <Link className="button hero-action" to="/timesheets">Open my timesheet <Icon name="arrow" size={18}/></Link>
-        </div>
-        <div className="hero-month"><div className="month-scene"><div className="month-orbit month-orbit-outer" aria-hidden="true"/><div className="month-orbit month-orbit-inner" aria-hidden="true"/><div className="month-ring" style={{ '--progress': monthProgress + '%' }}><div><small>MONTH ELAPSED</small><strong>{monthProgress}<span>%</span></strong></div></div></div><strong>{monthName}</strong><span>{new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - now.getDate()} days remaining</span></div>
-      </section>
-      <div className="section-heading"><h2>Your month at a glance</h2><span>{monthName}</span></div>
-      <section className="employee-home-grid" aria-label="Workspace summary" aria-busy={loading}>
-        <Link className="employee-command-card" to="/timesheets"><div className="metric-heading"><span className="metric-icon"><Icon name="clock"/></span><Icon name="arrow" size={17}/></div><span>Hours logged</span><strong>{loading || error ? '\u2014' : Number(timesheet?.totalHours || 0).toFixed(1)}<small> hrs</small></strong><p>{timesheet?.status ? timesheet.status.replaceAll('_', ' ').toLowerCase() : 'View your current timesheet'}</p></Link>
-        <Link className="employee-command-card" to="/vacation"><div className="metric-heading"><span className="metric-icon"><Icon name="calendar"/></span><Icon name="arrow" size={17}/></div><span>Approved time off</span><strong>{loading || error ? '\u2014' : approvedVacationDays.toFixed(1)}<small> days</small></strong><p>Across all requests &middot; {submittedVacationCount} pending</p></Link>
-        <Link className="employee-command-card" to="/notifications"><div className="metric-heading"><span className="metric-icon"><Icon name="bell"/></span><Icon name="arrow" size={17}/></div><span>Your inbox</span><strong>{loading || error ? '\u2014' : unreadCount}<small> unread</small></strong><p>Updates on your approvals</p></Link>
-        <Link className="employee-command-card" to="/requests"><div className="metric-heading"><span className="metric-icon"><Icon name="file"/></span><Icon name="arrow" size={17}/></div><span>Approved letters</span><strong>{loading || error ? '\u2014' : readyLettersCount}<small> ready</small></strong><p>View and download your letters</p></Link>
-      </section>
-      <section className="home-lower-grid">
-        <div className="home-action-panel"><span className="eyebrow">UP NEXT</span><h2>{activeVacation ? 'A little time away starts here.' : timesheet?.status === 'REJECTED' ? 'Your timesheet needs a second look.' : 'Keep your month up to date.'}</h2><p>{activeVacation ? 'Pick up your time-off request where you left it.' : timesheet?.status === 'REJECTED' ? 'Review the feedback, update your hours, and resubmit.' : 'A few minutes today makes the end of the month easier.'}</p><Link className="text-action" to={activeVacation ? '/vacation' : '/timesheets'}>{activeVacation ? 'Continue request' : 'Review my timesheet'}<Icon name="arrow" size={18}/></Link></div>
-        <div className="home-shortcuts"><h2>What would you like to do?</h2>{[['/vacation', 'Plan some time off', 'Request vacation and track its approval.', 'calendar'], ['/requests', 'Request a company letter', 'Employment, travel, and vacation letters.', 'file'], ['/profile', 'Keep your profile current', 'Review your personal and contact details.', 'users']].map(([to,title,detail,icon]) => <Link key={to} to={to}><span className="shortcut-icon"><Icon name={icon}/></span><span><strong>{title}</strong><small>{detail}</small></span><Icon name="arrow" size={17}/></Link>)}</div>
-      </section>
+  return <div className={`page-container focus-dashboard employee-day management-day ${systemAdmin ? 'organization-day' : 'project-day'}`}>
+    <header className="day-topline">
+      <span><span className="day-live-dot" />{systemAdmin ? 'THE BIG PICTURE' : 'YOUR TEAM, IN SYNC'}</span><time dateTime={format(new Date(), 'yyyy-MM-dd')}>{format(new Date(), 'EEEE, MMMM d')}</time>
+    </header>
+    <section className="day-welcome" aria-label="Welcome">
+      <div className="day-welcome-copy"><p className="day-greeting">Good to see you, {user?.firstName || 'there'}.</p><h1>{systemAdmin ? 'See the bigger picture.' : 'Great teams.'}<br /><em>{systemAdmin ? 'Make the next move.' : 'Good momentum.'}</em></h1><p className="day-intro">{systemAdmin ? 'A clear view of your people, projects, and the decisions that move them forward.' : 'Clear the little blockers. Give your team room to do their best work.'}</p>
+        <div className="day-welcome-actions"><Link className="button day-primary" to={systemAdmin ? '/projects' : '/admin'}>{systemAdmin ? 'Explore projects' : 'Review approvals'}<Icon name="arrow" size={16} /></Link><Link className="day-secondary" to={systemAdmin ? '/users' : '/project-hours'}>{systemAdmin ? 'Your people' : 'Plan with your team'}<Icon name="arrow" size={15} /></Link></div>
+      </div><TimeSculpture variant={systemAdmin ? 'compass' : 'team'} />
+    </section>
+    <section className="day-pulse management-pulse" aria-label="Workspace summary" aria-busy={state.loading}>
+      {model.metrics.map(metric => <Link key={metric.label} to={metric.to} onClick={metric.to.includes('#') ? () => document.getElementById('needs-attention')?.scrollIntoView({ block: 'start' }) : undefined}>
+        <strong>{state.loading || metric.value == null ? '—' : metric.value}</strong><span>{metric.label}<small>{state.loading || metric.value == null ? unavailable : metric.detail}</small></span><Icon name="arrow" size={14} />
+      </Link>)}
+    </section>
+    {state.errors.length > 0 && <p className="dashboard-error" role="alert">Some information is unavailable ({state.errors.join(', ')}). Counts may be incomplete. <button type="button" onClick={() => setRevision(value => value + 1)}>Retry</button></p>}
+    {/* Temporarily disabled: Needs Attention. Restore when work resumes.
+    <section className="day-attention" id="needs-attention" aria-labelledby="dashboard-attention-title">
+      <div className="day-section-title"><h2 id="dashboard-attention-title">Needs Attention {!state.loading && model.attention.length > 0 && <span>{model.actionCount}</span>}</h2><button type="button" className="management-refresh" disabled={state.loading} onClick={() => setRevision(value => value + 1)}>Refresh updates</button></div>
+      {state.loading ? <div className="dashboard-loading"><LoadingIndicator label="Loading your dashboard…" /></div> : <>
+        {attention.length ? <ul className="dashboard-rows">{attention.map(item => <ActionRow key={item.id} item={item} />)}</ul> : <p className="dashboard-clear"><Icon name="check" size={18} />{state.errors.length ? 'Refresh to confirm whether anything needs attention.' : 'You’re all caught up. No pending actions right now.'}</p>}
+        {model.attention.length > 3 && <button type="button" className="dashboard-more" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? 'Show less' : `See ${model.attention.length - 3} more`}</button>}
+      </>}
+    </section>
+    */}
+    <div className="management-lower-grid">
+    {!state.loading && manager && !systemAdmin && model.capacity.length > 0 && <section className="dashboard-section" aria-labelledby="dashboard-capacity-title">
+      <div className="dashboard-section-heading"><div><h2 id="dashboard-capacity-title">Team Capacity</h2><p>Estimated allocation today · 8-hour weekdays, excluding leave and holidays.</p></div><Link to="/project-hours" className="text-action">Review capacity <Icon name="arrow" size={16} /></Link></div>
+      <ul className="dashboard-rows">{model.capacity.slice(0, 3).map(item => <ActionRow key={item.id} item={item} />)}</ul>
+      {model.capacity.length > 3 && <Link className="management-more-projects" to="/project-hours">Review {model.capacity.length - 3} more employees <Icon name="arrow" size={14} /></Link>}
+    </section>}
+    {!state.loading && news.length > 0 && <section className="dashboard-section day-news" aria-label="Company announcements">
+      <div className="dashboard-section-heading"><div><h2>Announcements</h2><p>{systemAdmin ? 'Recent company updates.' : 'Important and unread updates.'}</p></div><Link className="text-action" to={systemAdmin ? '/announcements?manage=true' : '/announcements'}>{systemAdmin ? 'Manage announcements' : 'All announcements'} <Icon name="arrow" size={16} /></Link></div>
+      <ul>{news.map(item => <li key={item.id}><Link to={`/announcements?id=${encodeURIComponent(item.id)}`}><span className="day-news-kicker">{item.priority === 'URGENT' ? 'Important update' : 'Around Maxwell'}{!item.viewed_at && <i title="Unread" />}</span><strong>{item.title}</strong><span className="day-news-read">Take a look <Icon name="arrow" size={15} /></span></Link></li>)}</ul>
+    </section>}
     </div>
-  );
+    {systemAdmin && !state.loading && !news.length && <Link className="management-more-projects" to="/announcements?manage=true">Manage announcements <Icon name="arrow" size={14} /></Link>}
+  </div>;
 }

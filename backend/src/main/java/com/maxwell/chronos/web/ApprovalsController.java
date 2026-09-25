@@ -155,7 +155,7 @@ public class ApprovalsController {
         String email = jwt.getClaimAsString("preferred_username");
         var user = userService.findUserEntityByEmail(email);
 
-        if (user == null || !user.isSuperAdmin()) {
+        if (user == null || !user.isAdmin()) {
             return ResponseEntity.status(403).build();
         }
 
@@ -176,7 +176,7 @@ public class ApprovalsController {
         String email = jwt.getClaimAsString("preferred_username");
         var user = userService.findUserEntityByEmail(email);
 
-        if (user == null || !user.isSuperAdmin()) {
+        if (user == null || !user.isAdmin()) {
             return ResponseEntity.status(403).build();
         }
 

@@ -8,6 +8,7 @@ async function setup(page, role = 'EMPLOYEE') {
   const prefix = year + '-' + String(month).padStart(2, '0');
   const sheet = { id: 2, userId: 1, year, month, status: 'REJECTED', timeEntries: [{ id: 10, projectId: 4, projectCode: 'ATLAS', entryDate: prefix + '-07', hours: 8 }], vacationDays: [] };
   let status = 'REJECTED';
+  let preferences = { enabled: true, announcements: true, timesheets: true, vacation: true, letters: true, reports: true, feedback: true, performance: true };
   await page.addInitScript(() => localStorage.setItem('authToken', 'workflow-test'));
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url()), method = route.request().method();
@@ -15,36 +16,60 @@ async function setup(page, role = 'EMPLOYEE') {
     if (url.pathname.endsWith('/auth/me')) data = { id: 1, firstName: 'Alice', lastName: 'Smith', role, canReviewProjects: role === 'ADMIN', profileCompleted: true };
     else if (url.pathname.endsWith('/projects/assigned') || url.pathname === '/api/projects') data = [{ id: 4, code: 'ATLAS', name: 'Atlas platform', status: 'ACTIVE', assignments: [{ userId: 1, isActive: true, startDate: prefix + '-01', endDate: prefix + '-' + new Date(year, month, 0).getDate() }] }];
     else if (url.pathname.endsWith('/timesheets/missing')) data = [{ userId: 8, userName: 'Sam Jones', projectId: 4, projectCode: 'ATLAS', status: 'NOT_STARTED', hours: 0 }];
-    else if (url.pathname.endsWith('/copy-week')) {
-      const date = url.searchParams.get('weekStart');
-      data = { days: [{ date, hours: 8 }], copiedDays: method === 'POST' ? 1 : 0 };
-      if (method === 'POST') sheet.timeEntries.push({ id: 11, projectId: 4, projectCode: 'ATLAS', entryDate: date, hours: 8 });
-    } else if (url.pathname.endsWith('/projects/4/submit')) { status = 'SUBMITTED'; data = {}; }
+    else if (url.pathname.endsWith('/projects/4/submit')) { status = 'SUBMITTED'; data = {}; }
     else if (url.pathname.endsWith('/submission')) data = { id: 3, timesheetId: 2, projectId: 4, status, totalHours: 8, plannedHours: 160, rejectionReason: status === 'REJECTED' ? 'Please verify Monday hours.' : null, rejectedByName: 'Taylor Manager' };
     else if (url.pathname.includes('/timesheets/id/') || /\/timesheets\/\d{4}\/\d+$/.test(url.pathname)) data = sheet;
     else if (url.pathname.endsWith('/leave-balance')) { const bucket = { allowanceDays: 10, extraDays: 0, usedDays: 2, remainingDays: 8, unpaidDays: 0 }; data = { configured: true, vacation: bucket, sick: bucket, bereavement: bucket }; }
+    else if (url.pathname.endsWith('/email-preferences')) {
+      if (method === 'PUT') preferences = route.request().postDataJSON();
+      data = preferences;
+    }
     else if (url.pathname.includes('unread-count')) data = 0;
     await route.fulfill({ json: data });
   });
   fs.mkdirSync(output, { recursive: true });
   return prefix;
 }
-test('employee copies hours and resubmits corrections', async ({ page }) => {
-  const prefix = await setup(page);
+test('employee resubmits corrections without copy-week controls', async ({ page }) => {
+  await setup(page);
   await page.goto('/timesheet/2');
   await expect(page.getByRole('region', { name: 'Requested corrections' })).toBeVisible();
-  await page.getByLabel('Destination week').selectOption(prefix + '-14');
-  await page.getByRole('button', { name: 'Preview copy' }).click();
-  await expect(page.getByRole('button', { name: 'Copy hours', exact: true })).toBeEnabled();
-  await page.screenshot({ path: path.join(output, 'timesheet-copy-desktop.png'), fullPage: true });
-  await page.getByRole('button', { name: 'Copy hours', exact: true }).click();
-  await expect(page.getByLabel('Hours for ' + prefix + '-14')).toHaveValue('8');
-  await expect(page.getByText('1 day copied. Review the hours before submitting.')).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: path.join(output, 'timesheet-copy-mobile.png'), fullPage: true });
+  await expect(page.getByText('Copy last week', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Resubmit for Approval' }).click();
   await expect(page.getByRole('region', { name: 'Requested corrections' })).toHaveCount(0);
+});
+
+test('email preferences persist, support keyboard dismissal and fit mobile and dark theme', async ({ page }) => {
+  await setup(page);
+  await page.goto('/timesheet/2');
+  const button = page.getByRole('button', { name: 'Email alerts', exact: true });
+  await button.click();
+  const dialog = page.getByRole('dialog', { name: 'Email alerts' });
+  await expect(dialog.getByRole('switch')).toHaveCount(8);
+  await dialog.getByRole('switch', { name: 'Feedback', exact: true }).click();
+  await dialog.getByRole('switch', { name: 'Enable email alerts' }).click();
+  await expect(dialog.getByRole('switch', { name: 'Announcements' })).toBeDisabled();
+  await dialog.getByRole('button', { name: 'Save preferences' }).click();
+  await expect(dialog.getByRole('status')).toHaveText('Email preferences saved.');
+  await page.screenshot({ path: path.join(output, 'email-alerts-desktop.png'), fullPage: true });
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(button).toBeFocused();
+  await page.reload();
+  await button.click();
+  await expect(dialog.getByRole('switch', { name: 'Enable email alerts' })).toHaveAttribute('aria-checked', 'false');
+  await dialog.getByRole('switch', { name: 'Enable email alerts' }).click();
+  await expect(dialog.getByRole('switch', { name: 'Feedback', exact: true })).toHaveAttribute('aria-checked', 'false');
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Switch to dark theme' }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await button.click();
+  await expect(dialog).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+  await page.screenshot({ path: path.join(output, 'email-alerts-mobile-dark.png'), fullPage: true });
 });
 test('manager favorites a project and keeps the selection after reloading', async ({ page }) => {
   await setup(page, 'ADMIN');

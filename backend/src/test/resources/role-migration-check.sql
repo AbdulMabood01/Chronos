@@ -4,7 +4,7 @@
 BEGIN;
 SET LOCAL search_path = pg_temp, public;
 CREATE TEMP TABLE users (id BIGINT PRIMARY KEY, role user_role_enum NOT NULL);
-INSERT INTO users VALUES (1, 'PROJECT_MANAGER'), (2, 'EMPLOYEE'), (3, 'ADMIN'), (4, 'SUPER_ADMIN');
+INSERT INTO users VALUES (1, 'PROJECT_MANAGER'), (2, 'EMPLOYEE'), (3, 'PROJECT_ADMIN'), (4, 'ADMIN');
 CREATE TEMP TABLE project_role_links (
     project_manager_id BIGINT REFERENCES pg_temp.users(id),
     project_manager_hours_approver_id BIGINT REFERENCES pg_temp.users(id)
@@ -17,8 +17,8 @@ DO $check$
 BEGIN
     IF (SELECT role FROM pg_temp.users WHERE id = 1) <> 'EMPLOYEE'
        OR (SELECT count(*) FROM pg_temp.users WHERE role = 'EMPLOYEE') <> 2
-       OR (SELECT role FROM pg_temp.users WHERE id = 3) <> 'ADMIN'
-       OR (SELECT role FROM pg_temp.users WHERE id = 4) <> 'SUPER_ADMIN' THEN
+       OR (SELECT role FROM pg_temp.users WHERE id = 3) <> 'PROJECT_ADMIN'
+       OR (SELECT role FROM pg_temp.users WHERE id = 4) <> 'ADMIN' THEN
         RAISE EXCEPTION 'Role conversion failed';
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_temp.project_role_links WHERE project_manager_id = 1 AND project_manager_hours_approver_id = 2) THEN

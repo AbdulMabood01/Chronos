@@ -27,7 +27,7 @@ public class ProjectHealthService {
     private final TimesheetProjectSubmissionRepository submissions;
 
     public List<ProjectHealthDTO> overview(User requester) {
-        if (requester == null || !(requester.isAdmin() || requester.isSuperAdmin()
+        if (requester == null || !(requester.isProjectAdmin() || requester.isAdmin()
                 || projectService.canReviewProjects(requester.getId()))) {
             throw new AccessDeniedException("Project review permission required");
         }

@@ -15,8 +15,8 @@ import static org.mockito.Mockito.*;
 class EmployeeReportServiceTest {
     JdbcTemplate db = mock(JdbcTemplate.class);
     UserRepository users = mock(UserRepository.class);
-    EmployeeReportService service = new EmployeeReportService(db, users);
-    User user = User.builder().id(7L).email("user@example.com").role(UserRole.SUPER_ADMIN).isActive(true).build();
+    EmployeeReportService service = new EmployeeReportService(db, users, mock(EmailAlertService.class));
+    User user = User.builder().id(7L).email("user@example.com").role(UserRole.ADMIN).isActive(true).build();
     UUID id = UUID.randomUUID();
     @BeforeEach void setup() { when(users.findByEmail(user.getEmail())).thenReturn(Optional.of(user)); }
     Submission submission(boolean anonymous) { return new Submission(Category.SEXUAL_HARASSMENT, "Subject", "Description", null, null, null, null, anonymous, true); }
@@ -54,10 +54,30 @@ class EmployeeReportServiceTest {
         assertThrows(IllegalArgumentException.class, () -> service.review(user.getEmail(), id, new Review(Status.CLOSED,"Edit",null,null)));
     }
     @Test void revokedRoleCannotAccessServiceDirectly() {
-        user.setRole(UserRole.ADMIN);
+        user.setRole(UserRole.PROJECT_ADMIN);
         assertThrows(AccessDeniedException.class, () -> service.detail(user.getEmail(), id));
         assertThrows(AccessDeniedException.class, () -> service.download(user.getEmail(), id, UUID.randomUUID()));
         verifyNoInteractions(db);
+    }
+    @Test void employeeReadsAreScopedToOwnerAndExcludeAnonymousReports() {
+        user.setRole(UserRole.EMPLOYEE);
+        service.mine(user.getEmail(), 0);
+        verify(db).queryForList(contains("WHERE reporter_id=? AND NOT anonymous"), eq(7L), eq(0));
+        assertThrows(org.springframework.web.server.ResponseStatusException.class, () -> service.myDetail(user.getEmail(), id));
+        verify(db).queryForList(contains("WHERE id=? AND reporter_id=? AND NOT anonymous"), eq(id), eq(7L));
+        verify(db, never()).update(anyString(), any(Object[].class));
+    }
+    @Test void inactiveUserCannotReadOwnReports() {
+        user.setIsActive(false);
+        assertThrows(AccessDeniedException.class, () -> service.mine(user.getEmail(), 0));
+        assertThrows(AccessDeniedException.class, () -> service.myDetail(user.getEmail(), id));
+        verifyNoInteractions(db);
+    }
+    @Test void sharingRequiresExplicitReviewChoice() {
+        when(db.queryForList("SELECT * FROM employee_reports WHERE id=? FOR UPDATE", id))
+            .thenReturn(new ArrayList<>(List.of(new HashMap<>(Map.of("status", "SUBMITTED")))));
+        service.review(user.getEmail(), id, new Review(Status.UNDER_REVIEW, "Private", "Shared action", null, true));
+        verify(db).update(contains("status,employee_visible)"), eq(id), eq(7L), anyString(), eq("Private"), eq("Shared action"), isNull(), eq(id));
     }
     @Test void attachmentsAreScopedToReportAndDownloadIsAudited() {
         UUID file = UUID.randomUUID();

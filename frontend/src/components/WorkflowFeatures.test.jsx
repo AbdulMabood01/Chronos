@@ -3,7 +3,6 @@ import React from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import CopyPreviousWeek from './CopyPreviousWeek';
 import MissingTimesheets from './MissingTimesheets';
 import LeaveBalancePreview, { calculateLeavePreview } from './LeaveBalancePreview';
 import { timesheetAPI, userAPI } from '../api';
@@ -11,27 +10,6 @@ vi.mock('../api');
 beforeEach(() => vi.resetAllMocks());
 afterEach(cleanup);
 
-it('previews skipped entries before copying and refreshes saved hours', async () => {
-  timesheetAPI.previewPreviousWeek.mockResolvedValue({ data: { days: [{ date: '2026-09-14', hours: 8 }, { date: '2026-09-15', hours: 3, skippedReason: 'Existing entry kept' }] } });
-  timesheetAPI.copyPreviousWeek.mockResolvedValue({ data: { copiedDays: 1 } });
-  const refresh = vi.fn();
-  render(<CopyPreviousWeek timesheet={{ id: 2, year: 2026, month: 9 }} projectId="4" onCopied={refresh} />);
-  fireEvent.change(screen.getByLabelText('Destination week'), { target: { value: '2026-09-14' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Preview copy' }));
-  expect(await screen.findByText('Existing entry kept')).toBeTruthy();
-  expect(timesheetAPI.copyPreviousWeek).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button', { name: 'Copy hours' }));
-  await waitFor(() => expect(refresh).toHaveBeenCalled());
-  expect(timesheetAPI.copyPreviousWeek).toHaveBeenCalledWith(2, '4', '2026-09-14');
-  expect(screen.getByRole('status').textContent).toContain('1 day copied');
-});
-it('shows a copy failure without claiming success', async () => {
-  timesheetAPI.previewPreviousWeek.mockRejectedValue({ response: { data: { message: 'Project timesheet is not editable' } } });
-  render(<CopyPreviousWeek timesheet={{ id: 2, year: 2026, month: 9 }} projectId="4" onCopied={vi.fn()} />);
-  fireEvent.click(screen.getByRole('button', { name: 'Preview copy' }));
-  expect((await screen.findByRole('alert')).textContent).toContain('not editable');
-  expect(screen.queryByRole('button', { name: 'Copy hours' })).toBeNull();
-});
 it('lists employees without timesheets and reloads when month changes', async () => {
   timesheetAPI.getMissingTimesheets.mockResolvedValue({ data: [{ userId: 1, userName: 'Alice', projectId: 4, projectCode: 'ATLAS', status: 'NOT_STARTED', hours: 0 }, { userId: 2, userName: 'Bob', projectId: 4, projectCode: 'ATLAS', status: 'REJECTED', hours: 8, timesheetId: 6 }] });
   render(<MemoryRouter><MissingTimesheets /></MemoryRouter>);

@@ -8,7 +8,7 @@ test('calendar, budget, checklist and history work on desktop and mobile', async
   await page.addInitScript(() => localStorage.setItem('authToken','planning-test'));
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url()); let data = [];
-    if(url.pathname.endsWith('/auth/me')) data = { id: 1, firstName: 'Alice', lastName: 'Smith', role: 'ADMIN', jobTitle: 'Engineer', dateOfBirth: '1990-01-01', profileCompleted: true };
+    if(url.pathname.endsWith('/auth/me')) data = { id: 1, firstName: 'Alice', lastName: 'Smith', role: 'PROJECT_ADMIN', jobTitle: 'Engineer', dateOfBirth: '1990-01-01', profileCompleted: true };
     else if(url.pathname.endsWith('/team-calendar')) data = [{ id: 5, userId: 8, userName: 'Sam Jones', startDate: prefix+'-01', endDate: prefix+'-03' }];
     else if(url.pathname.endsWith('/hours-dashboard')) data = [{ projectId:4, projectCode:'ATLAS', projectName:'Atlas platform', budgetHours:100, lifetimeLoggedHours:85, totalLoggedHours:8, plannedHours:40, employees:[] }];
     else if(url.pathname.includes('/timesheets/id/')) data = { id:2,userId:1,year,month,status:'APPROVED',timeEntries:[{id:10,projectId:4,projectCode:'ATLAS',entryDate:prefix+'-01',hours:8}],vacationDays:[] };

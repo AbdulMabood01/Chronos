@@ -14,6 +14,12 @@
 .concern-table table { width: 100%; border-collapse: collapse; text-align: left; }
 .concern-table th, .concern-table td { padding: 12px; border-bottom: 1px solid var(--border-color); }
 .concern-table small { display: block; margin-top: 6px; }
+.concern-table td { vertical-align: middle; }
+.concern-table .concern-actions { width: 104px; min-width: 104px; padding: 16px 20px; text-align: right; }
+.employee-concerns .concern-actions button:not(.button) { min-width: 80px; min-height: 44px; white-space: nowrap; }
+.concern-heading h2 { overflow-wrap: anywhere; min-width: 0; }
+.concern-heading > button { flex-shrink: 0; min-height: 44px; }
+.employee-concerns [hidden] { display: none !important; }
 .concern-heading, .concern-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .concern-pagination { margin-top: 20px; justify-content: flex-end; }
 .concern-text { white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -57,3 +63,22 @@
 @media (max-width: 650px) { .concern-submit-bar { bottom: 8px; padding: 14px; gap: 12px; } .concern-submit-bar .button { width: 100%; } .concern-progress-steps { grid-template-columns: 1fr; gap: 10px; } .concern-heading { flex-wrap: wrap; } }
 @media (prefers-reduced-motion: reduce) { .employee-concerns progress::-webkit-progress-value { transition: none; } }
 @media (max-width: 650px) { .concern-columns, .concern-filters { grid-template-columns: 1fr; } .concern-card { padding: 16px; } }
+
+.concern-management { max-width: 1500px; }
+.concern-management > h1 { margin-bottom: 20px; }
+.concern-management .concern-card { margin: 28px 0; padding: clamp(20px, 3vw, 36px); border-radius: 18px; }
+.concern-management .concern-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+.concern-filter-heading { grid-column: 1 / -1; padding-bottom: 20px; border-bottom: 1px solid var(--border-color); }
+.concern-filter-heading h2 { margin: 0 0 8px; }
+.concern-filter-heading p { color: var(--text-secondary); margin: 0; }
+.concern-management .concern-filters label { margin: 0; gap: 10px; }
+.concern-management .concern-filters input, .concern-management .concern-filters select { min-height: 46px; }
+.concern-management .concern-heading { gap: 24px; margin-bottom: 24px; flex-wrap: wrap; }
+.concern-management .concern-table table { min-width: 1050px; }
+.concern-management .concern-table th, .concern-management .concern-table td { padding: 20px 16px; line-height: 1.6; }
+.concern-management .concern-table td:nth-child(3) { min-width: 200px; }
+.concern-management .concern-pagination { border-top: 1px solid var(--border-color); padding-top: 24px; margin-top: 28px; gap: 20px; }
+.concern-management .concern-details { max-width: 1000px; margin-inline: auto; }
+.concern-management .concern-details > p { line-height: 1.8; }
+@media (max-width: 1000px) { .concern-management .concern-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 650px) { .concern-management .concern-filters { grid-template-columns: 1fr; } }

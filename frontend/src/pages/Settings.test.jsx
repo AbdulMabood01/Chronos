@@ -5,7 +5,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import Settings from './Settings';
 import { settingsAPI } from '../api';
 vi.mock('../api');
-vi.mock('../AuthContext', () => ({ useAuth: () => ({ user: { role: 'SUPER_ADMIN' } }) }));
+vi.mock('../AuthContext', () => ({ useAuth: () => ({ user: { role: 'ADMIN' } }) }));
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 it('requires confirmation before applying saved leave defaults', async () => {
   settingsAPI.getAllSettings.mockResolvedValue({ data: [] });

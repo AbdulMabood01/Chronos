@@ -12,10 +12,10 @@ Prepared on: 2026-09-09
 
 | Task | Status | Target | Notes |
 | --- | --- | --- | --- |
-| Configure initial Super Admin email | Completed | Done | `superadmin@maxwellnetwork.org` is configured as the initial Super Admin. |
-| Move User Management to Super Admin only | Completed | Done | Admins no longer see or access user management controls. |
-| Allow Admin and Super Admin to view reports | Completed | Done | Reports page permission mismatch was fixed. |
-| Keep Admin separate from Super Admin | Completed | Done | Admin role no longer automatically receives Super Admin privileges. |
+| Configure initial Admin email | Completed | Done | `admin@maxwellnetwork.org` is configured as the initial Admin. |
+| Move User Management to Admin only | Completed | Done | Admins no longer see or access user management controls. |
+| Allow Admin and Admin to view reports | Completed | Done | Reports page permission mismatch was fixed. |
+| Keep Admin separate from Admin | Completed | Done | Admin role no longer automatically receives Admin privileges. |
 | Remove admin user-level bill-rate override UI | Completed | Done | Rates now belong to project assignments instead of global user overrides. |
 | Review backend permission tests for all role boundaries | Ongoing | 2026-09-30 | Add/expand tests for self-promotion, self-approval, project-specific approvals, and restricted user management. |
 
@@ -23,7 +23,7 @@ Prepared on: 2026-09-09
 
 | Task | Status | Target | Notes |
 | --- | --- | --- | --- |
-| Create/manage project codes | Completed | Done | Admin/Super Admin can create and manage projects. |
+| Create/manage project codes | Completed | Done | Admin/Admin can create and manage projects. |
 | Require Project Manager during project creation | Completed | Done | Project cannot be saved without PM. |
 | Require PM-hours approver during project creation | Completed | Done | Prevents Project Manager self-approval. |
 | Replace project side list with searchable project selector | Completed | Done | Project view starts blank and opens only after selecting/searching. |
@@ -64,7 +64,7 @@ Prepared on: 2026-09-09
 | Route Project Manager's own hours to PM-hours approver | Completed | Done | Project setup requires a separate approver. |
 | Prevent users from approving their own timesheets | Completed | Done | Backend validation blocks self-approval. |
 | Show employee details on approval screen | Completed | Done | Approval cards show employee, designation, project, period, hours, and status. |
-| Letter approvals go to Admin/Super Admin | Completed | Done | Letter request review is Admin/Super Admin gated. |
+| Letter approvals go to Admin/Admin | Completed | Done | Letter request review is Admin/Admin gated. |
 | Validate end-to-end approval notifications | Ongoing | 2026-09-27 | Confirm PM receives notification and Admin sees only intended operational items. |
 | Add approval audit/report filters | Next 2 Months | 2026-10-31 | Add filters by approver, project, status, and period. |
 
@@ -75,7 +75,7 @@ Prepared on: 2026-09-09
 | Restrict PDF export until approval | Completed | Done | Export is disabled unless project submission is approved. |
 | Export approved project timesheet PDF | Completed | Done | PDF includes employee, project, period, daily entries, sessions, status, approver, and date. |
 | Remove export-time rate override | Completed | Done | Reports no longer accept a manual bill-rate parameter. |
-| Admin/Super Admin monthly reports | Completed | Done | Reports page supports monthly summary and exports. |
+| Admin/Admin monthly reports | Completed | Done | Reports page supports monthly summary and exports. |
 | Improve report rate display for multi-project months | Next 2 Months | 2026-10-20 | Consider project-level export rows when a monthly timesheet spans multiple projects. |
 | Add report QA checklist | Next 2 Months | 2026-10-25 | Verify PDF/XLS values against UI totals before release. |
 
@@ -110,7 +110,7 @@ Prepared on: 2026-09-09
 | Add assignment bill rate migration | Completed | Done | Assignment-level bill rate added. |
 | Preserve existing users/timesheets compatibility | Ongoing | 2026-10-05 | Validate old rows with missing assignment planned hours or bill rates. |
 | Add migration for strict assignment required fields | Next 2 Months | 2026-10-12 | Consider backfilling missing start/end/bill-rate data before adding stricter DB constraints. |
-| Add data cleanup/seed process for fresh environments | Next 2 Months | 2026-10-10 | Document clean DB setup, Super Admin seed, sample projects, assignments, and plans. |
+| Add data cleanup/seed process for fresh environments | Next 2 Months | 2026-10-10 | Document clean DB setup, Admin seed, sample projects, assignments, and plans. |
 
 ## Testing And Release Readiness
 
@@ -118,7 +118,7 @@ Prepared on: 2026-09-09
 | --- | --- | --- | --- |
 | Backend compile verification | Completed | Done | Recent backend changes compile successfully. |
 | Frontend production build verification | Completed | Done | Recent frontend changes build successfully. |
-| Add service tests for project assignment permissions | Next 2 Months | 2026-10-15 | Cover Admin, Super Admin, Project Manager, PM-hours approver, and employee restrictions. |
+| Add service tests for project assignment permissions | Next 2 Months | 2026-10-15 | Cover Admin, Admin, Project Manager, PM-hours approver, and employee restrictions. |
 | Add UI regression checklist | Next 2 Months | 2026-10-22 | Include login, project creation, assignment, timesheet entry, approval, PDF export, reports. |
 | Add end-to-end happy-path test | Next 2 Months | 2026-11-05 | Employee logs hours, submits, PM approves, employee exports PDF. |
 | Add end-to-end rejection correction test | Next 2 Months | 2026-11-09 | Employee submits, PM rejects, employee edits, resubmits, PM approves. |

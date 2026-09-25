@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react';
 import Reports from './Reports';
 import { projectAPI } from '../api';
-vi.mock('../AuthContext', () => ({ useAuth: () => ({ user: { role: 'ADMIN' } }) }));
+vi.mock('../AuthContext', () => ({ useAuth: () => ({ user: { role: 'PROJECT_ADMIN' } }) }));
 vi.mock('../api', () => ({ projectAPI: { getHoursDashboard: vi.fn() }, reportsAPI: {} }));
 const project = { projectId: 1, projectCode: 'TEST', projectName: 'Test', employees: [
   { userId: 1, userName: 'Alice', submissionId: 4, totalLoggedHours: 8, status: 'APPROVED' },

@@ -1,4 +1,5 @@
 import EmployeeOnboarding from '../components/EmployeeOnboarding';
+import EmployeeImport from '../components/EmployeeImport';
 import ScreenTitle, { RecordSearch } from '../components/ScreenTitle';
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import EmploymentDetails from '../components/EmploymentDetails';
@@ -19,6 +20,7 @@ export default function UserManagement() {
   const [invitationBusy, setInvitationBusy] = useState(null);
   const [notice, setNotice] = useState('');
   const [search, setSearch] = useState('');
+  const [addPanel, setAddPanel] = useState(null);
   const [profileUser, setProfileUser] = useState(null);
   const profileHeading = useRef(null);
   const [leaveOpen, setLeaveOpen] = useState(false);
@@ -31,8 +33,8 @@ export default function UserManagement() {
     setProfileUser(updated);
   };
   const visibleRecords = users.filter(record => [record.firstName,record.lastName,record.email,record.employeeId,record.role].join(' ').toLowerCase().includes(search.toLowerCase()));
-  const canManageUsers = user?.role === 'SUPER_ADMIN';
-  const canManageRoles = user?.role === 'SUPER_ADMIN';
+  const canManageUsers = user?.role === 'ADMIN';
+  const canManageRoles = user?.role === 'ADMIN';
 
   useEffect(() => {
     if (!canManageUsers) return;
@@ -42,7 +44,7 @@ export default function UserManagement() {
   const stats = useMemo(() => ({
     total: users.length,
     active: users.filter((item) => item.isActive).length,
-    admins: users.filter((item) => item.role === 'ADMIN' || item.role === 'SUPER_ADMIN').length,
+    admins: users.filter((item) => item.role === 'PROJECT_ADMIN' || item.role === 'ADMIN').length,
   }), [users]);
 
   const loadUsers = async () => {
@@ -122,7 +124,7 @@ export default function UserManagement() {
         <EmployeeProfile user={profileUser} />
         <div className="employee-workspace-management">
           <EmploymentDetails key={profileUser.id} user={profileUser} editable onSaved={saveProfileUser} onSavingChange={setEmploymentSaving} />
-          {profileUser.role !== 'SUPER_ADMIN' && <section className="employee-section" aria-label="Leave allowance management">
+          {profileUser.role !== 'ADMIN' && <section className="employee-section" aria-label="Leave allowance management">
             <div className="employee-section-heading"><div><span className="eyebrow">TIME OFF</span><h2>Leave allowance</h2><p>Manage annual entitlements and extra days.</p></div>
               <button type="button" className="button button-primary" aria-expanded={leaveOpen} aria-controls="profile-leave-allowance" disabled={leaveSaving} onClick={() => setLeaveOpen(!leaveOpen)}>{leaveOpen ? 'Hide allowance' : 'Leave allowance'}</button>
             </div>
@@ -134,20 +136,21 @@ export default function UserManagement() {
   );
 
   return (
-    <div className="page-container admin-page user-management-page">
+    <div className="page-container admin-page user-management-page people-directory">
       <div className="header-bar">
         <div>
-          <ScreenTitle title="User Management" icon="users" eyebrow="PEOPLE & ACCESS" />
+          <ScreenTitle title="People" icon="users" eyebrow="PEOPLE & ACCESS" />
           <p className="page-subtitle">Manage access, roles, and employment status.</p>
+        </div>
+        <div className="people-header-actions">
+          <button className="button button-secondary" aria-expanded={addPanel === 'import'} onClick={() => setAddPanel(addPanel === 'import' ? null : 'import')}>Import employees</button>
+          <button className="button button-primary" aria-expanded={addPanel === 'add'} onClick={() => setAddPanel(addPanel === 'add' ? null : 'add')}>Add employee</button>
         </div>
       </div>
 
-      <EmployeeOnboarding onCreated={loadUsers} />
+      {addPanel === 'add' && <EmployeeOnboarding onCreated={async () => { setAddPanel(null); setNotice('Employee created. You can now send their invitation.'); await loadUsers(); }} />}
+      {addPanel === 'import' && <EmployeeImport onImported={async count => { setAddPanel(null); setNotice(`${count} employee${count === 1 ? '' : 's'} imported. You can now send invitations from the directory.`); await loadUsers(); }} />}
       {notice && <p role="status">{notice}</p>}
-      <RecordSearch value={search} onChange={setSearch} placeholder="Search people by name, email or role" label="Search people by name, email or role" />
-      {search && <p className="filter-count">{visibleRecords.length} matching records</p>}
-      {error && <div className="error-message" role="alert">{error} <button type="button" className="button button-secondary" onClick={loadUsers}>Retry</button></div>}
-
       <div className="admin-stats user-stats">
         <div>
           <span>Total Users</span>
@@ -163,6 +166,10 @@ export default function UserManagement() {
         </div>
       </div>
 
+      <RecordSearch value={search} onChange={setSearch} placeholder="Search people by name, email or role" label="Search people by name, email or role" />
+      {search && <p className="filter-count">{visibleRecords.length} matching records</p>}
+      {error && <div className="error-message" role="alert">{error} <button type="button" className="button button-secondary" onClick={loadUsers}>Retry</button></div>}
+
       <div className="table-container admin-table">
         <table className="data-table">
           <thead>
@@ -175,6 +182,7 @@ export default function UserManagement() {
             </tr>
           </thead>
           <tbody>
+            {visibleRecords.length === 0 && <tr><td colSpan={5}><div className="empty-state">{search ? 'No people match your search.' : 'No employees yet. Add an employee or import a spreadsheet to get started.'}</div></td></tr>}
             {visibleRecords.map((targetUser) => (
               <tr key={targetUser.id}>
                 <td>
@@ -184,16 +192,17 @@ export default function UserManagement() {
                 <td>
                   {canManageRoles ? (
                     <select
+                      aria-label={`Role for ${targetUser.firstName} ${targetUser.lastName}`}
                       value={targetUser.role}
                       onChange={(event) => handleChangeRole(targetUser.id, event.target.value)}
                       disabled={targetUser.id === user.id}
                     >
                       <option value="EMPLOYEE">Employee</option>
-                      <option value="ADMIN">Project Admin</option>
-                      <option value="SUPER_ADMIN">Admin</option>
+                      <option value="PROJECT_ADMIN">Project Admin</option>
+                      <option value="ADMIN">Admin</option>
                     </select>
                   ) : (
-                    targetUser.role === 'SUPER_ADMIN' ? 'Admin' : targetUser.role === 'ADMIN' ? 'Project Admin' : targetUser.role.replace('_', ' ')
+                    targetUser.role === 'ADMIN' ? 'Admin' : targetUser.role === 'PROJECT_ADMIN' ? 'Project Admin' : targetUser.role.replace('_', ' ')
                   )}
                 </td>
                 <td>
@@ -213,7 +222,7 @@ export default function UserManagement() {
                       <button className="button button-small" disabled={invitationBusy !== null} onClick={() => handleInvitation(targetUser.id)}>Send / resend invitation</button>
                       <button className="button button-small" disabled={invitationBusy !== null} onClick={() => handleInvitation(targetUser.id, true)}>Revoke invitation</button>
                     </>}
-                    {targetUser.role !== 'SUPER_ADMIN' && (targetUser.isActive ? (
+                    {targetUser.role !== 'ADMIN' && (targetUser.isActive ? (
                       <button className="button button-small button-danger" onClick={() => handleDeactivate(targetUser.id)}>
                         Deactivate
                       </button>

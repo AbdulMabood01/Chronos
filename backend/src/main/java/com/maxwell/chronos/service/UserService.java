@@ -90,8 +90,8 @@ public class UserService {
             throw new IllegalArgumentException("Users cannot change their own role");
         }
 
-        if (oldRole == UserRole.SUPER_ADMIN && newRole != UserRole.SUPER_ADMIN
-                && userRepository.findByRole(UserRole.SUPER_ADMIN).size() <= 1) {
+        if (oldRole == UserRole.ADMIN && newRole != UserRole.ADMIN
+                && userRepository.findByRole(UserRole.ADMIN).size() <= 1) {
             throw new IllegalArgumentException("Cannot demote the last remaining Admin");
         }
 
@@ -103,7 +103,7 @@ public class UserService {
     }
 
     public UserDTO updateJoiningDate(Long id, java.time.LocalDate joiningDate, User requester) {
-        if (requester == null || !requester.isSuperAdmin())
+        if (requester == null || !requester.isAdmin())
             throw new org.springframework.security.access.AccessDeniedException("Only Admin can edit joining dates");
         User employee = userRepository.findForUpdate(id).orElseThrow(() -> new IllegalArgumentException("User not found"));
         employee.setJoiningDate(joiningDate);
@@ -119,7 +119,7 @@ public class UserService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
-        if (user.isSuperAdmin() && clean(request.getSsnLast4()) != null) {
+        if (user.isAdmin() && clean(request.getSsnLast4()) != null) {
             throw new org.springframework.security.access.AccessDeniedException("SSN is not available for Admin profiles");
         }
 
@@ -134,7 +134,7 @@ public class UserService {
         }
         user.setJobTitle(clean(request.getJobTitle()));
         user.setDateOfBirth(request.getDateOfBirth());
-        if (!user.isSuperAdmin()) {
+        if (!user.isAdmin()) {
             user.setSsnLast4(clean(request.getSsnLast4()));
         }
         user.setProfileImageUrl(clean(request.getProfileImageUrl()));
@@ -176,9 +176,9 @@ public class UserService {
         return profile;
     }
 
-    public boolean hasSuperAdminRole(Long userId) {
+    public boolean hasAdminRole(Long userId) {
         User user = userRepository.findById(userId).orElse(null);
-        return user != null && user.isSuperAdmin();
+        return user != null && user.isAdmin();
     }
 
     private String clean(String value) {
@@ -200,7 +200,7 @@ public class UserService {
                 .jobTitle(user.getJobTitle())
                 .joiningDate(user.getJoiningDate())
                 .dateOfBirth(user.getDateOfBirth())
-                .ssnLast4(user.isSuperAdmin() ? null : user.getSsnLast4())
+                .ssnLast4(user.isAdmin() ? null : user.getSsnLast4())
                 .profileImageUrl(user.getProfileImageUrl())
                 .profileCompleted(Boolean.TRUE.equals(user.getProfileCompleted()))
                 .email(user.getEmail())

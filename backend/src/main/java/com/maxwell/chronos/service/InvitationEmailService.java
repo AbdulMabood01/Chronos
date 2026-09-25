@@ -20,6 +20,12 @@ public class InvitationEmailService {
         this.sender = sender; this.from = from; this.frontend = frontend;
     }
     public void send(User user, String token, Instant expires) {
+        send(user, token, expires, false);
+    }
+    public void sendPasswordReset(User user, String token, Instant expires) {
+        send(user, token, expires, true);
+    }
+    private void send(User user, String token, Instant expires, boolean reset) {
         JavaMailSender mail = sender.getIfAvailable();
         URI uri = URI.create(frontend);
         if (mail == null || from.isBlank() || uri.getHost() == null
@@ -37,6 +43,14 @@ public class InvitationEmailService {
                 + "\n\nThis invitation expires at " + expires + " (UTC). After activation, sign in with your work email and password."
                 + "\nIf this invitation has expired, contact your Admin for a new one."
                 + "\nIf you were not expecting this invitation, please contact your administrator.\n\nThe Chronos team");
+        if (reset) {
+            message.setSubject("Reset your Chronos password");
+            message.setText("A password reset was requested for your Chronos account.\n\n"
+                    + "Choose a new password using this one-time link:\n"
+                    + frontend.replaceAll("/+$", "") + "/reset-password#token=" + token
+                    + "\n\nThis link expires at " + expires + " (UTC), in 30 minutes."
+                    + "\nIf you did not request this, you can ignore this email. Your password has not changed.");
+        }
         // Never log the message, token, SMTP exceptions or provider response.
         try { mail.send(message); }
         catch (org.springframework.mail.MailException ex) {

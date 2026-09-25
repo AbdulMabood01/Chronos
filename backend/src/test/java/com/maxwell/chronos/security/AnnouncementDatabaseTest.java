@@ -28,7 +28,7 @@ class AnnouncementDatabaseTest {
     @Autowired ObjectMapper json;
     @Autowired UserRepository users;
     User employee, admin;
-    @BeforeEach void setup() { employee=create("EMPLOYEE"); admin=create("SUPER_ADMIN"); }
+    @BeforeEach void setup() { employee=create("EMPLOYEE"); admin=create("ADMIN"); }
     User create(String role) {
         String unique=UUID.randomUUID().toString();
         db.update("INSERT INTO users(employee_id,first_name,last_name,email,role,is_active,entra_id,password_hash,profile_completed) VALUES (?,?,?,?,?::user_role_enum,true,?,?,true)",unique,"Person",unique,unique+"@example.invalid",role,unique,"hash");

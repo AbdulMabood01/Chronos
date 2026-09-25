@@ -43,7 +43,7 @@ public class TimesheetReminderService {
         }
 
         userRepository.findByIsActiveTrue().stream()
-                .filter(user -> !UserRole.SUPER_ADMIN.equals(user.getRole()))
+                .filter(user -> !UserRole.ADMIN.equals(user.getRole()))
                 .forEach(user -> {
                     try {
                         transactionTemplate.executeWithoutResult(status -> remindIfNeeded(user, instant));
@@ -55,7 +55,7 @@ public class TimesheetReminderService {
 
     private void remindIfNeeded(User candidate, Instant instant) {
         User user = userRepository.findForUpdate(candidate.getId()).orElseThrow();
-        if (!Boolean.TRUE.equals(user.getIsActive()) || UserRole.SUPER_ADMIN.equals(user.getRole())) {
+        if (!Boolean.TRUE.equals(user.getIsActive()) || UserRole.ADMIN.equals(user.getRole())) {
             return;
         }
         LocalDateTime now = LocalDateTime.ofInstant(instant, ZoneId.of(user.getTimezone()));

@@ -1,12 +1,14 @@
 import React from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import ProfileForm from './ProfileForm';
 import './ProfileCompletionPrompt.css';
 
 export default function ProfileCompletionPrompt() {
   const { user, updateProfile } = useAuth();
+  const { pathname } = useLocation();
 
-  if (!user || user.profileCompleted) {
+  if (!user || user.profileCompleted || ['/login', '/activate', '/forgot-password', '/reset-password'].includes(pathname)) {
     return null;
   }
 

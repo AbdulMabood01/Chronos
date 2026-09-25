@@ -53,7 +53,7 @@ class AccountAccessTest {
                 new com.maxwell.chronos.dto.EmployeeDirectoryDTO(3L, "E3", "Other", "Member", "other@example.com", null, UserRole.EMPLOYEE, true)));
         mvc.perform(get("/users").with(token())).andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].id").value(2));
-        employee.setRole(UserRole.ADMIN);
+        employee.setRole(UserRole.PROJECT_ADMIN);
         mvc.perform(get("/users").with(token())).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(2));
     }
 

@@ -75,6 +75,46 @@
 .performance-page .performance-list-item { display: grid; grid-template-columns: minmax(0, 2fr) 90px 90px 110px; align-items: center; gap: 1rem; padding: 1rem; text-align: left; }
 .performance-list-item small { display: block; color: var(--text-secondary); font-weight: 400; margin-top: .35rem; overflow-wrap: anywhere; }
 .performance-status { color: var(--primary-color); background: var(--surface-tint); padding: .4rem .6rem; border-radius: 6px; text-align: center; font-size: 12px; }
+/* Quarterly reviews use the workspace typography and theme colors. */
+.performance-page-header { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); }
+.performance-page-header h1 { margin-top: .5rem; }
+.performance-page .page-subtitle { line-height: 1.65; margin-bottom: 0; }
+.performance-access { flex-shrink: 0; padding: .55rem .85rem; border: 1px solid var(--border-color); border-radius: 8px; font-size: 12px; font-weight: 600; color: var(--primary-color); background: var(--surface-tint); }
+.performance-visibility { margin: 1rem 0 1.5rem; color: var(--text-secondary); font-size: 13px; line-height: 1.65; }
+.performance-page .performance-directory, .performance-page .performance-form { border: 1px solid var(--border-color); border-radius: 12px; box-shadow: var(--shadow-card); padding: 1.5rem; }
+.performance-heading { padding-bottom: 1rem; border-bottom: 1px solid var(--border-color); }
+.performance-page h2 { color: var(--text-primary); line-height: 1.4; margin: 0 0 .4rem; }
+.performance-page .review-filters { padding: 1rem; background: var(--surface-muted); border: 1px solid var(--border-color); border-radius: 10px; gap: 1rem; }
+.performance-page .review-filters label { margin: 0; }
+.performance-page .performance-list-item { border-radius: 10px; padding: 1.15rem; }
+.performance-list-item strong { font-size: 14px; }
+.performance-list-item > span:last-child { color: var(--primary-color); font-size: 12px; }
+.performance-page .performance-status { display: inline-flex; justify-content: center; align-items: center; width: fit-content; font-weight: 650; font-size: 11px; line-height: 1.4; border: 1px solid var(--border-color); border-radius: 20px; padding: .35rem .75rem; }
+.performance-status.is-draft { background: var(--surface-muted); color: var(--text-secondary); }
+.performance-status.is-published { background: var(--surface-tint); color: var(--primary-color); }
+.performance-review-header { padding-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); }
+.performance-review-header h2 { margin-top: .8rem; font-size: 21px; }
+.performance-review-header p { color: var(--text-secondary); font-size: 13px; line-height: 1.7; margin: .5rem 0 0; }
+.performance-review-sections { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; padding: 1.5rem 0; }
+.performance-page .performance-review-sections section { margin: 0; padding: 1.25rem; border: 1px solid var(--border-color); border-radius: 10px; min-width: 0; }
+.performance-review-sections section:first-child { background: var(--surface-muted); }
+.performance-review-sections h3 { display: flex; gap: .65rem; align-items: baseline; color: var(--primary-color); line-height: 1.5; font-weight: 650; }
+.performance-section-number { color: var(--text-secondary); font-size: 10px; letter-spacing: .06em; }
+.performance-page .performance-review-sections .review-text { margin: .75rem 0 0; font-size: 14px; }
+.performance-unfilled { color: var(--text-secondary); }
+.performance-page .performance-review > p { color: var(--text-secondary); font-size: 12px; line-height: 1.7; padding-top: 1rem; border-top: 1px solid var(--border-color); }
+.performance-form .performance-fields { gap: 0 1.5rem; }
+.performance-form textarea { min-height: 150px; }
+.performance-form .review-tabs { border-top: 1px solid var(--border-color); padding-top: 1.5rem; }
+.performance-empty { padding: 2.5rem 1.5rem; text-align: center; color: var(--text-secondary); border: 1px dashed var(--border-color); border-radius: 12px; background: var(--surface-color); font-size: 14px; }
+@media (max-width: 640px) {
+  .performance-page-header { align-items: flex-start; flex-direction: column; gap: 1rem; }
+  .performance-review-sections { grid-template-columns: minmax(0, 1fr); }
+  .performance-page .performance-directory, .performance-page .performance-form, .performance-page .performance-review { padding: 1rem; }
+  .performance-page .performance-list-item { gap: .75rem; padding: 1rem; }
+  .performance-review-header h2 { font-size: 18px; }
+  .performance-page .review-tabs button { flex: 1 1 auto; }
+}
 @media (max-width: 640px) {
   .performance-fields { grid-template-columns: minmax(0, 1fr); }
   .performance-heading { align-items: stretch; flex-direction: column; }

@@ -28,6 +28,7 @@ class EmployeeReportAccessTest {
     @MockitoBean JwtDecoder decoder;
     @MockitoBean UserRepository users;
     @MockitoBean JdbcTemplate db;
+    @MockitoBean com.maxwell.chronos.service.EmailAlertService emailAlerts;
     User user;
     String id = UUID.randomUUID().toString();
     @BeforeEach void setup() {
@@ -36,10 +37,10 @@ class EmployeeReportAccessTest {
         when(users.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
     }
     private org.springframework.test.web.servlet.request.RequestPostProcessor token() {
-        return jwt().jwt(j -> j.subject("subject").claim("preferred_username", user.getEmail()).claim("role", "SUPER_ADMIN"));
+        return jwt().jwt(j -> j.subject("subject").claim("preferred_username", user.getEmail()).claim("role", "ADMIN"));
     }
     @Test void employeesAndProjectAdminsCannotReadOrManageEvenWithForgedRoleClaim() throws Exception {
-        for (UserRole role : List.of(UserRole.EMPLOYEE, UserRole.ADMIN)) {
+        for (UserRole role : List.of(UserRole.EMPLOYEE, UserRole.PROJECT_ADMIN)) {
             user.setRole(role);
             mvc.perform(get("/employee-reports").with(token())).andExpect(status().isForbidden());
             mvc.perform(get("/employee-reports/" + id).with(token())).andExpect(status().isForbidden());
@@ -55,11 +56,28 @@ class EmployeeReportAccessTest {
         mvc.perform(get("/employee-reports").with(token())).andExpect(status().isForbidden());
         verifyNoInteractions(db);
     }
-    @Test void superAdminCanListWithNoStore() throws Exception {
-        user.setRole(UserRole.SUPER_ADMIN);
+    @Test void systemAdminCanListWithNoStore() throws Exception {
+        user.setRole(UserRole.ADMIN);
         mvc.perform(get("/employee-reports").with(token())).andExpect(status().isOk())
             .andExpect(header().string("Cache-Control", "no-store"));
         verify(db).queryForList(anyString(), eq(0));
+    }
+    @Test void employeeCanReadOnlyOwnedReportsThroughDedicatedEndpoints() throws Exception {
+        UUID reportId = UUID.fromString(id);
+        when(db.queryForList(contains("WHERE id=? AND reporter_id=? AND NOT anonymous"), eq(reportId), eq(7L)))
+            .thenReturn(List.of(new HashMap<>(Map.of("id", reportId, "subject", "Own report", "status", "SUBMITTED"))));
+        mvc.perform(get("/employee-reports/mine").with(token())).andExpect(status().isOk())
+            .andExpect(header().string("Cache-Control", "no-store"));
+        verify(db).queryForList(contains("WHERE reporter_id=? AND NOT anonymous"), eq(7L), eq(0));
+        mvc.perform(get("/employee-reports/mine/" + id).with(token())).andExpect(status().isOk())
+            .andExpect(jsonPath("$.subject").value("Own report"))
+            .andExpect(jsonPath("$.reporter").doesNotExist())
+            .andExpect(header().string("Cache-Control", "no-store"));
+        verify(db).queryForList(argThat((String sql) -> sql.contains("CASE WHEN employee_visible THEN actions_taken")
+            && sql.contains("CASE WHEN employee_visible THEN resolution") && !sql.contains("h.note") && !sql.contains("actor_id")), eq(reportId));
+        mvc.perform(get("/employee-reports/mine/" + UUID.randomUUID()).with(token())).andExpect(status().isNotFound());
+        mvc.perform(get("/employee-reports/mine")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/employee-reports/mine/" + id)).andExpect(status().isUnauthorized());
     }
     @Test void submissionValidatesRequiredFieldsAndAcknowledgment() throws Exception {
         var invalid = new MockMultipartFile("report", "", "application/json", "{\"category\":\"OTHER_INCIDENT\",\"subject\":\"\",\"description\":\"x\"}".getBytes());

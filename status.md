@@ -13,7 +13,7 @@ These updates summarize the current codebase, including work in progress in the 
 ## Update 2: Authentication and Access
 
 - Integrated Microsoft Entra ID authentication with JWT security.
-- Defined employee, admin, and super admin access roles.
+- Defined employee, admin, and admin access roles.
 - Added protected frontend routes for role-specific workspaces.
 - Implemented backend permission checks for project visibility and management.
 - Added automated coverage for role permissions and account access.
@@ -86,13 +86,13 @@ These updates summarize the current codebase, including work in progress in the 
 
 - Added employee Reports navigation and a confidential incident form with categories, optional incident details, and supporting attachments.
 - Added anonymous submission with a pre-submission privacy disclosure and unique report reference; anonymous records contain no account link.
-- Added a Super Admin-only Employee Reports page with category, status, and submission-date filters.
+- Added a Admin-only Employee Reports page with category, status, and submission-date filters.
 - Added sequential review statuses, confidential notes, actions taken, resolution details, and private view/download/change audit history.
 - Enforced current database-role checks for report access and attachment downloads; project management permissions do not grant access.
 
-### Super Admin Reports Management
+### Admin Reports Management
 
-- Routed Super Admin Reports to employee incident management and moved time/leave exports to their own page.
+- Routed Admin Reports to employee incident management and moved time/leave exports to their own page.
 - Added Report ID search, anonymous/identified filters, reporter and last-updated columns, and automatic refresh for new submissions.
 - Added a chronological Report Tracker with status, internal notes, administrator, and timestamp on each entry.
 - Removed original filenames and hidden metadata from supported anonymous attachments; older unsafe formats are withheld from HR downloads.
@@ -103,19 +103,22 @@ These updates summarize the current codebase, including work in progress in the 
 - Added a dedicated navigation section with separate Feedback and Performance Reviews pages.
 - Added employee name/email search, optional categories, anonymous submissions, received feedback filters, and sender history.
 - Protected anonymous sender identity in recipient API responses while retaining private sender history.
-- Added Super Admin-only quarterly review creation, editing, publication, and audit snapshots, with one review per employee and quarter.
+- Added Admin-only quarterly review creation, editing, publication, and audit snapshots, with one review per employee and quarter.
 - Added read-only employee review history with year/quarter selection and the latest published review selected by default.
 - Added backend permission and PostgreSQL lifecycle tests, frontend workflow tests, and a desktop/mobile browser check.
 
 ## Company Announcements
 
-- Added Super Admin-only creation, editing, publishing, archiving, and deletion, enforced against the current database role.
+- Added Admin-only creation, editing, publishing, archiving, and deletion, enforced against the current database role.
 - Added titles, messages, publish/expiration dates, Normal/Important/Urgent priorities, optional attachments up to 5 MB, and Draft/Published/Archived states.
 - Added a prominent Overview panel and employee Announcements page with unread indicators, acknowledgment controls, and protected attachment downloads.
 - Added unique employee views and acknowledgments, engagement counts, and a filter showing active employees who have not acknowledged an announcement.
 - Publication dates use UTC; expiration dates are inclusive. Scheduled, expired, draft, and archived announcements are hidden from employee access.
 - Editing resets tracking for the revised content; publishing and archiving preserve it. Version checks reject stale edits and acknowledgments.
 - Added migration V32. Verified 5 backend authorization/database tests, 28 frontend workflow/navigation tests, 2 desktop/mobile browser tests, and the production frontend build.
+- Replaced the homepage announcement cards with one compact banner linking directly to the latest announcement. The banner is absent while loading, when the feed is empty, or when it cannot be loaded; the Announcements page retains its error/retry handling.
+- The homepage skips announcements already acknowledged by the current user, shows the next unacknowledged announcement, and hides the banner when none remain. Acknowledged announcements remain accessible in the Announcements tab. Verified 9 announcement unit tests and 3 browser tests, including return-to-home and reload after acknowledgment.
+- Fixed the local loading error by restarting the outdated backend, which had not loaded the Announcements controller. Verified authenticated HTTP 200 responses through both the backend and frontend proxy, 136 frontend tests, 3 announcement browser tests, and the production build.
 
 ## Project Health
 

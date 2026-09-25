@@ -11,7 +11,7 @@ import static org.mockito.Mockito.*;
 class NotificationServiceTest {
     @Test void readsNotificationsNewestFirst() {
         var notifications = mock(NotificationRepository.class);
-        var service = new NotificationService(notifications, mock(UserRepository.class));
+        var service = new NotificationService(notifications, mock(UserRepository.class), mock(EmailAlertService.class));
         when(notifications.findByUserIdOrderByCreatedAtDescIdDesc(1L)).thenReturn(List.of());
         when(notifications.findByUserIdAndIsReadFalseOrderByCreatedAtDescIdDesc(1L)).thenReturn(List.of());
 

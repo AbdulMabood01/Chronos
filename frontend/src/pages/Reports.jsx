@@ -33,7 +33,7 @@ export default function Reports() {
   const [selectedSubmissionIds, setSelectedSubmissionIds] = useState([]);
   const [loadingSummary, setLoadingSummary] = useState(true);
   const [error, setError] = useState('');
-  const canViewReports = ['ADMIN', 'SUPER_ADMIN'].includes(user?.role);
+  const canViewReports = ['PROJECT_ADMIN', 'ADMIN'].includes(user?.role);
 
   useEffect(() => {
     let cancelled = false;
@@ -143,7 +143,8 @@ export default function Reports() {
       <div className="card report-panel">
         <div className="panel-heading">
           <div>
-            <h2>Filters</h2>
+            <h2>Reporting period</h2>
+            <p>Choose a period and project, then find the employees you need.</p>
           </div>
           <button className="button button-secondary" onClick={handleExportVacation} disabled={!Number.isInteger(year) || year < 1 || year > 9999}>
             Export vacations
@@ -189,11 +190,11 @@ export default function Reports() {
         <div className="panel-heading">
           <div>
             <h2>{selectedProject ? `${selectedProject.projectCode} - ${selectedProject.projectName}` : 'Project Timesheets'} - {monthNames[month - 1]} {year}</h2>
-            <p>{selectedCount} approved project timesheet{selectedCount === 1 ? '' : 's'} selected. Draft, submitted, and rejected project timesheets cannot be selected.</p>
+            <p>Select approved or locked timesheets to download as a ZIP.</p>
           </div>
-          <button className="button button-primary report-download-button" onClick={handleExportTimesheets} disabled={selectedCount === 0}>
+          <div className="report-export-actions"><span aria-live="polite">{selectedCount} selected</span><button className="button button-primary report-download-button" onClick={handleExportTimesheets} disabled={selectedCount === 0}>
             Download selected
-          </button>
+          </button></div>
         </div>
 
         {loadingSummary ? (

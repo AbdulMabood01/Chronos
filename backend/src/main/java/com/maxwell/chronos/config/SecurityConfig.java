@@ -29,7 +29,7 @@ public class SecurityConfig {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(authz -> authz
-                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/auth/login", "/auth/invitations/validate", "/auth/activate").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/auth/login", "/auth/invitations/validate", "/auth/activate", "/auth/forgot-password", "/auth/reset-password", "/auth/reset-password/validate").permitAll()
                         .requestMatchers("/health", "/actuator/**").permitAll()
                         .anyRequest().authenticated()
                 )

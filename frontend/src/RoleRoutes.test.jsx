@@ -10,9 +10,9 @@ vi.mock('./AuthContext', () => ({
   useAuth: () => ({ user: currentUser, loading: false, logout: vi.fn() }),
 }));
 vi.mock('./pages/Dashboard', () => ({ default: () => <p>Dashboard content</p> }));
-const currentUser = { id: 1, role: 'SUPER_ADMIN', profileCompleted: true };
+const currentUser = { id: 1, role: 'ADMIN', profileCompleted: true };
 beforeEach(() => {
-  currentUser.role = 'SUPER_ADMIN';
+  currentUser.role = 'ADMIN';
   currentUser.canReviewProjects = false;
   currentUser.canManageProjects = false;
   notificationAPI.getUnreadCount.mockResolvedValue({ data: 0 });
@@ -20,7 +20,7 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-it.each(['/reports', '/employee-reports'])('opens HR management from the Super Admin reports route %s', async path => {
+it.each(['/reports', '/employee-reports'])('opens HR management from the Admin reports route %s', async path => {
   window.history.replaceState({}, '', path);
   render(<App />);
   await screen.findByRole('heading', { name: 'Employee reports' });
@@ -30,14 +30,14 @@ it.each(['/reports', '/employee-reports'])('opens HR management from the Super A
 });
 
 it('blocks project admins from the HR reports URL', async () => {
-  currentUser.role = 'ADMIN';
+  currentUser.role = 'PROJECT_ADMIN';
   window.history.replaceState({}, '', '/reports');
   render(<App />);
   await screen.findByText('Dashboard content');
   expect(window.location.pathname).toBe('/dashboard');
 });
 
-it.each(['/timesheets', '/vacation'])('redirects SuperAdmin away from personal route %s', async (path) => {
+it.each(['/timesheets', '/vacation'])('redirects Admin away from personal route %s', async (path) => {
   window.history.replaceState({}, '', path);
   render(<App />);
   await screen.findByText('Dashboard content');
@@ -95,7 +95,7 @@ it.each(['/projects', '/project-hours', '/admin', '/missing-timesheets', '/team-
 });
 
 it('hides settings from Admin navigation and blocks direct Settings URL', async () => {
-  currentUser.role = 'ADMIN';
+  currentUser.role = 'PROJECT_ADMIN';
   window.history.replaceState({}, '', '/settings');
   render(<App />);
   await screen.findByText('Dashboard content');

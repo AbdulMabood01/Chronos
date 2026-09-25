@@ -44,7 +44,7 @@ export default function Settings() {
   const [saved, setSaved] = useState(false);
   const [leaveYear, setLeaveYear] = useState(new Date().getFullYear());
   const [bulkMessage, setBulkMessage] = useState('');
-  const canManageSettings = user?.role === 'SUPER_ADMIN';
+  const canManageSettings = user?.role === 'ADMIN';
   const settingMap = settings.reduce((acc, item) => ({ ...acc, [item.key]: item }), {});
   const enabledSetting = settingMap['timesheet.reminders.enabled']?.value ?? knownSettings['timesheet.reminders.enabled'].fallback;
   const advancedSettings = settings.filter((item) => !knownSettings[item.key]);

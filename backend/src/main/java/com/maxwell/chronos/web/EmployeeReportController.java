@@ -34,6 +34,14 @@ public class EmployeeReportController {
             @RequestParam(required=false) Boolean anonymous) {
         return response(reports.list(email(jwt), category, status, from, to, page, reportId, anonymous));
     }
+    @GetMapping("/mine")
+    public ResponseEntity<List<Map<String,Object>>> mine(@AuthenticationPrincipal Jwt jwt, @RequestParam(defaultValue="0") int page) {
+        return response(reports.mine(email(jwt), page));
+    }
+    @GetMapping("/mine/{id}")
+    public ResponseEntity<Map<String,Object>> myDetail(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
+        return response(reports.myDetail(email(jwt), id));
+    }
     @GetMapping("/{id}")
     public ResponseEntity<Map<String,Object>> detail(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
         return response(reports.detail(email(jwt), id));

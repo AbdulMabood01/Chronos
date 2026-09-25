@@ -29,18 +29,20 @@ public class EmployeeReportService {
         @Override public String toString() { return "Confidential report submission [REDACTED]"; }
     }
     public record Review(@NotNull Status status, @Size(max=10000) String note,
-        @Size(max=10000) String actionsTaken, @Size(max=10000) String resolution) {
+        @Size(max=10000) String actionsTaken, @Size(max=10000) String resolution, boolean shareWithEmployee) {
+        public Review(Status status, String note, String actionsTaken, String resolution) { this(status, note, actionsTaken, resolution, false); }
         @Override public String toString() { return "Confidential report review [REDACTED]"; }
     }
     public record Receipt(UUID reportId, String status) {}
     public record Download(String filename, byte[] content) {}
     private final JdbcTemplate db;
     private final UserRepository users;
+    private final EmailAlertService emailAlerts;
 
     private User requireUser(String email, boolean admin) {
         User user = users.findByEmail(email).orElseThrow(() -> new AccessDeniedException("Access denied"));
-        if (!Boolean.TRUE.equals(user.getIsActive()) || (admin && !user.isSuperAdmin()))
-            throw new AccessDeniedException("Only HR Super Admins can access employee reports");
+        if (!Boolean.TRUE.equals(user.getIsActive()) || (admin && !user.isAdmin()))
+            throw new AccessDeniedException("Only HR Admins can access employee reports");
         return user;
     }
 
@@ -65,6 +67,7 @@ public class EmployeeReportService {
             db.update("INSERT INTO employee_report_attachments(id,report_id,filename,content,privacy_processed) VALUES (?,?,?,?,?)", UUID.randomUUID(), id, file.filename(), file.content(), input.anonymous());
         // Never record the submitter in an audit event, including for anonymous submissions.
         history(id, null, "SUBMITTED", null, null, null);
+        emailAlerts.notifyHr(EmailAlertService.Category.REPORTS, "Chronos: report submitted", "/reports");
         return new Receipt(id, "SUBMITTED");
     }
 
@@ -107,6 +110,27 @@ public class EmployeeReportService {
         return db.queryForList(sql.toString(), args.toArray());
     }
 
+    public List<Map<String,Object>> mine(String email, int page) {
+        User user = requireUser(email, false);
+        if (page < 0 || page > 100000) throw new IllegalArgumentException("Invalid page");
+        return db.queryForList("SELECT id,category,subject,status,submitted_at,updated_at FROM employee_reports WHERE reporter_id=? AND NOT anonymous ORDER BY submitted_at DESC,id LIMIT 50 OFFSET ?", user.getId(), page * 50);
+    }
+
+    public Map<String,Object> myDetail(String email, UUID id) {
+        User user = requireUser(email, false);
+        var rows = db.queryForList("SELECT id,category,subject,description,incident_at,location,people_involved,witnesses,status,submitted_at,updated_at FROM employee_reports WHERE id=? AND reporter_id=? AND NOT anonymous", id, user.getId());
+        if (rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Report not found");
+        var result = new HashMap<>(rows.getFirst());
+        result.put("history", db.queryForList("""
+            SELECT id,status,created_at,
+                CASE WHEN employee_visible THEN actions_taken END AS actions_taken,
+                CASE WHEN employee_visible THEN resolution END AS resolution
+            FROM employee_report_history WHERE report_id=? AND action NOT IN ('VIEWED','ATTACHMENT_DOWNLOADED')
+            AND (action <> 'NOTE_ADDED' OR employee_visible) ORDER BY id
+            """, id));
+        return result;
+    }
+
     private Map<String,Object> report(UUID id, boolean lock) {
         var rows = db.queryForList("SELECT * FROM employee_reports WHERE id=?" + (lock ? " FOR UPDATE" : ""), id);
         if (rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Report not found");
@@ -129,7 +153,7 @@ public class EmployeeReportService {
         result.put("attachments", attachments);
         history(id, admin.getId(), "VIEWED", null, null, null);
         result.put("history", db.queryForList("""
-            SELECT h.id,h.action,h.status,h.note,h.actions_taken,h.resolution,h.created_at,u.first_name,u.last_name
+            SELECT h.id,h.action,h.status,h.employee_visible,h.note,h.actions_taken,h.resolution,h.created_at,u.first_name,u.last_name
             FROM employee_report_history h LEFT JOIN users u ON u.id=h.actor_id WHERE report_id=? ORDER BY h.id
             """, id));
         return result;
@@ -147,7 +171,11 @@ public class EmployeeReportService {
         if (input.status() == previous && blank(input.note()) && blank(input.actionsTaken()) && blank(input.resolution()))
             throw new IllegalArgumentException("Add a note, action, resolution, or status change");
         db.update("UPDATE employee_reports SET status=?,updated_at=clock_timestamp() WHERE id=?", input.status().name(), id);
-        history(id, admin.getId(), previous == input.status() ? "NOTE_ADDED" : previous + " → " + input.status(), input.note(), input.actionsTaken(), input.resolution());
+        emailAlerts.notifyHr(EmailAlertService.Category.REPORTS, "Chronos: report updated", "/reports");
+        if (!Boolean.TRUE.equals(report.get("anonymous")) && report.get("reporter_id") instanceof Number reporter)
+            emailAlerts.enqueue(reporter.longValue(), EmailAlertService.Category.REPORTS,
+                "Chronos: report " + id + " is " + input.status().name().toLowerCase(java.util.Locale.ROOT).replace('_', ' '), "/workplace-reports");
+        history(id, admin.getId(), previous == input.status() ? "NOTE_ADDED" : previous + " → " + input.status(), input.note(), input.actionsTaken(), input.resolution(), input.shareWithEmployee());
     }
 
     public Download download(String email, UUID id, UUID attachmentId) {
@@ -165,6 +193,10 @@ public class EmployeeReportService {
         return download;
     }
     private boolean blank(String value) { return value == null || value.isBlank(); }
+    private void history(UUID id, Long actor, String action, String note, String actions, String resolution, boolean shared) {
+        if (!shared) { history(id, actor, action, note, actions, resolution); return; }
+        db.update("INSERT INTO employee_report_history(report_id,actor_id,action,note,actions_taken,resolution,status,employee_visible) VALUES (?,?,?,?,?,?,(SELECT status FROM employee_reports WHERE id=?),true)", id, actor, action, note, actions, resolution, id);
+    }
     private void history(UUID id, Long actor, String action, String note, String actions, String resolution) {
         db.update("INSERT INTO employee_report_history(report_id,actor_id,action,note,actions_taken,resolution,status) VALUES (?,?,?,?,?,?,(SELECT status FROM employee_reports WHERE id=?))", id, actor, action, note, actions, resolution, id);
     }

@@ -22,7 +22,7 @@ class LeaveBalanceServiceTest {
     @Mock AuditService audit;
     @InjectMocks LeaveBalanceService service;
     User employee = User.builder().id(1L).role(UserRole.EMPLOYEE).build();
-    User admin = User.builder().id(2L).role(UserRole.SUPER_ADMIN).build();
+    User admin = User.builder().id(2L).role(UserRole.ADMIN).build();
     VacationRequest request(String start, String end, VacationType type, VacationStatus status) {
         return VacationRequest.builder().user(employee).startDate(LocalDate.parse(start)).endDate(LocalDate.parse(end)).vacationType(type).status(status).build();
     }
@@ -48,7 +48,7 @@ class LeaveBalanceServiceTest {
         assertEquals(0, balance.sick().usedDays().compareTo(BigDecimal.valueOf(2)));
         assertEquals(0, balance.vacation().usedDays().compareTo(BigDecimal.ZERO));
     }
-    @Test void onlySuperAdminMayGrantDays() {
+    @Test void onlyAdminMayGrantDays() {
         var input = new LeaveAllowanceRequest(2026, BigDecimal.TEN, BigDecimal.valueOf(5), BigDecimal.ONE, BigDecimal.ZERO, "Annual allowance");
         assertThrows(org.springframework.security.access.AccessDeniedException.class, () -> service.update(1L, input, employee));
         verifyNoInteractions(allowances);

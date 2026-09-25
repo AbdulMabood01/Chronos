@@ -48,6 +48,10 @@ apiClient.interceptors.response.use((response) => {
 });
 
 export const authAPI = {
+  forgotPassword: email => apiClient.post('/auth/forgot-password', { email }, { publicAuth: true }),
+  validatePasswordReset: token => apiClient.post('/auth/reset-password/validate', { token }, { publicAuth: true }),
+  resetPassword: data => apiClient.post('/auth/reset-password', data, { publicAuth: true }),
+  changePassword: data => apiClient.post('/auth/change-password', data),
   login: (email, password) => apiClient.post('/auth/login', { email, password }, { publicAuth: true }),
   validateInvitation: (token) => apiClient.post('/auth/invitations/validate', { token }, { publicAuth: true }),
   activate: (token, password) => apiClient.post('/auth/activate', { token, password }, { publicAuth: true }),
@@ -55,6 +59,11 @@ export const authAPI = {
 };
 
 export const userAPI = {
+  importEmployees: (file) => {
+    const data = new FormData();
+    data.append('file', file);
+    return apiClient.post('/users/import', data, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
   createEmployee: (data) => apiClient.post('/users', data),
   sendInvitation: (id) => apiClient.post('/users/' + id + '/invitation'),
   revokeInvitation: (id) => apiClient.delete('/users/' + id + '/invitation'),
@@ -73,8 +82,6 @@ export const userAPI = {
 export const timesheetAPI = {
   getApprovalHistory: (id, projectId) => apiClient.get('/timesheets/' + id + '/projects/' + projectId + '/history'),
   getMissingTimesheets: (year, month) => apiClient.get('/timesheets/missing', { params: { year, month } }),
-  previewPreviousWeek: (id, projectId, weekStart) => apiClient.get(`/timesheets/${id}/projects/${projectId}/copy-week`, { params: { weekStart } }),
-  copyPreviousWeek: (id, projectId, weekStart) => apiClient.post(`/timesheets/${id}/projects/${projectId}/copy-week`, null, { params: { weekStart } }),
   getTimesheet: (year, month) => apiClient.get(`/timesheets/${year}/${month}`),
   getTimesheetById: (timesheetId, projectId) => apiClient.get(`/timesheets/id/${timesheetId}`, projectId ? { params: { projectId } } : undefined),
   createTimesheet: (year, month) => apiClient.post('/timesheets', null, { params: { year, month } }),
@@ -154,6 +161,8 @@ export const letterRequestAPI = {
 };
 
 export const notificationAPI = {
+  getEmailPreferences: () => apiClient.get('/notifications/email-preferences', { background: true }),
+  saveEmailPreferences: data => apiClient.put('/notifications/email-preferences', data),
   getNotifications: () => apiClient.get('/notifications'),
   getUnreadNotifications: () => apiClient.get('/notifications/unread'),
   getUnreadCount: () => apiClient.get('/notifications/unread-count'),
@@ -203,6 +212,8 @@ export const feedbackReviewsAPI = {
 };
 
 export const employeeReportsAPI = {
+  mine: (params) => apiClient.get('/employee-reports/mine', { params, background: true }),
+  myDetail: (id) => apiClient.get(`/employee-reports/mine/${id}`, { background: true }),
   submit: (data) => apiClient.post('/employee-reports', data, { headers: { 'Content-Type': undefined } }),
   list: (params) => apiClient.get('/employee-reports', { params, background: true }),
   detail: (id) => apiClient.get(`/employee-reports/${id}`),

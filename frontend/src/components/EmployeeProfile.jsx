@@ -18,7 +18,7 @@ export default function EmployeeProfile({ user }) {
     <section className="employee-info-section"><h3>Personal information</h3><Fields items={[
       ['First name', user.firstName], ['Last name', user.lastName], ['Role', user.role?.replace(/_/g, ' ')],
       ['Date of birth', user.dateOfBirth], ['Blood group', user.bloodGroup],
-      ...(user.role !== 'SUPER_ADMIN' ? [['SSN Last 4', user.ssnLast4]] : []),
+      ...(user.role !== 'ADMIN' ? [['SSN Last 4', user.ssnLast4]] : []),
       ['Profile completed', user.profileCompleted ? 'Yes' : 'No'],
     ]} /></section>
     <section className="employee-info-section"><h3>Contact & address</h3><Fields items={[

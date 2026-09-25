@@ -1,6 +1,6 @@
 # Project Health
 
-`GET /projects/health` derives current health without storing manual health fields or changing operational data. Admins and Super Admins see all projects. Project reviewers see only projects allowed by the existing project visibility rules. Other employees receive 403. Other-project assignments contribute to aggregate capacity counts without exposing their names, IDs, or budgets.
+`GET /projects/health` derives current health without storing manual health fields or changing operational data. Admins and Admins see all projects. Project reviewers see only projects allowed by the existing project visibility rules. Other employees receive 403. Other-project assignments contribute to aggregate capacity counts without exposing their names, IDs, or budgets.
 
 The response includes Healthy / Attention Needed / At Risk status, structured reasons, lifetime hours through the server's current date, remaining allocation, planned resource hours, active resource counts, submission and approval counts, and coverage notes. The most severe reason determines status. Results and reasons are ordered by severity.
 

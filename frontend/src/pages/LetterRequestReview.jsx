@@ -6,6 +6,7 @@ import { useAuth } from '../AuthContext';
 import { letterRequestAPI } from '../api';
 import { LoadingIndicator } from '../components/Hourglass';
 import logoUrl from '../assets/Logo.png';
+import managerSignatureUrl from '../assets/manager-signature.png';
 import '../styles.css';
 
 const LETTER_TYPES = {
@@ -91,7 +92,7 @@ export default function LetterRequestReview() {
     }
   };
 
-  if (user?.role !== 'SUPER_ADMIN') {
+  if (user?.role !== 'ADMIN') {
     return (
       <div className="page-container">
         <div className="error-message">You do not have permission to access this page.</div>
@@ -116,7 +117,7 @@ export default function LetterRequestReview() {
   const title = lines[0] || 'Maxwell';
   const date = lines[1] || '';
   const subjectIndex = lines.findIndex((line) => line.startsWith('Subject:'));
-  const salutation = lines.find((line) => line.toLowerCase().startsWith('to whomsoever')) || '';
+  const salutation = lines.find((line) => line.toLowerCase().startsWith('to whom')) || '';
   const subject = subjectIndex >= 0 ? lines[subjectIndex] : LETTER_TYPES[request.requestType];
   const bodyLines = subjectIndex >= 0 ? lines.slice(subjectIndex + 1).filter(Boolean) : lines.slice(2).filter(Boolean);
   const employerIndex = bodyLines.findIndex((line) => line === EMPLOYER_INFORMATION_TITLE);
@@ -155,7 +156,10 @@ export default function LetterRequestReview() {
           <p className="letter-subject">{subject}</p>
           <div className="letter-body">
             {letterBodyLines.map((line, index) => (
-              <p key={`${line}-${index}`}>{line}</p>
+              <React.Fragment key={`${line}-${index}`}>
+                {line === 'Best Regards,' && <img className="letter-manager-signature" src={managerSignatureUrl} alt="Manager signature" />}
+                <p>{line}</p>
+              </React.Fragment>
             ))}
           </div>
           {employerLines.length > 0 && (

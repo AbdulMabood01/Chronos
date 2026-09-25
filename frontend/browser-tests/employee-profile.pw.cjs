@@ -9,7 +9,7 @@ test('profile workspace separates details and management on desktop and fits mob
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url());
     let data = [];
-    if (url.pathname === '/api/auth/me') data = { id: 1, firstName: 'Sam', lastName: 'Admin', role: 'SUPER_ADMIN', profileCompleted: true };
+    if (url.pathname === '/api/auth/me') data = { id: 1, firstName: 'Sam', lastName: 'Admin', role: 'ADMIN', profileCompleted: true };
     else if (url.pathname === '/api/users/all') data = [employee];
     else if (url.pathname.includes('leave-balance')) data = { configured: true, vacation: days, sick: days, bereavement: days };
     else if (url.pathname.includes('unread-count')) data = 0;

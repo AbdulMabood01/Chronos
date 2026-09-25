@@ -1,6 +1,8 @@
 # Timesheet submission reminders
 
-Active employees and admins with a missing, draft, or rejected monthly timesheet receive an email to their work address and an in-app notification at 8:00 PM every Friday and on the last calendar day of the month. Submitted, approved, locked, and change-requested timesheets and SuperAdmins are excluded.
+Users can disable reminder emails using the Email alerts master switch or the Timesheets category beside the theme control. Their in-app reminders remain enabled. See [Email alerts](EMAIL_ALERTS.md).
+
+Active employees and admins with a missing, draft, or rejected monthly timesheet receive an email to their work address and an in-app notification at 8:00 PM every Friday and on the last calendar day of the month. Submitted, approved, locked, and change-requested timesheets and Admins are excluded.
 
 Employees choose an IANA timezone in their profile. Existing and new accounts default to America/Chicago until changed. Dates and daylight-saving offsets are evaluated in that timezone. The scheduler checks every five minutes and retries failed deliveries until local midnight. A Friday that is also month-end produces one reminder. The Settings reminder toggle pauses both channels.
 

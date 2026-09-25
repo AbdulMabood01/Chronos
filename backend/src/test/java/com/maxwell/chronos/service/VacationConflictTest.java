@@ -11,12 +11,12 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class VacationConflictTest {
-    @Test void superAdminCannotSubmitExistingDraft() {
+    @Test void systemAdminCannotSubmitExistingDraft() {
         var vacations = mock(VacationRequestRepository.class);
         var service = new VacationService(vacations, mock(UserRepository.class), mock(TimesheetRepository.class),
                 mock(TimesheetProjectSubmissionRepository.class), mock(ProjectAssignmentRepository.class),
                 mock(AuditService.class), mock(NotificationService.class));
-        var user = User.builder().id(1L).role(UserRole.SUPER_ADMIN).build();
+        var user = User.builder().id(1L).role(UserRole.ADMIN).build();
         var vacation = VacationRequest.builder().id(3L).user(user).status(VacationStatus.DRAFT).build();
         when(vacations.findById(3L)).thenReturn(Optional.of(vacation));
         assertThrows(org.springframework.security.access.AccessDeniedException.class, () -> service.submitVacationRequest(3L, 1L));
@@ -24,7 +24,7 @@ class VacationConflictTest {
         assertEquals(VacationStatus.DRAFT, vacation.getStatus());
     }
 
-    @Test void onlySuperAdminReceivesPendingVacationRequests() {
+    @Test void onlyAdminReceivesPendingVacationRequests() {
         var vacations = mock(VacationRequestRepository.class);
         var assignments = mock(ProjectAssignmentRepository.class);
         var service = new VacationService(vacations, mock(UserRepository.class), mock(TimesheetRepository.class),
@@ -36,7 +36,7 @@ class VacationConflictTest {
         when(vacations.findByStatus(VacationStatus.SUBMITTED)).thenReturn(List.of(vacation));
         when(assignments.findByUserIdAndIsActiveTrue(1L)).thenReturn(List.of(ProjectAssignment.builder().project(project).build()));
         assertTrue(service.getPendingVacationRequests(manager).isEmpty());
-        assertEquals(1, service.getPendingVacationRequests(User.builder().id(10L).role(UserRole.SUPER_ADMIN).build()).size());
+        assertEquals(1, service.getPendingVacationRequests(User.builder().id(10L).role(UserRole.ADMIN).build()).size());
         assertTrue(service.getPendingVacationRequests(User.builder().id(9L).role(UserRole.EMPLOYEE).build()).isEmpty());
         assertTrue(service.getPendingVacationRequests(employee).isEmpty());
     }
@@ -49,7 +49,7 @@ class VacationConflictTest {
         var service = new VacationService(vacations, users, sheets, submissions, mock(ProjectAssignmentRepository.class),
                 mock(AuditService.class), mock(NotificationService.class));
         var employee = User.builder().id(1L).build();
-        var admin = User.builder().id(2L).role(UserRole.SUPER_ADMIN).build();
+        var admin = User.builder().id(2L).role(UserRole.ADMIN).build();
         var date = LocalDate.of(2026,9,10);
         var vacation = VacationRequest.builder().id(3L).user(employee).startDate(date).endDate(date)
                 .status(VacationStatus.SUBMITTED).build();

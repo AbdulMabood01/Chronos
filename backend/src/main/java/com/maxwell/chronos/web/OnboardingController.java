@@ -17,6 +17,14 @@ public class OnboardingController {
     private final OnboardingService onboarding;
     private final AuthenticationService authentication;
     private final UserService users;
+    private final EmployeeImportService employeeImport;
+
+    @PostMapping(value = "/users/import", consumes = "multipart/form-data")
+    public Map<String, Integer> importEmployees(@RequestParam("file") org.springframework.web.multipart.MultipartFile file,
+                                               @AuthenticationPrincipal Jwt jwt) {
+        requireAdmin(jwt);
+        return Map.of("imported", employeeImport.importEmployees(file));
+    }
     // Request classes deliberately have no generated toString: credentials must not appear in logs.
     public static class LoginRequest {
         @NotBlank @Email @Size(max=255) public String email;
@@ -48,19 +56,19 @@ public class OnboardingController {
     @PostMapping("/users")
     @ResponseStatus(org.springframework.http.HttpStatus.CREATED)
     public UserDTO create(@Valid @RequestBody EmployeeRequest request, @AuthenticationPrincipal Jwt jwt) {
-        requireSuperAdmin(jwt);
+        requireAdmin(jwt);
         return users.findById(onboarding.create(request.firstName,request.lastName,request.email).getId());
     }
     @PostMapping("/users/{id}/invitation")
     public void invite(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
-        requireSuperAdmin(jwt); onboarding.invite(id);
+        requireAdmin(jwt); onboarding.invite(id);
     }
     @DeleteMapping("/users/{id}/invitation")
     public void revoke(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
-        requireSuperAdmin(jwt); onboarding.revoke(id);
+        requireAdmin(jwt); onboarding.revoke(id);
     }
-    private void requireSuperAdmin(Jwt jwt) {
+    private void requireAdmin(Jwt jwt) {
         var requester=jwt==null ? null : users.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        if(requester==null || !requester.isSuperAdmin()) throw new AccessDeniedException("Only Admin can manage onboarding");
+        if(requester==null || !requester.isAdmin()) throw new AccessDeniedException("Only Admin can manage onboarding");
     }
 }

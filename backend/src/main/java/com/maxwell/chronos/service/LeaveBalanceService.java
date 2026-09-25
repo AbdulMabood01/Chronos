@@ -33,11 +33,11 @@ public class LeaveBalanceService {
     }
 
     public LeaveBalanceDTO update(Long userId, LeaveAllowanceRequest input, User requester) {
-        if (requester == null || !requester.isSuperAdmin())
+        if (requester == null || !requester.isAdmin())
             throw new org.springframework.security.access.AccessDeniedException("Only Admin can set leave allowances");
         validateYear(input.year());
         var employee = users.findForUpdate(userId).orElseThrow(() -> new IllegalArgumentException("User not found"));
-        if (employee.isSuperAdmin()) throw new IllegalArgumentException("Leave allowances apply to employees and Project Admins");
+        if (employee.isAdmin()) throw new IllegalArgumentException("Leave allowances apply to employees and Project Admins");
         var value = allowances.findByUserIdAndYear(userId, input.year()).orElseGet(LeaveAllowance::new);
         value.setUserId(userId); value.setYear(input.year());
         value.setVacationDays(input.vacationDays()); value.setSickDays(input.sickDays());
@@ -71,7 +71,7 @@ public class LeaveBalanceService {
         return VacationType.VACATION;
     }
     private void authorize(Long userId, User requester) {
-        if (requester == null || (!requester.isSuperAdmin() && !requester.getId().equals(userId)))
+        if (requester == null || (!requester.isAdmin() && !requester.getId().equals(userId)))
             throw new org.springframework.security.access.AccessDeniedException("Leave balance permission required");
     }
     private void validateYear(int year) {

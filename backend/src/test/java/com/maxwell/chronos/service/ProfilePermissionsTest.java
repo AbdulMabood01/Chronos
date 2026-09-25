@@ -73,10 +73,10 @@ class ProfilePermissionsTest {
         }
     }
 
-    @Test void superAdminCannotSetSsnAndExistingValueIsNotReturnedOrErased() {
+    @Test void systemAdminCannotSetSsnAndExistingValueIsNotReturnedOrErased() {
         var users = mock(UserRepository.class);
         var service = new UserService(users, mock(AuditService.class));
-        var user = User.builder().id(1L).email("admin@example.com").role(UserRole.SUPER_ADMIN).ssnLast4("1234").build();
+        var user = User.builder().id(1L).email("admin@example.com").role(UserRole.ADMIN).ssnLast4("1234").build();
         when(users.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
         var request = new UpdateProfileRequest();
         request.setSsnLast4("5678");
@@ -99,18 +99,18 @@ class ProfilePermissionsTest {
         request.setSsnLast4("1234");
         assertEquals("1234", service.updateOwnProfile(user.getEmail(), request).getSsnLast4());
     }
-    @Test void onlySuperAdminCanSetOrClearJoiningDate() {
+    @Test void onlyAdminCanSetOrClearJoiningDate() {
         var users = mock(UserRepository.class);
         var service = new UserService(users, mock(AuditService.class));
         var employee = User.builder().id(1L).role(UserRole.EMPLOYEE).build();
-        var admin = User.builder().id(2L).role(UserRole.ADMIN).build();
-        var superAdmin = User.builder().id(3L).role(UserRole.SUPER_ADMIN).build();
+        var admin = User.builder().id(2L).role(UserRole.PROJECT_ADMIN).build();
+        var systemAdmin = User.builder().id(3L).role(UserRole.ADMIN).build();
         var date = java.time.LocalDate.of(2026, 7, 27);
         assertThrows(AccessDeniedException.class, () -> service.updateJoiningDate(1L, date, employee));
         assertThrows(AccessDeniedException.class, () -> service.updateJoiningDate(1L, date, admin));
         when(users.findForUpdate(1L)).thenReturn(Optional.of(employee));
         when(users.save(employee)).thenReturn(employee);
-        assertEquals(date, service.updateJoiningDate(1L, date, superAdmin).getJoiningDate());
-        assertNull(service.updateJoiningDate(1L, null, superAdmin).getJoiningDate());
+        assertEquals(date, service.updateJoiningDate(1L, date, systemAdmin).getJoiningDate());
+        assertNull(service.updateJoiningDate(1L, null, systemAdmin).getJoiningDate());
     }
 }

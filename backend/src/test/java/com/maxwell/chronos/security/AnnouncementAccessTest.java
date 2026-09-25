@@ -37,10 +37,10 @@ class AnnouncementAccessTest {
         when(users.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
     }
     private org.springframework.test.web.servlet.request.RequestPostProcessor token() {
-        return jwt().jwt(j -> j.subject("subject").claim("preferred_username",user.getEmail()).claim("role","SUPER_ADMIN"));
+        return jwt().jwt(j -> j.subject("subject").claim("preferred_username",user.getEmail()).claim("role","ADMIN"));
     }
-    @Test void onlyDatabaseSuperAdminsCanManageOrInspectTracking() throws Exception {
-        for(var role:List.of(UserRole.EMPLOYEE,UserRole.ADMIN)) {
+    @Test void onlyDatabaseAdminsCanManageOrInspectTracking() throws Exception {
+        for(var role:List.of(UserRole.EMPLOYEE,UserRole.PROJECT_ADMIN)) {
             user.setRole(role);
             mvc.perform(post("/announcements").with(token()).contentType("application/json").content(input)).andExpect(status().isForbidden());
             mvc.perform(put("/announcements/"+id).with(token()).contentType("application/json").content(input)).andExpect(status().isForbidden());
@@ -60,7 +60,7 @@ class AnnouncementAccessTest {
         verifyNoInteractions(db);
     }
     @Test void invalidFieldsAndDatesAreRejected() throws Exception {
-        user.setRole(UserRole.SUPER_ADMIN);
+        user.setRole(UserRole.ADMIN);
         mvc.perform(post("/announcements").with(token()).contentType("application/json").content(input.replace("\"News\"","\" \""))).andExpect(status().isBadRequest());
         mvc.perform(post("/announcements").with(token()).contentType("application/json").content(input.replace("\"version\":0","\"version\":0,\"expirationDate\":\"2026-09-21\""))).andExpect(status().isBadRequest());
         verifyNoInteractions(db);

@@ -2756,6 +2756,13 @@ html, body, #root {
   margin: 0;
 }
 
+.letter-manager-signature {
+  display: block;
+  width: 145px;
+  height: auto;
+  margin: 1rem 0 .35rem;
+}
+
 .letter-preview-footer,
 .letter-contact-footer {
   border-top: 1px solid #c7d9ee;

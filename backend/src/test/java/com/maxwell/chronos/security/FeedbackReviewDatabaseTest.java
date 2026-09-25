@@ -27,7 +27,7 @@ class FeedbackReviewDatabaseTest {
     @Autowired ObjectMapper json;
     @Autowired UserRepository users;
     User sender, recipient, admin;
-    @BeforeEach void setup() { sender=createUser("EMPLOYEE"); recipient=createUser("EMPLOYEE"); admin=createUser("SUPER_ADMIN"); }
+    @BeforeEach void setup() { sender=createUser("EMPLOYEE"); recipient=createUser("EMPLOYEE"); admin=createUser("ADMIN"); }
     private User createUser(String role) {
         String unique=UUID.randomUUID().toString();
         db.update("INSERT INTO users(employee_id,first_name,last_name,email,role,is_active,entra_id,password_hash,profile_completed) VALUES (?,?,?,?,?::user_role_enum,true,?,?,true)", unique,"Person",unique,unique+"@example.invalid",role,unique,"hash");
@@ -51,6 +51,10 @@ class FeedbackReviewDatabaseTest {
         assertFalse(received.contains(sender.getEmail()));
         mvc.perform(get("/feedback-reviews/feedback").param("given","true").with(token(sender))).andExpect(status().isOk())
             .andExpect(jsonPath("$.length()").value(2)).andExpect(jsonPath("$[0].recipient_email").value(recipient.getEmail()));
+        mvc.perform(get("/feedback-reviews/feedback").param("given","true").with(token(recipient)))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+        mvc.perform(get("/feedback-reviews/feedback").param("given","false").with(token(sender)))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
         mvc.perform(get("/feedback-reviews/feedback").with(token(admin))).andExpect(jsonPath("$.length()").value(0));
         mvc.perform(get("/feedback-reviews/employees").param("query",recipient.getEmail()).with(token(sender)))
             .andExpect(status().isOk()).andExpect(jsonPath("$[0].id").value(recipient.getId()));

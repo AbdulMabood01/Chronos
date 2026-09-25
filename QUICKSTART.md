@@ -257,7 +257,7 @@ chronos/
 ### 5. User Management
 - **Active/Inactive Status**: Deactivate without deleting employee records
 - **Hourly Rate Updates**: Track rate changes with audit logging
-- **Role-Based Access**: EMPLOYEE vs SUPER_ADMIN roles
+- **Role-Based Access**: EMPLOYEE vs ADMIN roles
 - **Employee ID Generation**: Auto-generated format (EMP000001)
 
 ---

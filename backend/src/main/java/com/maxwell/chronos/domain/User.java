@@ -109,6 +109,15 @@ public class User {
     @Column(length = 100)
     private String passwordHash;
 
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private String passwordResetHash;
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private java.time.Instant passwordResetExpiresAt;
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private java.time.Instant passwordResetRequestedAt;
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private long credentialVersion;
+
     public String getAccountStatus() {
         return !Boolean.TRUE.equals(isActive) ? "INACTIVE" : passwordHash == null ? "INVITED" : "ACTIVE";
     }
@@ -129,16 +138,16 @@ public class User {
     @Builder.Default
     private Set<VacationRequest> vacationRequests = new HashSet<>();
 
-    public boolean isSuperAdmin() {
-        return UserRole.SUPER_ADMIN.equals(this.role);
-    }
-
     public boolean isAdmin() {
         return UserRole.ADMIN.equals(this.role);
     }
 
+    public boolean isProjectAdmin() {
+        return UserRole.PROJECT_ADMIN.equals(this.role);
+    }
+
     public boolean canManageProjects() {
-        return isAdmin();
+        return isProjectAdmin();
     }
 
     public String getFullName() {

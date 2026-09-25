@@ -27,7 +27,7 @@ public class AuthController {
                 .jobTitle(user.getJobTitle())
                 .joiningDate(user.getJoiningDate())
                 .dateOfBirth(user.getDateOfBirth())
-                .ssnLast4(user.isSuperAdmin() ? null : user.getSsnLast4())
+                .ssnLast4(user.isAdmin() ? null : user.getSsnLast4())
                 .profileImageUrl(user.getProfileImageUrl())
                 .phoneNumber(user.getPhoneNumber())
                 .personalEmail(user.getPersonalEmail())

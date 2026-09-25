@@ -37,6 +37,7 @@ public class AuthenticationService {
             Instant now=Instant.now();
             SignedJWT jwt=new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), new JWTClaimsSet.Builder()
                     .subject(user.getEntraId()).claim("employee_id", user.getId())
+                    .claim("credential_version", user.getCredentialVersion())
                     .claim("preferred_username", user.getEmail()).issuer(issuer).audience(audience)
                     .issueTime(Date.from(now)).expirationTime(Date.from(now.plusSeconds(lifetime)))
                     .jwtID(UUID.randomUUID().toString()).build());

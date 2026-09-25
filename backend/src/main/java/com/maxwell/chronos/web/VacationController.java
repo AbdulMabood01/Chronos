@@ -129,7 +129,7 @@ public class VacationController {
         }
 
         try {
-            if (!user.isAdmin() && !user.isSuperAdmin() && !projectService.canReviewProjects(user.getId())) return ResponseEntity.status(403).build();
+            if (!user.isProjectAdmin() && !user.isAdmin() && !projectService.canReviewProjects(user.getId())) return ResponseEntity.status(403).build();
             List<VacationRequestDTO> requests = vacationService.getPendingVacationRequests(user);
             return ResponseEntity.ok(requests);
         } catch (IllegalArgumentException e) {

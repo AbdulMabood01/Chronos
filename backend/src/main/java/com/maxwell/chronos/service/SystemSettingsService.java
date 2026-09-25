@@ -31,7 +31,7 @@ public class SystemSettingsService {
     }
 
     public int applyLeaveDefaults(int year, boolean confirmed, com.maxwell.chronos.domain.User requester) {
-        if (requester == null || (!requester.isAdmin() && !requester.isSuperAdmin()))
+        if (requester == null || (!requester.isProjectAdmin() && !requester.isAdmin()))
             throw new org.springframework.security.access.AccessDeniedException("Admin or Project Admin permission required");
         if (!confirmed || year < 1900 || year > 9998) throw new IllegalArgumentException("Confirm a valid leave year");
         var vacation = leaveDays(getSetting("vacation_days_per_year").getValue());
@@ -39,7 +39,7 @@ public class SystemSettingsService {
         var bereavement = leaveDays(getSetting("bereavement_days_per_year").getValue());
         int count = 0;
         for (var employee : users.findAll().stream().sorted(java.util.Comparator.comparing(com.maxwell.chronos.domain.User::getId)).toList()) {
-            if (employee.isSuperAdmin()) continue;
+            if (employee.isAdmin()) continue;
             users.findForUpdate(employee.getId()).orElseThrow();
             var allowance = allowances.findByUserIdAndYear(employee.getId(), year)
                     .orElseGet(com.maxwell.chronos.domain.LeaveAllowance::new);

@@ -4,7 +4,7 @@ import { beforeEach, afterEach, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import UserManagement from './UserManagement';
 import { userAPI } from '../api';
-vi.mock('../AuthContext', () => ({ useAuth: () => ({ user: { id: 1, role: 'SUPER_ADMIN' } }) }));
+vi.mock('../AuthContext', () => ({ useAuth: () => ({ user: { id: 1, role: 'ADMIN' } }) }));
 vi.mock('../api', () => ({ userAPI: { getAllUsersAsAdmin: vi.fn(), deactivateUser: vi.fn(), reactivateUser: vi.fn(), updateJoiningDate: vi.fn(), getLeaveBalance: vi.fn(), updateLeaveAllowance: vi.fn() } }));
 beforeEach(() => vi.resetAllMocks());
 afterEach(cleanup);
@@ -33,20 +33,20 @@ it('can retry a failed request and search loaded users', async () => {
   vi.restoreAllMocks();
 });
 
-it('does not show the deactivate control for Super Admin users', async () => {
+it('does not show the deactivate control for Admin users', async () => {
   userAPI.getAllUsersAsAdmin.mockResolvedValue({
     data: [
-      { id: 1, firstName: 'Sam', lastName: 'Admin', email: 'sam@example.test', role: 'SUPER_ADMIN', isActive: true },
+      { id: 1, firstName: 'Sam', lastName: 'Admin', email: 'sam@example.test', role: 'ADMIN', isActive: true },
       { id: 2, firstName: 'Alice', lastName: 'Smith', email: 'alice@example.test', role: 'EMPLOYEE', isActive: true },
     ],
   });
 
   render(<UserManagement />);
 
-  const superAdminRow = (await screen.findByText('Sam Admin')).closest('tr');
+  const systemAdminRow = (await screen.findByText('Sam Admin')).closest('tr');
   const employeeRow = screen.getByText('Alice Smith').closest('tr');
 
-  expect(superAdminRow.textContent).not.toContain('Deactivate');
+  expect(systemAdminRow.textContent).not.toContain('Deactivate');
   expect(employeeRow.textContent).toContain('Deactivate');
 });
 

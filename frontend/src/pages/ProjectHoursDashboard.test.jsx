@@ -43,8 +43,8 @@ it('lets employee project reviewers view project hours without editing planned h
   expect(projectAPI.updatePlannedHours).not.toHaveBeenCalled();
 });
 
-it('lets Admin users edit planned project hours', async () => {
-  currentUser.role = 'ADMIN';
+it('lets Project Admin users edit planned project hours', async () => {
+  currentUser.role = 'PROJECT_ADMIN';
   projectAPI.updatePlannedHours.mockResolvedValue({});
   renderDashboard();
   const input = await screen.findByLabelText('Planned hours for Employee');

@@ -23,7 +23,7 @@ public class AuthenticationRateLimitFilter extends OncePerRequestFilter {
     @Override protected void doFilterInternal(HttpServletRequest request,HttpServletResponse response,FilterChain chain)
             throws ServletException,IOException {
         String path=request.getServletPath();
-        if("POST".equals(request.getMethod()) && Set.of("/auth/login","/auth/activate","/auth/invitations/validate").contains(path)
+        if("POST".equals(request.getMethod()) && Set.of("/auth/login","/auth/activate","/auth/invitations/validate", "/auth/forgot-password", "/auth/reset-password", "/auth/reset-password/validate", "/auth/change-password").contains(path)
                 && !allow(request.getRemoteAddr())) {
             response.setStatus(429); response.setHeader("Retry-After","60"); return;
         }

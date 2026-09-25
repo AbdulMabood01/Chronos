@@ -30,7 +30,7 @@ class EmployeeReportDatabaseTest {
     @Autowired UserRepository users;
     User employee, admin;
     @BeforeEach void setup() {
-        employee = createUser("EMPLOYEE"); admin = createUser("SUPER_ADMIN");
+        employee = createUser("EMPLOYEE"); admin = createUser("ADMIN");
     }
     private User createUser(String role) {
         String unique = UUID.randomUUID().toString();

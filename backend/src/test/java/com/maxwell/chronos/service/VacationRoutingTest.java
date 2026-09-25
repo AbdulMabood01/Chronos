@@ -17,7 +17,7 @@ class VacationRoutingTest {
     private final VacationService service = new VacationService(vacations, users, mock(TimesheetRepository.class),
             mock(TimesheetProjectSubmissionRepository.class), assignments, mock(AuditService.class), notifications);
     private final User employee = User.builder().id(1L).role(UserRole.EMPLOYEE).build();
-    private final User admin = User.builder().id(2L).role(UserRole.SUPER_ADMIN).build();
+    private final User admin = User.builder().id(2L).role(UserRole.ADMIN).build();
     private final User manager = User.builder().id(3L).role(UserRole.EMPLOYEE).isActive(true).build();
 
     private VacationRequest request(VacationStatus status) {
@@ -30,7 +30,7 @@ class VacationRoutingTest {
 
     @Test void managersCannotApproveOrReject() {
         var request = request(VacationStatus.SUBMITTED);
-        for (UserRole role : List.of(UserRole.EMPLOYEE, UserRole.ADMIN)) {
+        for (UserRole role : List.of(UserRole.EMPLOYEE, UserRole.PROJECT_ADMIN)) {
             manager.setRole(role);
             when(users.findById(3L)).thenReturn(Optional.of(manager));
             assertThrows(IllegalArgumentException.class, () -> service.approveVacationRequest(10L, 3L));
@@ -41,7 +41,7 @@ class VacationRoutingTest {
         verifyNoInteractions(notifications);
     }
 
-    @Test void superAdminCanApproveSubmittedVacation() {
+    @Test void systemAdminCanApproveSubmittedVacation() {
         var request = request(VacationStatus.SUBMITTED);
         when(users.findById(2L)).thenReturn(Optional.of(admin));
         when(users.findForUpdate(1L)).thenReturn(Optional.of(employee));
@@ -70,7 +70,7 @@ class VacationRoutingTest {
         projects.add(ProjectAssignment.builder().project(Project.builder().status(ProjectStatus.ACTIVE)
                 .isActive(true).projectManager(User.builder().id(201L).isActive(false).build()).build()).build());
         when(assignments.findByUserIdAndIsActiveTrue(1L)).thenReturn(projects);
-        when(users.findByRole(UserRole.SUPER_ADMIN)).thenReturn(List.of(admin));
+        when(users.findByRole(UserRole.ADMIN)).thenReturn(List.of(admin));
         when(users.findById(2L)).thenReturn(Optional.of(admin));
         when(users.findForUpdate(1L)).thenReturn(Optional.of(employee));
 

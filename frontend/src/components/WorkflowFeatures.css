@@ -31,7 +31,9 @@
 .budget-near progress { accent-color: #b77916; }
 .budget-over { border-left-color: var(--danger-color); }
 .budget-over progress { accent-color: var(--danger-color); }
-.history-title { margin: 1rem 0; }
+.history-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.history-title { margin: 0; }
+.history-close { margin-left: auto; }
 .approval-timeline { list-style: none; padding-left: 1rem; margin: 1rem 0; border-left: 3px solid var(--primary-color); }
 .approval-timeline li { padding: .5rem 0 1rem .7rem; }
 .history-reason { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface-tint); padding: .7rem; border-radius: 8px; }

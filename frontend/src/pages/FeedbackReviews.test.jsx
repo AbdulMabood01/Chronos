@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { FeedbackPage, PerformanceReviewsPage } from './FeedbackReviews';
 import { feedbackReviewsAPI as api } from '../api';
 vi.mock('../api', () => ({ feedbackReviewsAPI: { feedback: vi.fn(), submit: vi.fn(), employees: vi.fn(), reviews: vi.fn(), save: vi.fn(), publish: vi.fn(), audit: vi.fn() } }));
@@ -34,6 +34,27 @@ it('submits anonymous feedback after employee selection and shows sender history
   await waitFor(() => expect(api.submit).toHaveBeenCalledWith({ employeeId:2, content:'General Feedback\nThank you!', category:null, anonymous:true }));
   await waitFor(() => expect(api.feedback).toHaveBeenLastCalledWith(true));
 });
+it('keeps received feedback out of the recipient given tab, including late responses', async () => {
+  const received = { id:'received', content:'Feedback from A to B', anonymous:false, sender_name:'Employee A', sender_type:'Employee', submitted_at:'2026-09-23T12:00:00Z' };
+  let finishReceived;
+  api.feedback.mockImplementation(given => given
+    ? Promise.resolve({ data:[] })
+    : new Promise(resolve => { finishReceived = resolve; }));
+  render(<FeedbackPage/>);
+  expect(api.feedback).toHaveBeenLastCalledWith(false);
+  fireEvent.click(screen.getByRole('button', { name:"Feedback I've Given" }));
+  await screen.findByText("You haven't given any feedback yet.");
+  expect(api.feedback).toHaveBeenLastCalledWith(true);
+  await act(async () => { finishReceived({ data:[received] }); });
+  expect(screen.queryByText(received.content)).toBeNull();
+  api.feedback.mockImplementation(given => Promise.resolve({ data:given ? [] : [received] }));
+  fireEvent.click(screen.getByRole('button', { name:'My Feedback' }));
+  await screen.findByText(received.content);
+  expect(screen.getByText(/Submitted by: Employee A/)).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name:"Feedback I've Given" }));
+  await screen.findByText("You haven't given any feedback yet.");
+  expect(screen.queryByText(received.content)).toBeNull();
+});
 it('defaults to latest published review and keeps employee review history read-only', async () => {
   api.reviews.mockResolvedValue({ data:[{ id:'a', review_year:2026, quarter:3, summary:'Latest summary', published_at:'2026-09-20T12:00:00Z' }, { id:'b', review_year:2025, quarter:1, summary:'Historical summary', published_at:'2025-04-01T12:00:00Z' }] });
   render(<PerformanceReviewsPage/>);
@@ -44,8 +65,8 @@ it('defaults to latest published review and keeps employee review history read-o
   fireEvent.change(screen.getByLabelText('Quarter'), { target: { value:'1' } });
   expect(screen.getByText('Historical summary')).toBeTruthy();
 });
-it('lets a Super Admin create a draft and explicitly publish it', async () => {
-  user.role = 'SUPER_ADMIN';
+it('lets a Admin create a draft and explicitly publish it', async () => {
+  user.role = 'ADMIN';
   api.employees.mockResolvedValue({ data:[{ id:2, first_name:'Jane', last_name:'Doe', email:'jane@example.com' }] });
   api.reviews.mockResolvedValue({ data:[] });
   api.save.mockResolvedValue({ data:'draft' });
@@ -84,8 +105,8 @@ it('retains all sections after an error and prevents duplicate submissions while
   expect(screen.getByDisplayValue('Try a demo')).toBeTruthy();
   expect(screen.getByRole('button', { name:'Submit identified feedback' }).disabled).toBe(false);
 });
-it('lets Super Admin browse all employees and open the selected review period', async () => {
-  user.role = 'SUPER_ADMIN';
+it('lets Admin browse all employees and open the selected review period', async () => {
+  user.role = 'ADMIN';
   const review = { id:'review', employee_id:2, first_name:'Jane', last_name:'Doe', employee_name:'Jane Doe', employee_email:'jane@example.com', review_year:2025, quarter:2, summary:'Earlier review', version:0 };
   api.reviews.mockResolvedValue({ data:[review] });
   render(<PerformanceReviewsPage/>);
@@ -96,7 +117,7 @@ it('lets Super Admin browse all employees and open the selected review period', 
   expect(screen.getByLabelText('Quarter').value).toBe('2');
   expect(screen.getByRole('button', {name:'Publish to employee'})).toBeTruthy();
 });
-it.each(['EMPLOYEE', 'ADMIN'])('keeps %s performance reviews personal and read-only', async role => {
+it.each(['EMPLOYEE', 'PROJECT_ADMIN'])('keeps %s performance reviews personal and read-only', async role => {
   user.role = role;
   api.reviews.mockResolvedValue({ data:[{ id:'own', employee_id:1, review_year:2026, quarter:2, summary:'My published review', published_at:'2026-07-01T12:00:00Z' }] });
   render(<PerformanceReviewsPage/>);

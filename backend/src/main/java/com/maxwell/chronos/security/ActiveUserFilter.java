@@ -22,6 +22,12 @@ public class ActiveUserFilter extends OncePerRequestFilter {
         if (SecurityContextHolder.getContext().getAuthentication() instanceof JwtAuthenticationToken auth) {
             String email = auth.getToken().getClaimAsString("preferred_username");
             var user = email == null ? null : users.findByEmail(email).orElse(null);
+            Object version = auth.getToken().getClaims().get("credential_version");
+            if (user != null && (version == null ? user.getCredentialVersion() != 0
+                    : !(version instanceof Number) || ((Number) version).longValue() != user.getCredentialVersion())) {
+                response.sendError(401, "Password changed. Please sign in again.");
+                return;
+            }
             if (email == null || auth.getToken().getSubject() == null
                     || user == null
                     || (user != null && (!"ACTIVE".equals(user.getAccountStatus())

@@ -4,6 +4,7 @@ import { useAuth } from '../AuthContext';
 import { notificationAPI } from '../api';
 import { BrandLogo } from './Hourglass';
 import Icon from './Icon';
+import EmailAlertPreferences from './EmailAlertPreferences';
 
 export default function WorkspaceLayout({ children, darkBackground, onToggleBackground }) {
   const { user, logout } = useAuth();
@@ -11,16 +12,16 @@ export default function WorkspaceLayout({ children, darkBackground, onToggleBack
   const [unread, setUnread] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButton = useRef(null);
-  const reviewer = user?.canReviewProjects || ['ADMIN', 'SUPER_ADMIN'].includes(user?.role);
-  const projectManager = user?.canManageProjects || ['ADMIN', 'SUPER_ADMIN'].includes(user?.role);
-  const operations = ['ADMIN', 'SUPER_ADMIN'].includes(user?.role);
-  const superAdmin = user?.role === 'SUPER_ADMIN';
+  const reviewer = user?.canReviewProjects || ['PROJECT_ADMIN', 'ADMIN'].includes(user?.role);
+  const projectManager = user?.canManageProjects || ['PROJECT_ADMIN', 'ADMIN'].includes(user?.role);
+  const operations = ['PROJECT_ADMIN', 'ADMIN'].includes(user?.role);
+  const systemAdmin = user?.role === 'ADMIN';
   const primary = [
     ['/dashboard', 'Overview', 'grid'],
     ['/announcements', 'Announcements', 'bell'],
-    ...(!superAdmin ? [['/timesheets', 'Timesheets', 'clock'], ['/vacation', 'Time off', 'calendar']] : []),
+    ...(!systemAdmin ? [['/timesheets', 'Timesheets', 'clock'], ['/vacation', 'Time off', 'calendar']] : []),
     ['/requests', 'Letters & requests', 'file'],
-    ...(!superAdmin ? [['/workplace-reports', 'Reports', 'file']] : []),
+    ...(!systemAdmin ? [['/workplace-reports', 'Reports', 'file']] : []),
     ...(reviewer && !projectManager ? [['/admin', 'Approvals', 'check']] : []),
     ['/notifications', 'Inbox', 'bell'],
   ];
@@ -28,10 +29,10 @@ export default function WorkspaceLayout({ children, darkBackground, onToggleBack
     ...(projectManager ? [['/admin', 'Approvals', 'check']] : []),
     ...(projectManager ? [['/missing-timesheets', 'Missing timesheets', 'clock'], ['/team-leave-calendar', 'Team leave calendar', 'calendar']] : []),
     ...(projectManager ? [['/projects', 'Projects', 'briefcase']] : []),
-    ...(superAdmin ? [['/reports', 'Reports', 'file']] : []),
+    ...(systemAdmin ? [['/reports', 'Reports', 'file']] : []),
     ...(operations ? [['/time-reports', 'Time & leave reports', 'chart']] : []),
     ...(projectManager && !operations ? [['/project-hours', 'Project hours', 'chart']] : []),
-    ...(superAdmin ? [['/users', 'People', 'users'], ['/audit', 'Audit log', 'file'], ['/settings', 'Settings', 'settings']] : []),
+    ...(systemAdmin ? [['/users', 'People', 'users'], ['/audit', 'Audit log', 'file'], ['/settings', 'Settings', 'settings']] : []),
   ];
   const development = [['/feedback', 'Feedback', 'users'], ['/performance-reviews', 'Performance Reviews', 'file']];
   const current = [...primary, ...development, ...management].find(([path]) => location.pathname === path || location.pathname.startsWith(path + '/'));
@@ -77,6 +78,7 @@ export default function WorkspaceLayout({ children, darkBackground, onToggleBack
         <div className="workspace-breadcrumb"><button ref={menuButton} className="icon-button mobile-menu-toggle" onClick={() => setMenuOpen(!menuOpen)} aria-label={menuOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={menuOpen} aria-controls="workspace-navigation"><Icon name={menuOpen ? 'close' : 'menu'}/></button><span>Workspace</span><span className="breadcrumb-divider">/</span><strong>{title}</strong></div>
         <div className="workspace-tools"><time dateTime={new Date().toISOString().slice(0, 10)}>{new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date())}</time>
           <button className="icon-button" onClick={onToggleBackground} aria-label={darkBackground ? 'Switch to light theme' : 'Switch to dark theme'} title={darkBackground ? 'Light theme' : 'Dark theme'}><Icon name={darkBackground ? 'sun' : 'moon'}/></button>
+          <EmailAlertPreferences key={user?.id} />
           <Link to="/notifications" className="icon-button topbar-inbox" aria-label={unread ? `Inbox, ${unread} unread notifications` : 'Inbox'}><Icon name="bell"/>{unread > 0 && <i/>}</Link>
         </div>
       </header>

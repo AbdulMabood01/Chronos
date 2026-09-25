@@ -33,9 +33,9 @@ it('loads, updates and clears optional contact details in the saved profile', as
 });
 const profile = { firstName: 'Test', lastName: 'User', jobTitle: 'Engineer', dateOfBirth: '1990-01-01', ssnLast4: '1234' };
 
-it('omits SuperAdmin SSN from the form and saved payload, including legacy values', async () => {
+it('omits Admin SSN from the form and saved payload, including legacy values', async () => {
   const save = vi.fn().mockResolvedValue({});
-  render(<ProfileForm user={{ ...profile, role: 'SUPER_ADMIN' }} onSave={save} />);
+  render(<ProfileForm user={{ ...profile, role: 'ADMIN' }} onSave={save} />);
   expect(screen.queryByLabelText('4 Digits of SSN')).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Save Profile' }));
   await waitFor(() => expect(save).toHaveBeenCalled());

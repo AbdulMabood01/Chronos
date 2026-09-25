@@ -20,8 +20,12 @@ export default function ApprovalHistory({ timesheetId, projectId, revision }) {
   }, [timesheetId, projectId, revision, refresh]);
   const disabled = !error && loaded && events.length === 0;
   return <>
-    <button type="button" className="button button-secondary" aria-expanded={open} disabled={loading || disabled} onClick={() => setOpen(value => !value)}>{open ? 'Hide approval history' : 'View approval history'}</button>
-    {open && <section className="workflow-panel" aria-label="Approval history"><h3 className="history-title">Approval history</h3>
+    {!open && <button type="button" className="button button-secondary" aria-expanded="false" disabled={loading || disabled} onClick={() => setOpen(true)}>View approval history</button>}
+    {open && <section className="workflow-panel" aria-label="Approval history">
+      <div className="history-heading">
+        <h3 className="history-title">Approval history</h3>
+        <button type="button" className="button button-secondary history-close" aria-expanded="true" onClick={() => setOpen(false)}>Close approval history</button>
+      </div>
       {loading ? <p role="status">Loading history...</p> : error ? <p role="alert">{error}</p> : events.length === 0 ? <p>No recorded approval events yet.</p> : <ol className="approval-timeline">
         {events.map(event => <li key={event.id}><strong>{labels[event.action] || event.action}</strong><p>{event.userName || 'System'}{event.createdAt && <> <span aria-hidden="true"> / </span><time dateTime={event.createdAt}>{new Date(event.createdAt).toLocaleString()}</time></>}</p>
           {['TIMESHEET_REJECTED', 'TIMESHEET_REOPENED'].includes(event.action) && event.details?.message && <p className="history-reason">{event.details.message}</p>}

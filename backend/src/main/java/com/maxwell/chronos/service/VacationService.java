@@ -95,6 +95,8 @@ public class VacationService {
         VacationRequest saved = vacationRequestRepository.save(vacation);
         auditService.logAction(userId, "VACATION_EDITED", "VacationRequest", vacationId,
                 "Updated dates and type");
+        notificationService.createNotification(userId, "VACATION_UPDATED", "Vacation request updated",
+                "Your vacation request has been updated.", vacationId, "VacationRequest");
 
         return toDTO(saved);
     }
@@ -123,7 +125,7 @@ public class VacationService {
         if (!vacation.getUser().getId().equals(userId)) {
             throw new IllegalArgumentException("User cannot submit another user's vacation request");
         }
-        if (vacation.getUser().isSuperAdmin()) {
+        if (vacation.getUser().isAdmin()) {
             throw new org.springframework.security.access.AccessDeniedException("Admin cannot submit vacation requests");
         }
 
@@ -307,7 +309,7 @@ public class VacationService {
     }
 
     private void notifyAdminsOfVacationSubmission(VacationRequest vacation) {
-        List<User> reviewers = userRepository.findByRole(com.maxwell.chronos.enums.UserRole.SUPER_ADMIN);
+        List<User> reviewers = userRepository.findByRole(com.maxwell.chronos.enums.UserRole.ADMIN);
         for (User reviewer : reviewers) {
             notificationService.createNotification(reviewer.getId(),
                     "VACATION_SUBMITTED",
@@ -328,12 +330,12 @@ public class VacationService {
         if (vacation == null || reviewer == null || vacation.getUser().getId().equals(reviewer.getId())) {
             return false;
         }
-        return reviewer.isSuperAdmin();
+        return reviewer.isAdmin();
     }
 
     private void notifyProjectManagers(VacationRequest vacation, String type, String title, String action) {
         for (User manager : findProjectManagers(vacation)) {
-            if (type.equals("VACATION_SUBMITTED") && manager.isSuperAdmin()) {
+            if (type.equals("VACATION_SUBMITTED") && manager.isAdmin()) {
                 continue;
             }
             notificationService.createNotification(manager.getId(), type, title,

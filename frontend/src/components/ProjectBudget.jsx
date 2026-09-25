@@ -2,7 +2,7 @@ import React from 'react';
 import './WorkflowFeatures.css';
 export default function ProjectBudget({ budget, logged }) {
   const planned = Number(budget), used = Number(logged || 0);
-  if (budget == null || planned <= 0) return <div className="budget-panel"><strong>Project budget</strong><p>No hours budget set. Set total allocated hours in Projects to enable warnings.</p></div>;
+  if (budget == null || planned <= 0) return null;
   const percent = used / planned * 100;
   const status = percent >= 100 ? 'Budget reached' : percent >= 80 ? 'Approaching budget' : 'Within budget';
   return <section className={'budget-panel budget-' + (percent >= 100 ? 'over' : percent >= 80 ? 'near' : 'ok')} aria-label="Project budget">

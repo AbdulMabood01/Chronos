@@ -15,7 +15,7 @@ export default function AuditLog() {
   const visibleRecords = logs.filter(record => [record.userName,record.action,record.entityType,record.details].join(' ').toLowerCase().includes(search.toLowerCase()));
 
   useEffect(() => {
-    if (user?.role !== 'SUPER_ADMIN') {
+    if (user?.role !== 'ADMIN') {
       return;
     }
     loadLogs();
@@ -34,7 +34,7 @@ export default function AuditLog() {
     }
   };
 
-  if (user?.role !== 'SUPER_ADMIN') {
+  if (user?.role !== 'ADMIN') {
     return (
       <div className="page-container">
         <div className="error-message">You do not have permission to access this page.</div>

@@ -17,6 +17,7 @@ import java.util.stream.Collectors;
 public class NotificationService {
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
+    private final EmailAlertService emailAlerts;
 
     public void createNotification(Long userId, String type, String title, String message, Long entityId, String entityType) {
         var user = userRepository.findById(userId)
@@ -33,6 +34,7 @@ public class NotificationService {
                 .build();
 
         notificationRepository.save(notification);
+        emailAlerts.notification(userId, type);
     }
 
     public List<NotificationDTO> getUserNotifications(Long userId) {

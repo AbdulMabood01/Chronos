@@ -8,7 +8,7 @@ test('project control tabs, reporting period, themes and mobile layouts', async 
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url());
     let data = [];
-    if (url.pathname === '/api/auth/me') data = { id: 1, firstName: 'Jordan', lastName: 'Rivera', role: 'ADMIN', profileCompleted: true };
+    if (url.pathname === '/api/auth/me') data = { id: 1, firstName: 'Jordan', lastName: 'Rivera', role: 'PROJECT_ADMIN', profileCompleted: true };
     else if (url.pathname.includes('unread-count')) data = 0;
     else if (url.pathname.includes('hours-dashboard')) data = [{ projectId: 10, plannedHours: 160, totalLoggedHours: 112, submittedHours: 24, approvedHours: 80, rejectedHours: 0, employees: [{ userId: 3, userName: 'Taylor Morgan', email: 'taylor@example.com', assignmentStartDate: '2026-09-01', assignmentEndDate: '2026-12-31', plannedHours: 160, totalLoggedHours: 112, submittedHours: 24, approvedHours: 80, status: 'SUBMITTED' }] }];
     else if (url.pathname === '/api/projects') data = [project];

@@ -51,7 +51,7 @@ public class LetterRequestController {
     @GetMapping("/pending")
     public ResponseEntity<List<LetterRequestDTO>> getPendingLetterRequests(@AuthenticationPrincipal Jwt jwt) {
         var user = currentUser(jwt);
-        if (user == null || !user.isSuperAdmin()) {
+        if (user == null || !user.isAdmin()) {
             return ResponseEntity.status(403).build();
         }
 
@@ -68,7 +68,7 @@ public class LetterRequestController {
         }
 
         try {
-            return ResponseEntity.ok(letterRequestService.getRequest(requestId, user.getId(), user.isSuperAdmin()));
+            return ResponseEntity.ok(letterRequestService.getRequest(requestId, user.getId(), user.isAdmin()));
         } catch (IllegalArgumentException e) {
             throw e;
         }
@@ -84,7 +84,7 @@ public class LetterRequestController {
         }
 
         try {
-            boolean canReviewLetters = user.isSuperAdmin();
+            boolean canReviewLetters = user.isAdmin();
             byte[] pdf = letterRequestService.generatePdf(requestId, user.getId(), canReviewLetters);
             String filename = letterRequestService.buildFilename(requestId, user.getId(), canReviewLetters);
             return ResponseEntity.ok()

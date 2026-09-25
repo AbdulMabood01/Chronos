@@ -41,7 +41,7 @@ class RolePermissionsApiTest {
 
     @BeforeEach void setup() {
         user = User.builder().id(1L).email("admin@example.com").entraId("subject")
-                .role(UserRole.SUPER_ADMIN).isActive(true).passwordHash("test-account-hash").ssnLast4("1234").build();
+                .role(UserRole.ADMIN).isActive(true).passwordHash("test-account-hash").ssnLast4("1234").build();
         when(users.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
         when(userService.findUserEntityByEmail(user.getEmail())).thenReturn(user);
     }
@@ -60,7 +60,7 @@ class RolePermissionsApiTest {
         mvc.perform(get("/vacation/team-calendar").param("year", "2026").param("month", "9").with(token())).andExpect(status().isOk());
     }
 
-    @Test void superAdminReadsButAllProjectWriteEndpointsReturnForbidden() throws Exception {
+    @Test void systemAdminReadsButAllProjectWriteEndpointsReturnForbidden() throws Exception {
         mvc.perform(get("/projects").with(token())).andExpect(status().isOk());
         mvc.perform(get("/projects/hours-dashboard").param("year", "2026").param("month", "9").with(token()))
                 .andExpect(status().isOk());
@@ -79,7 +79,7 @@ class RolePermissionsApiTest {
         verify(plans, never()).save(any());
     }
 
-    @Test void superAdminSubmissionEndpointsReturnForbiddenForExistingDrafts() throws Exception {
+    @Test void systemAdminSubmissionEndpointsReturnForbiddenForExistingDrafts() throws Exception {
         when(timesheets.findForUpdate(2L)).thenReturn(Optional.of(Timesheet.builder().id(2L).user(user).status(TimesheetStatus.DRAFT).build()));
         when(vacations.findById(3L)).thenReturn(Optional.of(VacationRequest.builder().id(3L).user(user).status(VacationStatus.DRAFT).build()));
         mvc.perform(post("/timesheets/2/submit").with(token())).andExpect(status().isForbidden());
@@ -87,7 +87,7 @@ class RolePermissionsApiTest {
         mvc.perform(post("/vacation/3/submit").with(token())).andExpect(status().isForbidden());
     }
 
-    @Test void authResponseHidesSuperAdminSsnAndExposesEmployeeProjectCapability() throws Exception {
+    @Test void authResponseHidesAdminSsnAndExposesEmployeeProjectCapability() throws Exception {
         mvc.perform(get("/auth/me").with(token())).andExpect(status().isOk())
                 .andExpect(jsonPath("$.ssnLast4").doesNotExist());
         user.setRole(UserRole.EMPLOYEE);

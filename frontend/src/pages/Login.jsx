@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { BrandLogo, LoadingIndicator } from '../components/Hourglass';
 import '../styles.css';
@@ -8,6 +8,7 @@ import './Login.css';
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -46,6 +47,7 @@ export default function Login() {
       <div className="login-card">
         <BrandLogo /><span className="eyebrow">WELCOME TO CHRONOS</span><h1>Make yourself at home.</h1><p className="signin-subtitle">Sign in to your employee workspace.</p>
 
+        {location.state?.passwordChanged && <p role="status" className="inline-alert">Password changed. Sign in with your new password.</p>}
         <form onSubmit={handleLogin}>
           <div className="form-group">
             <label htmlFor="email">Work email</label>
@@ -60,6 +62,7 @@ export default function Login() {
           </button>
         </form>
 
+        <p className="login-note"><Link to="/forgot-password">Forgot password?</Link></p>
         {error && <p className="error-message" role="alert">{error}</p>}
         <p className="login-note">
           New employees: use the invitation email from your administrator to activate your account.

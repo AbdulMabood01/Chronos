@@ -28,6 +28,7 @@ class FeedbackReviewAccessTest {
     @MockitoBean UserRepository users;
     @MockitoBean ProjectRepository projects;
     @MockitoBean JdbcTemplate db;
+    @MockitoBean com.maxwell.chronos.service.EmailAlertService emailAlerts;
     User user;
     String id = UUID.randomUUID().toString();
     String review = "{\"employeeId\":8,\"year\":2026,\"quarter\":3,\"summary\":\"Good work\",\"version\":0}";
@@ -36,10 +37,10 @@ class FeedbackReviewAccessTest {
         when(users.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
     }
     private org.springframework.test.web.servlet.request.RequestPostProcessor token() {
-        return jwt().jwt(j -> j.subject("subject").claim("preferred_username",user.getEmail()).claim("role","SUPER_ADMIN"));
+        return jwt().jwt(j -> j.subject("subject").claim("preferred_username",user.getEmail()).claim("role","ADMIN"));
     }
     @Test void employeeAndManagerCannotManageReviewsOrReadOtherEmployeesDespiteForgedClaim() throws Exception {
-        for (UserRole role : List.of(UserRole.EMPLOYEE, UserRole.ADMIN)) {
+        for (UserRole role : List.of(UserRole.EMPLOYEE, UserRole.PROJECT_ADMIN)) {
             user.setRole(role);
             mvc.perform(post("/feedback-reviews/reviews").with(token()).contentType("application/json").content(review)).andExpect(status().isForbidden());
             mvc.perform(put("/feedback-reviews/reviews/"+id).with(token()).contentType("application/json").content(review)).andExpect(status().isForbidden());
@@ -56,7 +57,7 @@ class FeedbackReviewAccessTest {
         verifyNoInteractions(db);
     }
     @Test void ownReviewsArePublishedOnlyAndNotCached() throws Exception {
-        for (UserRole role : List.of(UserRole.EMPLOYEE, UserRole.ADMIN)) {
+        for (UserRole role : List.of(UserRole.EMPLOYEE, UserRole.PROJECT_ADMIN)) {
             user.setRole(role);
             mvc.perform(get("/feedback-reviews/reviews").with(token())).andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store"));
             mvc.perform(get("/feedback-reviews/reviews").param("employeeId","7").with(token())).andExpect(status().isOk());
@@ -68,15 +69,15 @@ class FeedbackReviewAccessTest {
         // Project assignments never grant access to formal performance reviews.
         verifyNoInteractions(projects);
     }
-    @Test void superAdminCanBrowseAllEmployeeReviews() throws Exception {
-        user.setRole(UserRole.SUPER_ADMIN);
+    @Test void systemAdminCanBrowseAllEmployeeReviews() throws Exception {
+        user.setRole(UserRole.ADMIN);
         mvc.perform(get("/feedback-reviews/reviews").with(token())).andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store"));
         verify(db).queryForList(contains("u.email AS employee_email"));
     }
     @Test void feedbackCannotBeSentToSelfAndReviewFieldsAreValidated() throws Exception {
         when(users.findById(7L)).thenReturn(Optional.of(user));
         mvc.perform(post("/feedback-reviews/feedback").with(token()).contentType("application/json").content("{\"employeeId\":7,\"content\":\"Test\"}")).andExpect(status().isBadRequest());
-        user.setRole(UserRole.SUPER_ADMIN);
+        user.setRole(UserRole.ADMIN);
         mvc.perform(post("/feedback-reviews/reviews").with(token()).contentType("application/json").content(review.replace("\"quarter\":3","\"quarter\":5"))).andExpect(status().isBadRequest());
         verifyNoInteractions(db);
     }

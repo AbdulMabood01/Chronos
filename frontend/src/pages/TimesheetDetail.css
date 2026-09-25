@@ -37,19 +37,22 @@
 .timesheet-page .has-notes { background: #cce9e1; color: #125e4e; border-color: #6ca995; }
 .previous-month-arrow { transform: rotate(180deg); }
 .timesheet-page > .action-bar:not(:empty) {
-  position: sticky;
-  bottom: 1rem;
-  z-index: 5;
   padding: 1rem;
   background: var(--surface-color, #fff);
   border: 1px solid var(--border-color, #bdcad8);
   border-radius: 12px;
   box-shadow: 0 8px 24px #142b4530;
 }
-.timesheet-page > .action-bar .workflow-panel {
-  flex: 1 0 100%;
-  order: 10;
-  margin-block: .25rem 0;
+.timesheet-page > .action-bar:empty { display: none; }
+.timesheet-approval-history {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin-top: 1rem;
+}
+.timesheet-approval-history .workflow-panel {
+  align-self: stretch;
+  margin-block: 0;
 }
 .daily-notes-dialog { margin: auto; width: min(520px, calc(100vw - 2rem)); max-height: 85vh; overflow: auto; color: var(--text-color); }
 .daily-notes-dialog::backdrop { background: #10233799; backdrop-filter: blur(3px); }

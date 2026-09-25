@@ -39,22 +39,6 @@ public class TimesheetController {
         return ResponseEntity.ok(timesheetService.getMissingTimesheets(year, month, user));
     }
 
-    @GetMapping("/{timesheetId}/projects/{projectId}/copy-week")
-    public ResponseEntity<TimesheetService.WeekCopyResult> previewWeek(@PathVariable Long timesheetId, @PathVariable Long projectId,
-            @RequestParam LocalDate weekStart, @AuthenticationPrincipal Jwt jwt) {
-        var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        if (user == null) return ResponseEntity.status(403).build();
-        return ResponseEntity.ok(timesheetService.copyPreviousWeek(timesheetId, projectId, weekStart, user.getId(), false));
-    }
-
-    @PostMapping("/{timesheetId}/projects/{projectId}/copy-week")
-    public ResponseEntity<TimesheetService.WeekCopyResult> copyWeek(@PathVariable Long timesheetId, @PathVariable Long projectId,
-            @RequestParam LocalDate weekStart, @AuthenticationPrincipal Jwt jwt) {
-        var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        if (user == null) return ResponseEntity.status(403).build();
-        return ResponseEntity.ok(timesheetService.copyPreviousWeek(timesheetId, projectId, weekStart, user.getId(), true));
-    }
-
     @GetMapping("/{year}/{month}")
     public ResponseEntity<TimesheetDTO> getTimesheet(@PathVariable int year, @PathVariable int month,
                                                      @AuthenticationPrincipal Jwt jwt) {
@@ -96,7 +80,7 @@ public class TimesheetController {
 
         try {
             TimesheetDTO timesheet = projectId == null
-                    ? timesheetService.getTimesheetById(timesheetId, user.getId(), user.isSuperAdmin() || user.isAdmin())
+                    ? timesheetService.getTimesheetById(timesheetId, user.getId(), user.isAdmin() || user.isProjectAdmin())
                     : timesheetService.getProjectTimesheet(timesheetId, projectId, user);
             return ResponseEntity.ok(timesheet);
         } catch (IllegalArgumentException e) {
@@ -172,7 +156,7 @@ public class TimesheetController {
         String email = jwt.getClaimAsString("preferred_username");
         var user = userService.findUserEntityByEmail(email);
 
-        if (user == null || !user.isSuperAdmin()) {
+        if (user == null || !user.isAdmin()) {
             return ResponseEntity.status(403).build();
         }
 

@@ -211,7 +211,7 @@ public class LetterRequestService {
     private User requireAdmin(Long adminId) {
         User admin = userRepository.findById(adminId)
                 .orElseThrow(() -> new IllegalArgumentException("Admin user not found"));
-        if (!admin.isSuperAdmin()) {
+        if (!admin.isAdmin()) {
             throw new IllegalArgumentException("Only Admin can approve letter requests");
         }
         return admin;
@@ -228,7 +228,7 @@ public class LetterRequestService {
 
     private void notifyAdmins(LetterRequest request) {
         List<User> admins = new ArrayList<>();
-        admins.addAll(userRepository.findByRole(UserRole.SUPER_ADMIN));
+        admins.addAll(userRepository.findByRole(UserRole.ADMIN));
         for (User admin : admins) {
             notificationService.createNotification(admin.getId(),
                     "LETTER_REQUEST_SUBMITTED",
@@ -286,27 +286,24 @@ public class LetterRequestService {
 
         String body = switch (request.getRequestType()) {
             case EMPLOYMENT_VERIFICATION -> String.join("\n\n",
-                    String.format("This letter is issued at the request of %s for employment verification purposes.", fullName),
-                    String.format("This is to confirm that %s is currently employed with %s. %s holds the position of %s and has been employed with the company since %s.", fullName, company, fullName, jobTitle, employmentStart),
-                    "This confirmation is based on the information available in the company's employment records as of the date of this letter. The employee remains in active status with the organization.",
-                    "Please accept this letter as official confirmation of current employment. Any additional verification may be directed to the Human Resources department at Maxwell Network Inc.");
+                    String.format("At the request of %s, this letter confirms their current employment with %s.", fullName, company),
+                    String.format("%s has been employed since %s and currently holds the position of %s. Our records show that their employment is active as of the date of this letter.", fullName, employmentStart, jobTitle),
+                    "This verification reflects our employment records and is provided for the recipient's use. For further confirmation, please contact our Human Resources department using the details on this letter.");
             case TRAVEL -> String.join("\n\n",
-                    String.format("This letter is issued at the request of %s in connection with planned travel.", fullName),
-                    String.format("This is to confirm that %s is currently employed with %s as %s and has been employed with the company since %s.", fullName, company, jobTitle, employmentStart),
-                    String.format("Based on the information submitted for review, %s plans to travel%s from %s to %s. The company has no restriction on this travel during the stated period, provided all applicable company policies and work obligations are satisfied.", fullName, travelDestinationText(request), formatDate(request.getTravelStartDate()), formatDate(request.getTravelEndDate())),
-                    String.format("%s is expected to continue employment with %s following the travel period. This letter is provided for presentation to the appropriate requesting authority, airline, consulate, border official, or other concerned party.", fullName, company));
+                    String.format("At the request of %s, this letter confirms their current employment with %s as %s. Their employment began on %s.", fullName, company, jobTitle, employmentStart),
+                    String.format("According to the information provided with their request, %s plans to travel%s from %s through %s.", fullName, travelDestinationText(request), formatDate(request.getTravelStartDate()), formatDate(request.getTravelEndDate())),
+                    String.format("%s remains an active employee and is expected to resume their work responsibilities after the stated travel period. This letter confirms employment and the travel dates supplied to us; it does not replace any required travel authorization.", fullName));
             case VACATION -> String.join("\n\n",
-                    String.format("This letter is issued at the request of %s for vacation confirmation purposes.", fullName),
-                    String.format("This is to confirm that %s is currently employed with %s as %s and has been employed with the company since %s.", fullName, company, jobTitle, employmentStart),
-                    String.format("%s has requested vacation leave from %s through %s. The request has been submitted through the company's administrative workflow and is subject to the final approval status recorded in Chronos.", fullName, formatDate(request.getVacationStartDate()), formatDate(request.getVacationEndDate())),
-                    String.format("This letter may be used to confirm the employee's current employment status and the vacation dates submitted for administrative review. %s is expected to resume regular work responsibilities after the approved vacation period.", fullName));
+                    String.format("At the request of %s, this letter confirms their current employment with %s as %s. Their employment began on %s.", fullName, company, jobTitle, employmentStart),
+                    String.format("%s has provided vacation dates of %s through %s. These dates are recorded with the company for administrative review and remain subject to the applicable leave approval process.", fullName, formatDate(request.getVacationStartDate()), formatDate(request.getVacationEndDate())),
+                    String.format("%s is expected to resume their regular work responsibilities following any approved leave. Please contact our Human Resources department if further employment verification is needed.", fullName));
         };
 
         List<String> sections = new ArrayList<>();
         sections.add(company);
         sections.add(date);
         sections.add("");
-        sections.add("To whomsoever it may be concerned.");
+        sections.add("To whom it may concern,");
         sections.add("");
         sections.add("Subject: " + displayType(request.getRequestType()));
         sections.add("");

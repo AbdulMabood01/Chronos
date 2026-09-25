@@ -69,3 +69,34 @@
   .employee-workspace .employee-profile-fields { grid-template-columns: 1fr; }
   .employee-identity { gap: 1rem; }
 }
+
+/* Spacious directory, scoped away from the employee detail workspace. */
+.people-directory { display: flex; flex-direction: column; gap: 24px; }
+.people-directory .header-bar { margin: 0; align-items: center; gap: 24px; flex-wrap: wrap; }
+.people-header-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.people-directory .user-stats { margin: 0; gap: 20px; }
+.people-directory .user-stats > div { padding: 20px 24px; border-radius: 14px; background: var(--surface-color); }
+.people-directory .record-search { max-width: none; margin: 0; padding: 14px 18px; }
+.people-directory .admin-table { margin: 0; border: 1px solid var(--border-color); border-radius: 16px; background: var(--surface-color); }
+.people-directory .data-table { min-width: 900px; }
+.people-directory .data-table th { padding: 18px 22px; font-size: 12px; }
+.people-directory .data-table td { padding: 22px; vertical-align: middle; }
+.people-directory .data-table td:first-child { min-width: 240px; }
+.people-directory .table-subtext { margin-top: 8px; line-height: 1.6; overflow-wrap: anywhere; }
+.people-directory .wrap-actions { gap: 10px; }
+.people-directory .data-table select { min-width: 145px; min-height: 40px; }
+.people-directory .employee-section > p { color: var(--text-secondary); line-height: 1.7; margin: 12px 0 24px; }
+.people-directory .employee-section form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; align-items: end; }
+.people-directory .employee-section .form-group { margin: 0; }
+.people-directory .employee-section form > button { justify-self: start; }
+.people-directory .employee-section form > .error-message { grid-column: 1 / -1; }
+.people-directory .employee-import form { grid-template-columns: minmax(0, 1fr); }
+.import-columns { display: grid; grid-template-columns: 1fr 1fr 1.5fr; border: 1px solid var(--border-color); border-radius: 10px; background: var(--surface-tint); overflow: hidden; }
+.import-columns span { padding: 16px; font-weight: 600; }
+.import-columns span + span { border-left: 1px solid var(--border-color); }
+.people-directory [role="status"] { margin: 0; padding: 16px 20px; border-radius: 12px; background: var(--surface-tint); }
+@media (max-width: 700px) {
+  .people-directory .employee-section form { grid-template-columns: 1fr; }
+  .people-header-actions { width: 100%; }
+  .people-header-actions .button { flex: 1; }
+}

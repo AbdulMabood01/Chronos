@@ -15,7 +15,7 @@ test('health overview opens details, responds to mobile and dark theme, and reco
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url());
     let data = [];
-    if (url.pathname === '/api/auth/me') data = { id: 1, firstName: 'Jordan', lastName: 'Rivera', role: 'ADMIN', profileCompleted: true };
+    if (url.pathname === '/api/auth/me') data = { id: 1, firstName: 'Jordan', lastName: 'Rivera', role: 'PROJECT_ADMIN', profileCompleted: true };
     else if (url.pathname.includes('unread-count')) data = 0;
     else if (url.pathname === '/api/projects/health') {
       if (fail) return route.fulfill({ status: 503, json: { message: 'Unavailable' } });

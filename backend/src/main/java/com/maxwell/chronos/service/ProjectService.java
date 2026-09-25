@@ -52,7 +52,7 @@ public class ProjectService {
     private final NotificationService notificationService;
 
     public List<ProjectDTO> getProjects(User requester) {
-        if (requester == null || (!requester.isSuperAdmin() && !requester.isAdmin() && !canManageProjects(requester.getId()))) {
+        if (requester == null || (!requester.isAdmin() && !requester.isProjectAdmin() && !canManageProjects(requester.getId()))) {
             throw new org.springframework.security.access.AccessDeniedException("Project view permission required");
         }
         return visibleProjects(requester).stream()
@@ -250,7 +250,7 @@ public class ProjectService {
 
     public List<ProjectHoursDashboardDTO> getProjectHoursDashboard(int year, int month, User requester) {
         validatePeriod(year, month);
-        if (requester == null || (!requester.isSuperAdmin() && !requester.isAdmin() && !canManageProjects(requester.getId()))) {
+        if (requester == null || (!requester.isAdmin() && !requester.isProjectAdmin() && !canManageProjects(requester.getId()))) {
             throw new IllegalArgumentException("Project dashboard permission required");
         }
 
@@ -301,7 +301,7 @@ public class ProjectService {
             }
             User replacementUser = userRepository.findById(replacementManagerId)
                     .orElseThrow(() -> new IllegalArgumentException("Replacement PM not found"));
-            if (replacementUser.getRole() != com.maxwell.chronos.enums.UserRole.ADMIN) {
+            if (replacementUser.getRole() != com.maxwell.chronos.enums.UserRole.PROJECT_ADMIN) {
                 ProjectAssignment replacement = assignmentRepository.findByProjectIdAndUserId(projectId, replacementManagerId)
                         .orElseThrow(() -> new IllegalArgumentException("The secondary PM must be an active project team member or Project Admin"));
                 requireActiveAssignment(replacement);
@@ -324,7 +324,7 @@ public class ProjectService {
     }
 
     private void requireEligibleReviewer(User user) {
-        if (!Boolean.TRUE.equals(user.getIsActive()) || user.isSuperAdmin()) {
+        if (!Boolean.TRUE.equals(user.getIsActive()) || user.isAdmin()) {
             throw new IllegalArgumentException("Choose an active employee or Project Admin as project manager or PM hours approver");
         }
     }
@@ -375,7 +375,7 @@ public class ProjectService {
     }
 
     private List<Project> visibleProjects(User requester) {
-        if (requester.isAdmin() || requester.isSuperAdmin()) return projectRepository.findAll();
+        if (requester.isProjectAdmin() || requester.isAdmin()) return projectRepository.findAll();
         var assigned = assignmentRepository.findByUserId(requester.getId()).stream()
                 .filter(a -> Boolean.TRUE.equals(a.getIsActive()))
                 .map(a -> a.getProject().getId()).collect(Collectors.toSet());
@@ -407,7 +407,7 @@ public class ProjectService {
     }
 
     private void requireCanPlanProject(Long projectId, User requester) {
-        if (requester == null || !requester.isAdmin()) {
+        if (requester == null || !requester.isProjectAdmin()) {
             throw new org.springframework.security.access.AccessDeniedException("Project planning permission required");
         }
     }

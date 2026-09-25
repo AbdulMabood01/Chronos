@@ -11,7 +11,7 @@ function Meta({ item }) {
   return <div className="announcement-meta"><span className={`announcement-priority ${item.priority.toLowerCase()}`}>{label(item.priority)}</span><span>{date(item.publish_date)}</span>{!item.viewed_at && <span className="announcement-unread">Unread</span>}{item.acknowledgment_required && <span>{item.acknowledged_at ? 'Acknowledged' : 'Acknowledgment required'}</span>}</div>;
 }
 
-export function AnnouncementPanel() {
+export function AnnouncementPanel({ className = '' }) {
   const [items, setItems] = useState([]);
   const [state, setState] = useState('loading');
   useEffect(() => {
@@ -19,19 +19,24 @@ export function AnnouncementPanel() {
     announcementAPI.list().then(r => { if (active) { setItems(r.data); setState('ready'); } }).catch(() => { if (active) setState('error'); });
     return () => { active = false; };
   }, []);
-  return <section className="announcements announcement-panel" aria-label="Company announcements"><div className="announcement-heading"><div><span className="eyebrow">IN THE LOOP</span><h2>Company announcements</h2></div><Link to="/announcements">View all →</Link></div>
-    {state === 'loading' && <p role="status">Loading announcements…</p>}{state === 'error' && <p role="alert">Announcements could not be loaded. <Link to="/announcements">Try the announcements page</Link>.</p>}
-    {state === 'ready' && !items.length && <p>No announcements right now. You're all caught up.</p>}
-    <div className="announcement-preview-grid">{items.slice(0, 3).map(item => <Link className={`announcement-card ${!item.viewed_at ? 'unread' : ''} ${item.priority.toLowerCase()}`} key={item.id} to={`/announcements?id=${item.id}`}><Meta item={item}/><h3>{item.title}</h3><p className="announcement-excerpt">{item.content}</p><span className="announcement-open">Read announcement →</span></Link>)}</div>
+  const item = items.find(announcement => !announcement.acknowledged_at);
+  if (state !== 'ready' || !item) return null;
+  return <section className={`announcements announcement-banner ${className}`} aria-label="Company announcements">
+    <Link className={`announcement-banner-link ${item.priority.toLowerCase()}`} to={`/announcements?id=${encodeURIComponent(item.id)}`}>
+      <span className="announcement-banner-label">Announcement</span>
+      <strong className="announcement-banner-title">{item.title}</strong>
+      {!item.viewed_at && <span className="announcement-unread">Unread</span>}
+      <span className="announcement-banner-action">Read announcement <span aria-hidden="true">→</span></span>
+    </Link>
   </section>;
 }
 
 const emptyForm = () => ({ title: '', content: '', publishDate: new Date().toISOString().slice(0, 10), expirationDate: '', priority: 'NORMAL', status: 'DRAFT', acknowledgmentRequired: false, version: 0 });
 export default function Announcements() {
   const { user } = useAuth();
-  const admin = user?.role === 'SUPER_ADMIN';
+  const admin = user?.role === 'ADMIN';
   const [params, setParams] = useSearchParams();
-  const [management, setManagement] = useState(false);
+  const management = admin;
   const [items, setItems] = useState([]);
   const [selected, setSelected] = useState(null);
   const [tracking, setTracking] = useState(null);
@@ -84,8 +89,7 @@ export default function Announcements() {
     const url = URL.createObjectURL(r.data); const link = document.createElement('a'); link.href = url; link.download = selected.attachment_name; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
   const filtered = items.filter(item => filter === 'ALL' || (filter === 'UNREAD' ? !item.viewed_at : filter === 'PENDING' ? item.acknowledgment_required && !item.acknowledged_at : item.status === filter));
-  return <div className="page-container announcements"><div className="announcement-heading"><div><span className="eyebrow">COMPANY UPDATES</span><h1>Announcements</h1><p>News, updates, and the things we need you to know.</p></div>{admin && management && <button className="button" disabled={busy} onClick={() => edit(null)}>New announcement</button>}</div>
-    {admin && <div className="announcement-tabs"><button disabled={busy} aria-pressed={!management} onClick={() => { setManagement(false); setFilter('ALL'); setParams({}); }}>Employee view</button><button disabled={busy} aria-pressed={management} onClick={() => { setManagement(true); setFilter('ALL'); setParams({}); }}>Manage announcements</button></div>}
+  return <div className={`page-container announcements${management ? ' announcement-management' : ''}`}><div className="announcement-heading"><div>{!management && <span className="eyebrow">COMPANY UPDATES</span>}<h1>Announcements</h1>{!management && <p>News, updates, and the things we need you to know.</p>}</div>{management && <button className="button" disabled={busy} onClick={() => edit(null)}>New announcement</button>}</div>
     {error && <div className="error-message" role="alert">{error} <button disabled={busy} onClick={() => act(async () => { await reload(); if (id) setSelected((await announcementAPI.open(id, management)).data); })}>Reload</button></div>}{notice && <p role="status">{notice}</p>}
     {form ? <form className="announcement-editor announcement-card" onSubmit={save}><h2>{form.id ? 'Edit announcement' : 'New announcement'}</h2><fieldset disabled={busy}>
       <label>Title<input required maxLength={200} value={form.title} onChange={e => field('title', e.target.value)}/></label>

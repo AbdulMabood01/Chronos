@@ -28,10 +28,11 @@ public class FeedbackReviewService {
     private final JdbcTemplate db;
     private final UserRepository users;
     private final ProjectRepository projects;
+    private final EmailAlertService emailAlerts;
 
     private User actor(String email, boolean admin) {
         User user = users.findByEmail(email).orElseThrow(() -> new AccessDeniedException("Access denied"));
-        if (!Boolean.TRUE.equals(user.getIsActive()) || (admin && !user.isSuperAdmin()))
+        if (!Boolean.TRUE.equals(user.getIsActive()) || (admin && !user.isAdmin()))
             throw new AccessDeniedException("Access denied");
         return user;
     }
@@ -55,9 +56,10 @@ public class FeedbackReviewService {
         employee(input.employeeId());
         if (sender.getId().equals(input.employeeId())) throw new IllegalArgumentException("Choose another employee");
         UUID id = UUID.randomUUID();
-        String type = sender.isAdmin() || sender.isSuperAdmin() || projects.existsByProjectManagerIdOrProjectManagerHoursApproverId(sender.getId(), sender.getId()) ? "Manager" : "Employee";
+        String type = sender.isProjectAdmin() || sender.isAdmin() || projects.existsByProjectManagerIdOrProjectManagerHoursApproverId(sender.getId(), sender.getId()) ? "Manager" : "Employee";
         db.update("INSERT INTO employee_feedback(id,sender_id,recipient_id,content,category,anonymous,sender_type) VALUES (?,?,?,?,?,?,?)",
             id, sender.getId(), input.employeeId(), input.content().trim(), input.category() == null ? null : input.category().name(), input.anonymous(), type);
+        emailAlerts.enqueue(input.employeeId(), EmailAlertService.Category.FEEDBACK, "Chronos: feedback received", "/feedback");
         return id;
     }
     public List<Map<String,Object>> feedback(String email, boolean given) {
@@ -72,13 +74,13 @@ public class FeedbackReviewService {
     }
     public List<Map<String,Object>> reviews(String email, Long employeeId) {
         User user = actor(email, false);
-        if (!user.isSuperAdmin() && employeeId != null && !employeeId.equals(user.getId())) throw new AccessDeniedException("Access denied");
-        if (user.isSuperAdmin() && employeeId == null) {
+        if (!user.isAdmin() && employeeId != null && !employeeId.equals(user.getId())) throw new AccessDeniedException("Access denied");
+        if (user.isAdmin() && employeeId == null) {
             return db.queryForList("SELECT r.*,u.first_name,u.last_name,u.email AS employee_email,u.first_name || ' ' || u.last_name AS employee_name FROM performance_reviews r JOIN users u ON u.id=r.employee_id ORDER BY r.review_year DESC,r.quarter DESC,r.modified_at DESC,r.id");
         }
         Long target = employeeId == null ? user.getId() : employeeId;
         return db.queryForList("SELECT r.*,u.first_name || ' ' || u.last_name AS employee_name FROM performance_reviews r JOIN users u ON u.id=r.employee_id WHERE r.employee_id=?"
-            + (user.isSuperAdmin() ? "" : " AND r.published_at IS NOT NULL")
+            + (user.isAdmin() ? "" : " AND r.published_at IS NOT NULL")
             + " ORDER BY r.published_at DESC NULLS LAST,r.review_year DESC,r.quarter DESC", target);
     }
     public UUID save(String email, UUID id, Review input) {
@@ -99,6 +101,8 @@ public class FeedbackReviewService {
             db.update("UPDATE performance_reviews SET summary=?,accomplishments=?,strengths=?,improvements=?,goals=?,comments=?,modified_at=CURRENT_TIMESTAMP,version=version+1 WHERE id=?",
                 input.summary().trim(),input.accomplishments(),input.strengths(),input.improvements(),input.goals(),input.comments(),id);
             audit(id,admin.getId(),"EDITED");
+            if (previous.get("published_at") != null)
+                emailAlerts.enqueue(input.employeeId(), EmailAlertService.Category.PERFORMANCE, "Chronos: performance review updated", "/performance-reviews");
         }
         return id;
     }
@@ -109,6 +113,8 @@ public class FeedbackReviewService {
         if (review.get("published_at") != null) throw new IllegalArgumentException("Review is already published");
         db.update("UPDATE performance_reviews SET published_at=CURRENT_TIMESTAMP,modified_at=CURRENT_TIMESTAMP,version=version+1 WHERE id=?",id);
         audit(id,admin.getId(),"PUBLISHED");
+        emailAlerts.enqueue(((Number)review.get("employee_id")).longValue(), EmailAlertService.Category.PERFORMANCE,
+            "Chronos: performance review published", "/performance-reviews");
     }
     private Map<String,Object> locked(UUID id) {
         var rows = db.queryForList("SELECT * FROM performance_reviews WHERE id=? FOR UPDATE",id);

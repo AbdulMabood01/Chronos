@@ -1,5 +1,4 @@
 import ApprovalHistory from '../components/ApprovalHistory';
-import CopyPreviousWeek from '../components/CopyPreviousWeek';
 import '../components/WorkflowFeatures.css';
 import ValidationMessage from '../components/ValidationMessage';
 import ScreenTitle from '../components/ScreenTitle';
@@ -119,7 +118,6 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [copyMessage, setCopyMessage] = useState('');
   const [assignedProjects, setAssignedProjects] = useState([]);
   const favoritesKey = 'chronos:project-favorites:' + user?.id;
   const [favorites, setFavorites] = useState([]);
@@ -128,7 +126,6 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
     catch { setFavorites([]); }
   }, [favoritesKey]);
   const [selectedProjectId, setSelectedProjectId] = useState('');
-  useEffect(() => { setCopyMessage(''); }, [activeTimesheetId, selectedProjectId]);
   const [projectSubmissionState, setProjectSubmission] = useState(null);
   const projectSubmissionRequest = useRef(0);
   const projectSubmission = String(projectSubmissionState?.timesheetId) === String(timesheet?.id)
@@ -298,7 +295,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
   const timesheetMonthStart = timesheet ? new Date(timesheet.year, timesheet.month - 1, 1) : null;
   const isPastMonth = timesheetMonthStart ? isBefore(timesheetMonthStart, currentMonthStart) : false;
   const isReadOnlyPastMonth = lockPastMonths && isPastMonth;
-  const isReviewerRole = user?.canReviewProjects || ['ADMIN', 'SUPER_ADMIN'].includes(user?.role);
+  const isReviewerRole = user?.canReviewProjects || ['PROJECT_ADMIN', 'ADMIN'].includes(user?.role);
   const isAdminReview = isReviewerRole && timesheet?.userId !== user?.id;
   const isOwner = timesheet?.userId === user?.id;
   const timesheetProjectOptions = useMemo(() => {
@@ -358,17 +355,17 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
     && !isOffboarded
     && (!selectedAssignment || periodIndex >= 0)
     && timesheet.status !== 'LOCKED'
-    && user?.role !== 'SUPER_ADMIN'
+    && user?.role !== 'ADMIN'
     && !isAdminReview
     && !isReadOnlyPastMonth
     && projectSubmission
     && (autoEditableStatuses.includes(projectSubmission.status) || (editMode && editButtonStatuses.includes(projectSubmission.status)));
   const canStartEdit = false;
-  const canApprove = (user?.role !== 'SUPER_ADMIN' && (projectSubmission?.routedApproverId === user?.id
+  const canApprove = (user?.role !== 'ADMIN' && (projectSubmission?.routedApproverId === user?.id
     || (isOwner && projectSubmission?.projectManagerId === user?.id)))
     && !isReadOnlyPastMonth && ['SUBMITTED', 'CHANGE_REQUESTED'].includes(projectSubmission?.status);
   const canReject = canApprove && !isOwner;
-  const canReopen = user?.role === 'SUPER_ADMIN' && !isReadOnlyPastMonth && (timesheet?.status === 'APPROVED' || timesheet?.status === 'LOCKED');
+  const canReopen = user?.role === 'ADMIN' && !isReadOnlyPastMonth && (timesheet?.status === 'APPROVED' || timesheet?.status === 'LOCKED');
   const totalHours = useMemo(() => days.reduce((sum, day) => sum + (parseFloat(day.hours) || 0), 0), [days]);
 
   const plannedHours = Number(projectSubmission?.plannedHours ?? selectedAssignment?.plannedHours ?? 0);
@@ -813,9 +810,6 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
         </section>
       )}
 
-      {isEditable && <CopyPreviousWeek key={timesheet.id + '-' + selectedProjectId} timesheet={timesheet} projectId={selectedProjectId}
-        disabled={submitting || savingDayKeys.length > 0} onCopied={async (count) => { await loadTimesheetById(timesheet.id); setCopyMessage(count + (count === 1 ? ' day copied.' : ' days copied.') + ' Review the hours before submitting.'); }} />}
-      {copyMessage && <p role="status" className="login-note">{copyMessage}</p>}
       <div className="card timesheet-calendar-card">
         <div className="timesheet-card-heading">
           <div>
@@ -953,8 +947,6 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
       )}
 
       <div className="action-bar">
-        {selectedProjectId && <ApprovalHistory key={timesheet.id + ':' + selectedProjectId} timesheetId={timesheet.id} projectId={selectedProjectId}
-          revision={[projectSubmission?.status, projectSubmission?.submittedAt, projectSubmission?.approvedAt, projectSubmission?.rejectedAt].join(':')} />}
         {isEditable && ['DRAFT', 'REJECTED'].includes(selectedStatus) && (
           <button
             className="button button-primary"
@@ -991,6 +983,11 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
           </button>
         )}
       </div>
+
+      {selectedProjectId && <div className="timesheet-approval-history">
+        <ApprovalHistory key={timesheet.id + ':' + selectedProjectId} timesheetId={timesheet.id} projectId={selectedProjectId}
+          revision={[projectSubmission?.status, projectSubmission?.submittedAt, projectSubmission?.approvedAt, projectSubmission?.rejectedAt].join(':')} />
+      </div>}
 
       {notesDay && <dialog ref={notesDialog} className="modal-card daily-notes-dialog" aria-labelledby="daily-notes-title"
         onCancel={(event) => { event.preventDefault(); closeNotes(); }}>

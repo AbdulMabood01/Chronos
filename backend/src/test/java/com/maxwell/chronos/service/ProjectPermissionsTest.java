@@ -26,8 +26,8 @@ class ProjectPermissionsTest {
     @Mock AuditService audit;
     @Mock NotificationService notifications;
     @InjectMocks ProjectService service;
-    User superAdmin = User.builder().id(1L).role(UserRole.SUPER_ADMIN).build();
-    User admin = User.builder().id(2L).role(UserRole.ADMIN).isActive(true).build();
+    User systemAdmin = User.builder().id(1L).role(UserRole.ADMIN).build();
+    User admin = User.builder().id(2L).role(UserRole.PROJECT_ADMIN).isActive(true).build();
     User manager = User.builder().id(3L).role(UserRole.EMPLOYEE).isActive(true).build();
     User approver = User.builder().id(4L).role(UserRole.EMPLOYEE).isActive(true).build();
 
@@ -56,22 +56,22 @@ class ProjectPermissionsTest {
         assertEquals(BigDecimal.ZERO,result.getTotalLoggedHours());
     }
 
-    @Test void superAdminCanReadProjectsAndDashboard() {
+    @Test void systemAdminCanReadProjectsAndDashboard() {
         when(projects.findAll()).thenReturn(List.of());
-        assertTrue(service.getProjects(superAdmin).isEmpty());
-        assertTrue(service.getProjectHoursDashboard(2026, 9, superAdmin).isEmpty());
+        assertTrue(service.getProjects(systemAdmin).isEmpty());
+        assertTrue(service.getProjectHoursDashboard(2026, 9, systemAdmin).isEmpty());
         verify(projects, times(2)).findAll();
     }
 
-    @Test void superAdminCannotWriteProjectsAssignmentsOrEitherPlanVariant() {
+    @Test void systemAdminCannotWriteProjectsAssignmentsOrEitherPlanVariant() {
         var date = LocalDate.of(2026, 9, 1);
-        assertThrows(AccessDeniedException.class, () -> service.saveProject(null, new SaveProjectRequest(), superAdmin));
-        assertThrows(AccessDeniedException.class, () -> service.saveProject(10L, new SaveProjectRequest(), superAdmin));
-        assertThrows(AccessDeniedException.class, () -> service.assignEmployee(10L, 3L, date, date, BigDecimal.TEN, superAdmin));
-        assertThrows(AccessDeniedException.class, () -> service.removeEmployee(10L, 3L, superAdmin));
-        assertThrows(AccessDeniedException.class, () -> service.updateAssignmentDates(10L, 3L, date, date, BigDecimal.TEN, superAdmin));
-        assertThrows(AccessDeniedException.class, () -> service.updatePlannedHours(10L, 3L, BigDecimal.TEN, superAdmin));
-        assertThrows(AccessDeniedException.class, () -> service.updatePlannedHours(10L, 3L, 2026, 9, BigDecimal.TEN, superAdmin));
+        assertThrows(AccessDeniedException.class, () -> service.saveProject(null, new SaveProjectRequest(), systemAdmin));
+        assertThrows(AccessDeniedException.class, () -> service.saveProject(10L, new SaveProjectRequest(), systemAdmin));
+        assertThrows(AccessDeniedException.class, () -> service.assignEmployee(10L, 3L, date, date, BigDecimal.TEN, systemAdmin));
+        assertThrows(AccessDeniedException.class, () -> service.removeEmployee(10L, 3L, systemAdmin));
+        assertThrows(AccessDeniedException.class, () -> service.updateAssignmentDates(10L, 3L, date, date, BigDecimal.TEN, systemAdmin));
+        assertThrows(AccessDeniedException.class, () -> service.updatePlannedHours(10L, 3L, BigDecimal.TEN, systemAdmin));
+        assertThrows(AccessDeniedException.class, () -> service.updatePlannedHours(10L, 3L, 2026, 9, BigDecimal.TEN, systemAdmin));
         verifyNoInteractions(projects, assignments, plans, audit);
     }
 
@@ -151,14 +151,14 @@ class ProjectPermissionsTest {
         verify(submissions, never()).save(completed);
     }
 
-    @Test void inactiveAndSuperAdminCannotBeSelectedAsReviewers() {
+    @Test void inactiveAndAdminCannotBeSelectedAsReviewers() {
         var request = SaveProjectRequest.builder().code("P1").name("Project").projectManagerId(3L).projectManagerHoursApproverId(4L).build();
         when(users.findById(3L)).thenReturn(Optional.of(manager));
         when(users.findById(4L)).thenReturn(Optional.of(approver));
         approver.setIsActive(false);
         assertThrows(IllegalArgumentException.class, () -> service.saveProject(null, request, admin));
         approver.setIsActive(true);
-        approver.setRole(UserRole.SUPER_ADMIN);
+        approver.setRole(UserRole.ADMIN);
         assertThrows(IllegalArgumentException.class, () -> service.saveProject(null, request, admin));
         verify(projects, never()).save(any());
     }

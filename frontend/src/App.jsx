@@ -5,6 +5,7 @@ import { GlobalApiLoader, LoadingIndicator } from './components/Hourglass';
 import ProfileCompletionPrompt from './components/ProfileCompletionPrompt';
 import Login from './pages/Login';
 import Activate from './pages/Activate';
+import { ForgotPassword, ResetPassword } from './pages/PasswordRecovery';
 import Dashboard from './pages/Dashboard';
 import Announcements from './pages/Announcements';
 import TimesheetDetail from './pages/TimesheetDetail';
@@ -42,14 +43,14 @@ function ProtectedRoute({ children }) {
     return <Navigate to="/login" />;
   }
 
-  const operations = ['ADMIN', 'SUPER_ADMIN'].includes(user.role);
+  const operations = ['PROJECT_ADMIN', 'ADMIN'].includes(user.role);
   const reviewer = operations || user.canReviewProjects;
   const projectManager = operations || user.canManageProjects;
   const path = location.pathname;
   if ((path === '/admin' || path.startsWith('/admin/')) && !reviewer
       || (['/projects', '/project-hours', '/missing-timesheets', '/team-leave-calendar'].some(p => path === p || path.startsWith(p + '/')) && !projectManager)
       || (path === '/time-reports' && !operations)
-      || (['/settings', '/users', '/audit', '/employee-reports', '/reports'].some(p => path === p || path.startsWith(p + '/')) && user.role !== 'SUPER_ADMIN')) {
+      || (['/settings', '/users', '/audit', '/employee-reports', '/reports'].some(p => path === p || path.startsWith(p + '/')) && user.role !== 'ADMIN')) {
     return <Navigate to="/dashboard" replace />;
   }
   return children;
@@ -72,6 +73,8 @@ function AppContent({ darkBackground, onToggleBackground }) {
       <Route path="/reports" element={<ProtectedRoute><Layout darkBackground={darkBackground} onToggleBackground={onToggleBackground}><EmployeeReports management /></Layout></ProtectedRoute>} />
       <Route path="/login" element={<Login />} />
       <Route path="/activate" element={<Activate />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/" element={user ? <Navigate to="/dashboard" /> : <Navigate to="/login" />} />
       <Route
         path="/dashboard"
@@ -108,7 +111,7 @@ function AppContent({ darkBackground, onToggleBackground }) {
         element={
           <ProtectedRoute>
             <Layout darkBackground={darkBackground} onToggleBackground={onToggleBackground}>
-              {user?.role === 'SUPER_ADMIN' ? <Navigate to="/dashboard" replace /> : <TimesheetDetail openCurrentMonth showMonthScroller />}
+              {user?.role === 'ADMIN' ? <Navigate to="/dashboard" replace /> : <TimesheetDetail openCurrentMonth showMonthScroller />}
             </Layout>
           </ProtectedRoute>
         }
@@ -128,7 +131,7 @@ function AppContent({ darkBackground, onToggleBackground }) {
         element={
           <ProtectedRoute>
             <Layout darkBackground={darkBackground} onToggleBackground={onToggleBackground}>
-              {user?.role === 'SUPER_ADMIN' ? <Navigate to="/dashboard" replace /> : <VacationRequests />}
+              {user?.role === 'ADMIN' ? <Navigate to="/dashboard" replace /> : <VacationRequests />}
             </Layout>
           </ProtectedRoute>
         }

@@ -37,7 +37,7 @@ it.each([[79, 'Within budget'], [80, 'Approaching budget'], [100, 'Budget reache
 });
 it('handles an unset budget without a misleading zero percent', () => {
   render(<ProjectBudget budget={null} logged={40} />);
-  expect(screen.getByText(/No hours budget set/)).toBeTruthy();
+  expect(screen.queryByText(/No hours budget set/)).toBeNull();
   expect(screen.queryByRole('progressbar')).toBeNull();
 });
 it('focuses missing fields and updates checklist progress while editing', () => {
@@ -64,4 +64,7 @@ it('loads approval history and refreshes after a status change', async () => {
   view.rerender(<ApprovalHistory timesheetId={2} projectId={4} revision="SUBMITTED" />);
   expect(await screen.findByText('Submitted for approval')).toBeTruthy();
   expect(timesheetAPI.getApprovalHistory).toHaveBeenLastCalledWith(2,4);
+  fireEvent.click(screen.getByRole('button', { name: 'Close approval history' }));
+  expect(screen.queryByRole('region', { name: 'Approval history' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'View approval history' })).toBeTruthy();
 });

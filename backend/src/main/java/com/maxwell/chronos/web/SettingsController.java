@@ -20,7 +20,7 @@ public class SettingsController {
     private final UserService userService;
 
     private boolean canManageSettings(com.maxwell.chronos.domain.User user) {
-        return user != null && user.isSuperAdmin();
+        return user != null && user.isAdmin();
     }
 
     @PostMapping("/leave-defaults/apply")

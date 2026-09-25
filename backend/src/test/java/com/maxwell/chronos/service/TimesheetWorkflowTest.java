@@ -40,7 +40,7 @@ class TimesheetWorkflowTest {
     @BeforeEach void setup() {
         employee = User.builder().id(1L).firstName("Test").lastName("Employee").role(UserRole.EMPLOYEE)
                 .isActive(true).build();
-        admin = User.builder().id(2L).role(UserRole.SUPER_ADMIN).isActive(true).build();
+        admin = User.builder().id(2L).role(UserRole.ADMIN).isActive(true).build();
         project = Project.builder().id(3L).code("P1").name("Project").status(ProjectStatus.ACTIVE).build();
         sheet = Timesheet.builder().id(4L).user(employee).year(2026).month(9).status(TimesheetStatus.DRAFT).build();
         submission = TimesheetProjectSubmission.builder().id(5L).timesheet(sheet).project(project)
@@ -72,41 +72,6 @@ class TimesheetWorkflowTest {
         submission.setTotalHours(new BigDecimal("12"));
         when(submissions.findByProjectIdAndTimesheetUserId(3L, 1L)).thenReturn(List.of(approved, locked, submission));
         assertEquals(new BigDecimal("132"), service.getProjectSubmission(4L, 3L, employee).getLoggedHoursToDate());
-    }
-
-    @Test void weekCopyPreviewsAndPreservesExistingEntries() {
-        var monday = LocalDate.of(2026, 9, 14);
-        sheet.getTimeEntries().add(TimeEntry.builder().id(20L).timesheet(sheet).project(project).entryDate(monday.minusWeeks(1)).hours(new BigDecimal("8")).build());
-        sheet.getTimeEntries().add(TimeEntry.builder().id(21L).timesheet(sheet).project(project).entryDate(monday.minusWeeks(1).plusDays(1)).hours(new BigDecimal("6")).build());
-        sheet.getTimeEntries().add(TimeEntry.builder().id(22L).timesheet(sheet).project(project).entryDate(monday.plusDays(1)).hours(new BigDecimal("2")).build());
-        when(timesheets.findByUserIdAndYearAndMonth(1L, 2026, 9)).thenReturn(Optional.of(sheet));
-        var preview = service.copyPreviousWeek(4L, 3L, monday, 1L, false);
-        assertEquals(0, preview.copiedDays());
-        assertEquals("Existing entry kept", preview.days().get(1).skippedReason());
-        verify(entries, never()).save(any());
-        assertEquals(1, service.copyPreviousWeek(4L, 3L, monday, 1L, true).copiedDays());
-        assertEquals(new BigDecimal("2"), sheet.getTimeEntries().stream().filter(e -> e.getId().equals(22L)).findFirst().orElseThrow().getHours());
-        assertEquals(0, service.copyPreviousWeek(4L, 3L, monday, 1L, true).copiedDays());
-    }
-
-    @Test void weekCopyReadsPriorMonthAndSkipsLeave() {
-        var prior = Timesheet.builder().id(30L).user(employee).year(2026).month(8).status(TimesheetStatus.APPROVED).build();
-        prior.getTimeEntries().add(TimeEntry.builder().id(31L).project(project).entryDate(LocalDate.of(2026,8,25)).hours(new BigDecimal("8")).build());
-        prior.getTimeEntries().add(TimeEntry.builder().id(32L).project(project).entryDate(LocalDate.of(2026,8,26)).hours(new BigDecimal("8")).build());
-        when(timesheets.findByUserIdAndYearAndMonth(1L, 2026, 8)).thenReturn(Optional.of(prior));
-        when(assignments.findByProjectIdAndUserId(3L, 1L)).thenReturn(Optional.of(ProjectAssignment.builder().project(project).user(employee).startDate(LocalDate.of(2026,1,1)).endDate(LocalDate.of(2026,12,31)).plannedHours(new BigDecimal("160")).isActive(true).build()));
-        when(vacations.findByUserIdAndStartDateLessThanEqualAndEndDateGreaterThanEqual(eq(1L), any(), any()))
-                .thenReturn(List.of(VacationRequest.builder().startDate(LocalDate.of(2026,9,2)).endDate(LocalDate.of(2026,9,2)).status(VacationStatus.APPROVED).build()));
-        var result = service.copyPreviousWeek(4L, 3L, LocalDate.of(2026,8,31), 1L, true);
-        assertEquals(1, result.copiedDays());
-        assertEquals("Approved leave", result.days().get(1).skippedReason());
-    }
-
-    @Test void weekCopyRejectsOtherOwnersAndFinalizedSubmissions() {
-        assertThrows(org.springframework.security.access.AccessDeniedException.class, () -> service.copyPreviousWeek(4L, 3L, LocalDate.of(2026,9,14), 2L, true));
-        submission.setStatus(TimesheetStatus.APPROVED);
-        assertThrows(IllegalArgumentException.class, () -> service.copyPreviousWeek(4L, 3L, LocalDate.of(2026,9,14), 1L, true));
-        verify(entries, never()).save(any());
     }
 
     @Test void missingSubmissionsIncludeAbsentTimesheetsAndRespectManagerScope() {
@@ -175,8 +140,8 @@ class TimesheetWorkflowTest {
         service.addTimeEntry(4L, date, new BigDecimal(hours), "", 3L, sessions, 1L);
     }
 
-    @Test void superAdminCannotSubmitMonthlyOrProjectTimesheets() {
-        employee.setRole(UserRole.SUPER_ADMIN);
+    @Test void systemAdminCannotSubmitMonthlyOrProjectTimesheets() {
+        employee.setRole(UserRole.ADMIN);
         assertThrows(org.springframework.security.access.AccessDeniedException.class, () -> service.submitTimesheet(4L, 1L));
         assertThrows(org.springframework.security.access.AccessDeniedException.class, () -> service.submitProjectTimesheet(4L, 3L, 1L));
         verify(submissions, never()).save(any());
@@ -304,7 +269,7 @@ class TimesheetWorkflowTest {
         assertEquals(new BigDecimal("8"), submission.getTotalHours());
     }
 
-    @Test void superAdminCannotReviewEvenWhenAssignedAsManager() {
+    @Test void systemAdminCannotReviewEvenWhenAssignedAsManager() {
         submission.setStatus(TimesheetStatus.SUBMITTED);
         project.setProjectManager(admin);
         when(projectService.managesProject(3L, 2L)).thenReturn(true);
@@ -317,7 +282,7 @@ class TimesheetWorkflowTest {
     }
 
     @Test void monthlyApprovalSnapshotsProjectRateAndBlocksFurtherEdits() {
-        admin.setRole(UserRole.ADMIN);
+        admin.setRole(UserRole.PROJECT_ADMIN);
         project.setProjectManager(admin);
         when(projectService.managesProject(3L, 2L)).thenReturn(true);
         sheet.setStatus(TimesheetStatus.SUBMITTED);

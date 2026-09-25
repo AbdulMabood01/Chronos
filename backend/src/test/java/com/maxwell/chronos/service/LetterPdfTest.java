@@ -40,12 +40,14 @@ class LetterPdfTest {
             assertTrue(text.contains("E-Verification Number: 2601516"));
             assertTrue(text.contains("hr@maxwellnetwork.org"));
             assertTrue(text.contains("Syed Hussain"));
+            assertTrue(text.contains("Best regards,"));
+            assertFalse(text.contains("To whomsoever"));
             assertFalse(text.contains("PREVIEW - NOT APPROVED"));
-            for (var page : pdf.getPages()) {
-                boolean logo = false;
-                for (var name : page.getResources().getXObjectNames()) logo |= page.getResources().isImageXObject(name);
-                assertTrue(logo);
-            }
+            var images = 0;
+            for (var page : pdf.getPages())
+                for (var name : page.getResources().getXObjectNames())
+                    if (page.getResources().isImageXObject(name)) images++;
+            assertTrue(images >= 2, "Letter should include both logo and manager signature");
             Path output = Path.of("target", "letter-preview"); Files.createDirectories(output);
             Files.write(output.resolve(type + ".pdf"), bytes);
             ImageIO.write(new PDFRenderer(pdf).renderImageWithDPI(0, 105), "png", output.resolve(type + ".png").toFile());

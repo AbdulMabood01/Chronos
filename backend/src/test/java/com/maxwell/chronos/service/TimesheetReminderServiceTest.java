@@ -99,11 +99,11 @@ class TimesheetReminderServiceTest {
         verify(sheets, atLeastOnce()).save(argThat(t -> t.getUser() == employee && t.getStatus() == TimesheetStatus.DRAFT));
     }
 
-    @Test void disabledOrInactiveOrSuperAdminAreSkipped() {
+    @Test void disabledOrInactiveOrAdminAreSkipped() {
         employee.setIsActive(false);
         run("2026-09-18T20:00:00");
         employee.setIsActive(true);
-        employee.setRole(UserRole.SUPER_ADMIN);
+        employee.setRole(UserRole.ADMIN);
         run("2026-09-18T20:00:00");
         employee.setRole(UserRole.EMPLOYEE);
         when(settings.findBySettingKey("timesheet.reminders.enabled")).thenReturn(Optional.of(
@@ -113,7 +113,7 @@ class TimesheetReminderServiceTest {
     }
 
     @Test void failedEmailIsNotMarkedSentAndOtherUsersStillReceiveReminders() {
-        User second = User.builder().id(2L).isActive(true).role(UserRole.ADMIN).build();
+        User second = User.builder().id(2L).isActive(true).role(UserRole.PROJECT_ADMIN).build();
         when(users.findByIsActiveTrue()).thenReturn(List.of(employee, second));
         when(users.findForUpdate(2L)).thenReturn(Optional.of(second));
         when(sheets.findPeriodForUpdate(2L, 2026, 9)).thenReturn(Optional.of(

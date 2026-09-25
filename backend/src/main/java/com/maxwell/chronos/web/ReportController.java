@@ -28,7 +28,7 @@ public class ReportController {
                                                     @RequestParam(required = false) String userIds,
                                                     @AuthenticationPrincipal Jwt jwt) {
         var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        if (user == null || (!user.isSuperAdmin() && !user.isAdmin())) {
+        if (user == null || (!user.isAdmin() && !user.isProjectAdmin())) {
             return ResponseEntity.status(403).build();
         }
 
@@ -44,7 +44,7 @@ public class ReportController {
     public ResponseEntity<byte[]> exportProjectTimesheets(@RequestParam String submissionIds,
                                                           @AuthenticationPrincipal Jwt jwt) {
         var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        if (user == null || (!user.isSuperAdmin() && !user.isAdmin())) {
+        if (user == null || (!user.isAdmin() && !user.isProjectAdmin())) {
             return ResponseEntity.status(403).build();
         }
 
@@ -59,7 +59,7 @@ public class ReportController {
     @GetMapping("/vacation/export")
     public ResponseEntity<byte[]> exportVacationRequests(@RequestParam int year, @AuthenticationPrincipal Jwt jwt) {
         var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        if (user == null || (!user.isSuperAdmin() && !user.isAdmin())) {
+        if (user == null || (!user.isAdmin() && !user.isProjectAdmin())) {
             return ResponseEntity.status(403).build();
         }
 
@@ -80,7 +80,7 @@ public class ReportController {
         }
 
         try {
-            byte[] excel = reportService.exportTimesheetById(timesheetId, user.getId(), user.isSuperAdmin() || user.isAdmin());
+            byte[] excel = reportService.exportTimesheetById(timesheetId, user.getId(), user.isAdmin() || user.isProjectAdmin());
             String filename = "timesheet-" + timesheetId + ".xlsx";
             return ResponseEntity.ok()
                     .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
@@ -95,7 +95,7 @@ public class ReportController {
     public ResponseEntity<List<Map<String, Object>>> getMonthlySummary(@RequestParam int year, @RequestParam int month,
                                                                         @AuthenticationPrincipal Jwt jwt) {
         var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        if (user == null || (!user.isSuperAdmin() && !user.isAdmin())) {
+        if (user == null || (!user.isAdmin() && !user.isProjectAdmin())) {
             return ResponseEntity.status(403).build();
         }
 
@@ -111,7 +111,7 @@ public class ReportController {
         }
 
         try {
-            byte[] pdf = reportService.exportTimesheetPdfById(timesheetId, user.getId(), user.isSuperAdmin() || user.isAdmin());
+            byte[] pdf = reportService.exportTimesheetPdfById(timesheetId, user.getId(), user.isAdmin() || user.isProjectAdmin());
             String filename = "timesheet-" + timesheetId + ".pdf";
             return ResponseEntity.ok()
                     .contentType(MediaType.APPLICATION_PDF)
@@ -131,7 +131,7 @@ public class ReportController {
         }
 
         try {
-            byte[] pdf = reportService.exportProjectTimesheetPdfById(submissionId, user.getId(), user.isSuperAdmin() || user.isAdmin());
+            byte[] pdf = reportService.exportProjectTimesheetPdfById(submissionId, user.getId(), user.isAdmin() || user.isProjectAdmin());
             String filename = "project-timesheet-" + submissionId + ".pdf";
             return ResponseEntity.ok()
                     .contentType(MediaType.APPLICATION_PDF)

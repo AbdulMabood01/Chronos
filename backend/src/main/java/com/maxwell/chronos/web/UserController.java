@@ -44,7 +44,7 @@ public class UserController {
     @GetMapping("/{id}")
     public ResponseEntity<UserDTO> getUser(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
         var requester = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        if (requester == null || (!requester.isSuperAdmin() && !requester.getId().equals(id))) {
+        if (requester == null || (!requester.isAdmin() && !requester.getId().equals(id))) {
             return ResponseEntity.status(403).build();
         }
         UserDTO user = userService.findById(id);
@@ -59,7 +59,7 @@ public class UserController {
         var requester = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
         if (requester == null) return ResponseEntity.status(403).build();
         var users = userService.getEmployeeDirectory();
-        if (!requester.isAdmin() && !requester.isSuperAdmin()) {
+        if (!requester.isProjectAdmin() && !requester.isAdmin()) {
             var visibleIds = projectService.visibleEmployeeIds(requester);
             users = users.stream().filter(user -> visibleIds.contains(user.id()) || requester.getId().equals(user.id())).toList();
         }
@@ -82,7 +82,7 @@ public class UserController {
         String email = jwt.getClaimAsString("preferred_username");
         var currentUser = userService.findUserEntityByEmail(email);
 
-        if (currentUser == null || !currentUser.isSuperAdmin()) {
+        if (currentUser == null || !currentUser.isAdmin()) {
             return ResponseEntity.status(403).build();
         }
 
@@ -95,7 +95,7 @@ public class UserController {
         String email = jwt.getClaimAsString("preferred_username");
         var currentUser = userService.findUserEntityByEmail(email);
 
-        if (currentUser == null || !currentUser.isSuperAdmin()) {
+        if (currentUser == null || !currentUser.isAdmin()) {
             return ResponseEntity.status(403).build();
         }
 
@@ -109,7 +109,7 @@ public class UserController {
         String email = jwt.getClaimAsString("preferred_username");
         var currentUser = userService.findUserEntityByEmail(email);
 
-        if (currentUser == null || !currentUser.isSuperAdmin()) {
+        if (currentUser == null || !currentUser.isAdmin()) {
             return ResponseEntity.status(403).build();
         }
 
@@ -124,7 +124,7 @@ public class UserController {
         String email = jwt.getClaimAsString("preferred_username");
         var currentUser = userService.findUserEntityByEmail(email);
 
-        if (currentUser == null || !currentUser.isSuperAdmin()) {
+        if (currentUser == null || !currentUser.isAdmin()) {
             return ResponseEntity.status(403).build();
         }
 

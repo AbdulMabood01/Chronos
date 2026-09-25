@@ -60,7 +60,7 @@ test('mobile navigation, responsive dashboard and calendar', async ({ page }) =>
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 test('management navigation and approvals', async ({ page }) => {
-  await mockWorkspace(page, 'SUPER_ADMIN');
+  await mockWorkspace(page, 'ADMIN');
   await page.goto('/dashboard');
   await expect(page.getByRole('heading', { name: 'Admin Dashboard' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'People', exact: true })).toBeVisible();

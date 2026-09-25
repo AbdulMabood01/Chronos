@@ -1,5 +1,4 @@
 import ScreenTitle from '../components/ScreenTitle';
-import { ProjectHealthOverview, useProjectHealth } from '../components/ProjectHealth';
 import { formatDate } from '../utils/dates';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -31,9 +30,8 @@ export default function AdminDashboard() {
   const [error, setError] = useState('');
   const [rejectingTask, setRejectingTask] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
-  const isReviewer = user?.canReviewProjects || ['ADMIN', 'SUPER_ADMIN'].includes(user?.role);
-  const canReviewLetters = user?.role === 'SUPER_ADMIN';
-  const healthState = useProjectHealth(['ADMIN', 'SUPER_ADMIN'].includes(user?.role), pendingTimesheets);
+  const isReviewer = user?.canReviewProjects || ['PROJECT_ADMIN', 'ADMIN'].includes(user?.role);
+  const canReviewLetters = user?.role === 'ADMIN';
 
   useEffect(() => {
     if (!isReviewer) return;
@@ -43,8 +41,8 @@ export default function AdminDashboard() {
   const loadPendingItems = async () => {
     try {
       const requests = [
-        user?.role !== 'SUPER_ADMIN' ? timesheetAPI.getPendingProjectSubmissions() : Promise.resolve({ data: [] }),
-        user?.role === 'SUPER_ADMIN' ? vacationAPI.getPendingRequests() : Promise.resolve({ data: [] }),
+        user?.role !== 'ADMIN' ? timesheetAPI.getPendingProjectSubmissions() : Promise.resolve({ data: [] }),
+        user?.role === 'ADMIN' ? vacationAPI.getPendingRequests() : Promise.resolve({ data: [] }),
       ];
       if (canReviewLetters) {
         requests.push(letterRequestAPI.getPendingRequests());
@@ -189,7 +187,6 @@ export default function AdminDashboard() {
 
       {error && <div className="error-message">{error} <button type="button" onClick={loadPendingItems}>Retry</button></div>}
 
-      {['ADMIN', 'SUPER_ADMIN'].includes(user?.role) && <ProjectHealthOverview state={healthState} onOpen={id => navigate(`/projects?projectId=${id}`)} />}
 
       <section className="admin-panel admin-approval-section admin-pending-section">
         <div className="panel-heading">

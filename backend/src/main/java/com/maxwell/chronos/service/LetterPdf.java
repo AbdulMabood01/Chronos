@@ -17,6 +17,7 @@ final class LetterPdf implements AutoCloseable {
     private final String reference;
     private final boolean approved;
     private final PDImageXObject logo;
+    private final PDImageXObject managerSignature;
     private PDPageContentStream content;
     private float y;
 
@@ -26,6 +27,10 @@ final class LetterPdf implements AutoCloseable {
         try (InputStream in = LetterPdf.class.getResourceAsStream("/Logo.png")) {
             if (in == null) throw new IOException("Company logo resource is missing");
             logo = PDImageXObject.createFromByteArray(document, in.readAllBytes(), "Maxwell Network Inc");
+        } catch (IOException | RuntimeException ex) { document.close(); throw ex; }
+        try (InputStream in = LetterPdf.class.getResourceAsStream("/manager-signature.png")) {
+            if (in == null) throw new IOException("Manager signature resource is missing");
+            managerSignature = PDImageXObject.createFromByteArray(document, in.readAllBytes(), "Manager signature");
         } catch (IOException | RuntimeException ex) { document.close(); throw ex; }
     }
 
@@ -51,10 +56,13 @@ final class LetterPdf implements AutoCloseable {
                 } else if (section.startsWith("tech.maxwellnetwork.org")) {
                     // Company contact details repeat in the footer of every page.
                 } else if (section.startsWith("Best Regards,")) {
-                    pdf.ensure(79);
-                    pdf.y -= 8;
+                    pdf.ensure(112);
+                    float signatureHeight = 48f;
+                    float signatureWidth = signatureHeight * pdf.managerSignature.getWidth() / pdf.managerSignature.getHeight();
+                    pdf.content.drawImage(pdf.managerSignature, LEFT, pdf.y - signatureHeight, signatureWidth, signatureHeight);
+                    pdf.y -= signatureHeight + 8;
                     pdf.text("Best regards,", LEFT, pdf.y, 10.5f, PDType1Font.TIMES_ROMAN, NAVY);
-                    pdf.y -= 27;
+                    pdf.y -= 18;
                     String[] signature = section.split("\\R");
                     for (int n = 1; n < signature.length; n++) {
                         pdf.text(signature[n], LEFT, pdf.y, n == 1 ? 11 : 9, n == 1 ? PDType1Font.HELVETICA_BOLD : PDType1Font.HELVETICA, n == 1 ? NAVY : MUTED);

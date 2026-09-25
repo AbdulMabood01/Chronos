@@ -30,7 +30,7 @@ public class AnnouncementService {
 
     private User actor(String email, boolean admin) {
         User u = users.findByEmail(email).orElseThrow(() -> new AccessDeniedException("Access denied"));
-        if (!Boolean.TRUE.equals(u.getIsActive()) || (admin && !u.isSuperAdmin())) throw new AccessDeniedException("Access denied");
+        if (!Boolean.TRUE.equals(u.getIsActive()) || (admin && !u.isAdmin())) throw new AccessDeniedException("Access denied");
         return u;
     }
     public List<Map<String,Object>> list(String email, boolean management) {

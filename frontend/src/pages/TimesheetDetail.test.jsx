@@ -66,7 +66,7 @@ it('lets a project manager enter hours on their own assigned project', async () 
   expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
 });
 describe('daily notes and summary', () => {
-  it.each(['ADMIN', 'EMPLOYEE'])('lets a %s reviewer open populated and empty notes without editing', async (role) => {
+  it.each(['PROJECT_ADMIN', 'EMPLOYEE'])('lets a %s reviewer open populated and empty notes without editing', async (role) => {
     HTMLDialogElement.prototype.showModal = vi.fn(function () { this.setAttribute('open', ''); });
     employee.id = 6;
     employee.role = role;
@@ -119,8 +119,8 @@ describe('employee PDF export', () => {
     await waitFor(() => expect(timesheetAPI.getProjectSubmission).toHaveBeenCalled());
     expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
   });
-  it('does not allow SuperAdmin to submit an existing personal draft', async () => {
-    employee.role = 'SUPER_ADMIN';
+  it('does not allow Admin to submit an existing personal draft', async () => {
+    employee.role = 'ADMIN';
     timesheetAPI.getTimesheetById.mockResolvedValue({ data: { ...sheet, status: 'DRAFT' } });
     timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, status: 'DRAFT', plannedHours: 160 } });
     open(false);
@@ -258,9 +258,9 @@ it('shows backend validation messages when hour saves fail', async () => {
   expect(await screen.findByText('Entry date must be within the project assignment dates')).toBeTruthy();
 });
 
-it('hides approval actions from superadmins even when they are the routed approver', async () => {
+it('hides approval actions from admins even when they are the routed approver', async () => {
   employee.id = 6;
-  employee.role = 'SUPER_ADMIN';
+  employee.role = 'ADMIN';
   timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, status: 'SUBMITTED', routedApproverId: 6 } });
   open(false);
   await screen.findByText('SUBMITTED');

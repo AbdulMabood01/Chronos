@@ -3,6 +3,7 @@ import React from 'react';
 import { useAuth } from '../AuthContext';
 import EmploymentDetails from '../components/EmploymentDetails';
 import ProfileForm from '../components/ProfileForm';
+import ChangePassword from '../components/ChangePassword';
 import '../styles.css';
 
 export default function Profile() {
@@ -29,6 +30,7 @@ export default function Profile() {
         <ProfileForm user={user} onSave={handleSave} />
       </div>
       <EmploymentDetails user={user} />
+      <ChangePassword />
     </div>
   );
 }

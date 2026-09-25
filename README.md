@@ -33,7 +33,7 @@ A modern, full-stack employee timekeeping and vacation management application de
   - Unread notification count
   - Recent activity overview
 
-### Manager/Super Admin Features
+### Manager/Admin Features
 - ✅ **Approval Workflows**
   - Review pending timesheets with employee details
   - Approve/reject timesheet submissions

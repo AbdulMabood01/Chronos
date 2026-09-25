@@ -80,6 +80,11 @@ export function FeedbackPage() {
     catch (e) { setError(message(e)); } finally { setBusy(false); }
   }
   const years = [...new Set(rows.map(r => yearOf(r.submitted_at)))].sort((a,b) => b-a);
+  const historyTitle = tab === 'given' ? "Feedback I've Given" : 'My Feedback';
+  const historyDescription = tab === 'given' ? 'Feedback you have sent to colleagues.' : 'Feedback colleagues have sent to you.';
+  const emptyMessage = Object.values(filters).some(Boolean)
+    ? 'No feedback matches this selection.'
+    : tab === 'given' ? "You haven't given any feedback yet." : "You haven't received any feedback yet.";
   const visible = rows.filter(r => (!filters.year || String(yearOf(r.submitted_at)) === filters.year) && (!filters.category || r.category === filters.category) && (!filters.sender || r.sender_type === filters.sender) && (!filters.privacy || String(r.anonymous) === filters.privacy));
   const filter = (key, label, choices) => <label>{label}<select value={filters[key]} onChange={e => setFilters({ ...filters, [key]: e.target.value })}><option value="">All</option>{choices.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label>;
   return <div className="page-container feedback-reviews feedback-page"><h1>Feedback</h1><p className="page-subtitle">Share recognition and constructive feedback with colleagues.</p>
@@ -103,14 +108,14 @@ export function FeedbackPage() {
           <button className="button button-primary" disabled={busy || !selected || !draft.general.trim() || content.length > 20000}>{busy ? 'Submitting...' : anonymous ? 'Submit anonymous feedback' : 'Submit identified feedback'}</button>
         </footer>
       </fieldset>
-    </form> : <>{busy ? <p role="status">Loading feedback…</p> : <><div className="review-filters">{filter('year','Year',years.map(y => [y,y]))}{filter('category','Category',Object.entries(categories))}{filter('sender','Sender type',[['Manager','Manager'],['Employee','Employee']])}{filter('privacy','Identity',[['true','Anonymous'],['false','Identified']])}</div>
-      {!visible.length && <p>No feedback matches this selection.</p>}{years.filter(y => visible.some(r => yearOf(r.submitted_at)===y)).map(y => <section key={y}><h2>{y}</h2>{visible.filter(r => yearOf(r.submitted_at)===y).map(r => <article className="review-card feedback-history-card" key={r.id}><div className="review-meta"><strong>{categories[r.category] || 'Uncategorized'}</strong><time>{date(r.submitted_at)}</time></div><FeedbackContent content={r.content}/><p>{tab === 'given' ? `To: ${r.recipient_name} (${r.recipient_email}) · ${r.anonymous ? 'Anonymous to recipient' : 'Identified'}` : `Submitted by: ${r.anonymous ? 'Anonymous' : r.sender_name}`} · {r.sender_type}</p></article>)}</section>)}</>}</>}
+    </form> : <><h2>{historyTitle}</h2><p className="page-subtitle">{historyDescription}</p>{busy ? <p role="status">Loading feedback…</p> : <><div className="review-filters">{filter('year','Year',years.map(y => [y,y]))}{filter('category','Category',Object.entries(categories))}{tab !== 'given' && filter('sender','Sender type',[['Manager','Manager'],['Employee','Employee']])}{filter('privacy','Identity',[['true','Anonymous'],['false','Identified']])}</div>
+      {!visible.length && <p>{emptyMessage}</p>}{years.filter(y => visible.some(r => yearOf(r.submitted_at)===y)).map(y => <section key={y}><h2>{y}</h2>{visible.filter(r => yearOf(r.submitted_at)===y).map(r => <article className="review-card feedback-history-card" key={r.id}><div className="review-meta"><strong>{categories[r.category] || 'Uncategorized'}</strong><time>{date(r.submitted_at)}</time></div><FeedbackContent content={r.content}/><p>{tab === 'given' ? `To: ${r.recipient_name} (${r.recipient_email}) · ${r.anonymous ? 'Anonymous to recipient' : 'Identified'}` : `Submitted by: ${r.anonymous ? 'Anonymous' : r.sender_name}`} · {r.sender_type}</p></article>)}</section>)}</>}</>}
   </div>;
 }
 
 export function PerformanceReviewsPage() {
   const { user } = useAuth();
-  const admin = user.role === 'SUPER_ADMIN';
+  const admin = user.role === 'ADMIN';
   const [employee, setEmployee] = useState(null);
   const [rows, setRows] = useState([]);
   const [year, setYear] = useState('');
@@ -123,6 +128,8 @@ export function PerformanceReviewsPage() {
   const [revision, setRevision] = useState(0);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
+  const [searchYear, setSearchYear] = useState('');
+  const [searchQuarter, setSearchQuarter] = useState('');
   const desiredPeriod = useRef(null);
   useEffect(() => {
     let active = true; setRows([]); setForm(null); setAudit(null); setError(''); setYear(''); setQuarter('');
@@ -133,6 +140,9 @@ export function PerformanceReviewsPage() {
   }, [employee, admin, revision]);
   const selected = rows.find(r => String(r.review_year) === year && String(r.quarter) === quarter);
   const years = [...new Set([new Date().getFullYear(), ...rows.map(r => r.review_year)])].sort((a,b) => b-a);
+  const matchingReviews = rows.filter(row => (row.employee_name + ' ' + row.employee_email).toLowerCase().includes(search.toLowerCase()) && (!status || Boolean(row.published_at) === (status === 'published'))
+    && (!searchYear || String(row.review_year) === searchYear)
+    && (!searchQuarter || String(row.quarter) === searchQuarter));
   async function save(e) {
     e.preventDefault(); if (busy || !form.summary.trim()) return; setBusy(true); setError(''); setNotice('');
     try { await api.save(form.id, { ...form, employeeId: employee.id, year: Number(form.year), quarter: Number(form.quarter) }); desiredPeriod.current = { year: Number(form.year), quarter: Number(form.quarter) }; setNotice('Review saved.'); setRevision(r => r+1); }
@@ -143,14 +153,14 @@ export function PerformanceReviewsPage() {
     try { await api.publish(selected.id, selected.version); desiredPeriod.current = { year: selected.review_year, quarter: selected.quarter }; setNotice('Review published to the employee.'); setRevision(r => r+1); }
     catch (e) { setError(message(e)); } finally { setBusy(false); }
   }
-  return <div className="page-container feedback-reviews feedback-page performance-page"><h1>Performance Reviews</h1><p className="page-subtitle">Official quarterly evaluations{admin ? '. Drafts are visible only to Super Admins.' : '. You can view only your own published reviews. Reviews are read-only.'}</p>
+  return <div className="page-container feedback-reviews feedback-page performance-page"><header className="performance-page-header"><div><span className="eyebrow">DEVELOPMENT &amp; GROWTH</span><h1>Performance Reviews</h1><p className="page-subtitle">Reflect on achievements, recognize strengths, and plan what comes next.</p></div><span className="performance-access">{admin ? "Review management" : "My quarterly reviews"}</span></header><p className="performance-visibility">{admin ? "Drafts are visible only to Admins. Publish a review when it is ready to share." : "Your published quarterly reviews, all in one place. Reviews are read-only."}</p>
     {admin && <section className="card performance-directory"><><div className="performance-heading"><div><h2>{employee ? 'Employee review history' : 'All employee reviews'}</h2><p className="page-subtitle">Search an employee to create a quarterly review or view their history.</p></div>{employee && <button disabled={busy} onClick={() => setEmployee(null)}>All employee reviews</button>}</div><fieldset disabled={busy || !!form}><EmployeeSearch selected={employee} onSelect={value => { setEmployee(value); setNotice(''); }}/></fieldset></></section>}
     {error && <p className="feedback-message feedback-error" role="alert">{error}</p>}{notice && <p className="feedback-message" role="status">{notice}</p>}
     {admin && employee && !form && <button className="button button-primary" disabled={busy} onClick={() => { setForm({ year: new Date().getFullYear(), quarter: Math.floor(new Date().getMonth()/3)+1, version: 0, ...Object.fromEntries(Object.keys(fields).map(k => [k,''])) }); setAudit(null); }}>Create quarterly review</button>}
     {admin && !employee && !busy && <section className="card performance-directory">
-      <div className="review-filters"><label>Filter by employee<input placeholder="Name or email" value={search} onChange={e => setSearch(e.target.value)}/></label><label>Review status<select value={status} onChange={e => setStatus(e.target.value)}><option value="">All statuses</option><option value="draft">Draft</option><option value="published">Published</option></select></label></div>
-      <div className="performance-list">{rows.filter(row => (row.employee_name + ' ' + row.employee_email).toLowerCase().includes(search.toLowerCase()) && (!status || Boolean(row.published_at) === (status === 'published'))).map(row => <button className="performance-list-item" key={row.id} onClick={() => { desiredPeriod.current = { year: row.review_year, quarter: row.quarter }; setEmployee({ id: row.employee_id, first_name: row.first_name, last_name: row.last_name, email: row.employee_email }); }}><span><strong>{row.employee_name}</strong><small>{row.employee_email}</small></span><span>Q{row.quarter} {row.review_year}</span><span className="performance-status">{row.published_at ? 'Published' : 'Draft'}</span><span>View review &rarr;</span></button>)}</div>
-      {!rows.some(row => (row.employee_name + ' ' + row.employee_email).toLowerCase().includes(search.toLowerCase()) && (!status || Boolean(row.published_at) === (status === 'published'))) && <p className="page-subtitle">No reviews match this selection. Search an employee above to create a review.</p>}
+      <div className="review-filters"><label>Filter by employee<input placeholder="Name or email" value={search} onChange={e => setSearch(e.target.value)}/></label><label>Year<select value={searchYear} onChange={e => setSearchYear(e.target.value)}><option value="">All years</option>{years.map(y => <option key={y} value={y}>{y}</option>)}</select></label><label>Quarter<select value={searchQuarter} onChange={e => setSearchQuarter(e.target.value)}><option value="">All quarters</option>{[1,2,3,4].map(q => <option key={q} value={q}>Q{q}</option>)}</select></label><label>Review status<select value={status} onChange={e => setStatus(e.target.value)}><option value="">All statuses</option><option value="draft">Draft</option><option value="published">Published</option></select></label></div>
+      <div className="performance-list">{matchingReviews.map(row => <button className="performance-list-item" key={row.id} onClick={() => { desiredPeriod.current = { year: row.review_year, quarter: row.quarter }; setEmployee({ id: row.employee_id, first_name: row.first_name, last_name: row.last_name, email: row.employee_email }); }}><span><strong>{row.employee_name}</strong><small>{row.employee_email}</small></span><span>Q{row.quarter} {row.review_year}</span><span className={`performance-status ${row.published_at ? "is-published" : "is-draft"}`}>{row.published_at ? 'Published' : 'Draft'}</span><span>View review &rarr;</span></button>)}</div>
+      {!matchingReviews.length && <p className="page-subtitle">No reviews match this selection. Search an employee above to create a review.</p>}
     </section>}
     {busy && <p role="status">Loading…</p>}
     {form ? <form className="card performance-form" onSubmit={save}><fieldset disabled={busy}><h2>{form.id ? 'Edit review' : 'New quarterly review'} — {employee.first_name} {employee.last_name}</h2>
@@ -159,10 +169,10 @@ export function PerformanceReviewsPage() {
       <div className="performance-fields">{Object.entries(fields).map(([key,label]) => <label className={key === 'summary' || key === 'goals' ? 'performance-wide' : ''} key={key}>{label}{key === 'summary' ? ' (required)' : ''}<textarea required={key === 'summary'} maxLength={20000} value={form[key] || ''} onChange={e => setForm({ ...form, [key]: e.target.value })}/></label>)}</div>
       <div className="review-tabs"><button className="button button-primary" disabled={busy || !form.summary.trim()}>{busy ? 'Saving...' : 'Save review'}</button><button type="button" disabled={busy} onClick={() => setForm(null)}>Cancel</button></div><p className="page-subtitle">{form.published_at ? 'Saving updates the published review.' : 'Save a draft first, then publish it to the employee.'}</p></fieldset></form>
     : (!admin || employee) && <><div className="review-filters"><label>Year<select value={year} onChange={e => { setYear(e.target.value); setAudit(null); }}><option value="">Select year</option>{years.map(y => <option key={y}>{y}</option>)}</select></label><label>Quarter<select value={quarter} onChange={e => { setQuarter(e.target.value); setAudit(null); }}><option value="">Select quarter</option>{[1,2,3,4].map(q => <option key={q} value={q}>Q{q}</option>)}</select></label></div>
-      {selected ? <article className="review-card"><h2>Performance Review — Q{selected.quarter} {selected.review_year}</h2><p>{selected.employee_name} · {selected.published_at ? `Published ${date(selected.published_at)}` : 'Draft'}</p>
-        {Object.entries(fields).map(([key,label]) => <section key={key}><h3>{label}</h3><p className="review-text">{selected[key] || '—'}</p></section>)}
+      {selected ? <article className="review-card performance-review"><header className="performance-review-header"><span className={`performance-status ${selected.published_at ? "is-published" : "is-draft"}`}>{selected.published_at ? "Published" : "Draft"}</span><h2>Performance Review — Q{selected.quarter} {selected.review_year}</h2><p>{selected.employee_name} · {selected.published_at ? `Published ${date(selected.published_at)}` : 'Draft'}</p></header>
+        <div className="performance-review-sections">{Object.entries(fields).map(([key,label], index) => <section className={key === "summary" || key === "goals" ? "performance-wide" : ""} key={key}><h3><span className="performance-section-number" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>{label}</h3><p className={`review-text${selected[key] ? "" : " performance-unfilled"}`}>{selected[key] || "No comments added."}</p></section>)}</div>
         {admin && <><p>Created {date(selected.created_at)} · Created by user #{selected.created_by} · Last modified {date(selected.modified_at)}</p><div className="review-tabs"><button disabled={busy} onClick={() => setForm({ ...selected, year: selected.review_year })}>Edit review</button>{!selected.published_at && <button className="button button-primary" disabled={busy} onClick={publish}>Publish to employee</button>}<button disabled={busy} onClick={async () => { setBusy(true); try { setAudit((await api.audit(selected.id)).data); } catch(e) { setError(message(e)); } finally { setBusy(false); } }}>View audit history</button></div>
           {audit && <section><h3>Audit history</h3>{audit.map(a => <p key={a.id}>{a.action} · {date(a.recorded_at)} · User #{a.actor_id}</p>)}</section>}</>}
-      </article> : !busy && <p>No {admin ? '' : 'published '}review for this period.</p>}</>}
+      </article> : !busy && <p className="performance-empty">No {admin ? '' : 'published '}review for this period.</p>}</>}
   </div>;
 }

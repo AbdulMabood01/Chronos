@@ -833,7 +833,7 @@ public class ReportService {
     }
 
     private boolean isEmployeeTimesheet(Timesheet timesheet) {
-        return timesheet.getUser() != null && !UserRole.SUPER_ADMIN.equals(timesheet.getUser().getRole());
+        return timesheet.getUser() != null && !UserRole.ADMIN.equals(timesheet.getUser().getRole());
     }
 
     private boolean isReportExportEligible(Timesheet timesheet) {

@@ -13,10 +13,10 @@ class LeaveDefaultsTest {
         var users = mock(UserRepository.class);
         var allowances = mock(LeaveAllowanceRepository.class);
         var service = new SystemSettingsService(settings, mock(AuditService.class), users, allowances);
-        var admin = User.builder().id(2L).role(UserRole.ADMIN).build();
+        var admin = User.builder().id(2L).role(UserRole.PROJECT_ADMIN).build();
         var employee = User.builder().id(1L).role(UserRole.EMPLOYEE).build();
-        var superAdmin = User.builder().id(3L).role(UserRole.SUPER_ADMIN).build();
-        when(users.findAll()).thenReturn(List.of(employee, superAdmin));
+        var systemAdmin = User.builder().id(3L).role(UserRole.ADMIN).build();
+        when(users.findAll()).thenReturn(List.of(employee, systemAdmin));
         when(users.findForUpdate(1L)).thenReturn(Optional.of(employee));
         var existing = new LeaveAllowance(); existing.setExtraVacationDays(BigDecimal.TEN);
         when(allowances.findByUserIdAndYear(1L, 2026)).thenReturn(Optional.of(existing));

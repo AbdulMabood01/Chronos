@@ -30,7 +30,7 @@ class TeamCalendarServiceTest {
         assertEquals("Alice Smith",result.get(0).userName());
         assertEquals(LocalDate.of(2026,8,31),result.get(0).startDate());
         assertEquals(Set.of("id","userId","userName","startDate","endDate"), Arrays.stream(TeamCalendarService.Absence.class.getRecordComponents()).map(java.lang.reflect.RecordComponent::getName).collect(java.util.stream.Collectors.toSet()));
-        manager.setRole(UserRole.ADMIN);
+        manager.setRole(UserRole.PROJECT_ADMIN);
         assertEquals(2,service.getCalendar(2026,9,manager).size());
     }
     @Test void unrelatedEmployeesCannotReadCalendar() {

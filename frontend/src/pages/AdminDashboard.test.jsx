@@ -7,12 +7,12 @@ import AdminDashboard from './AdminDashboard';
 import { letterRequestAPI, timesheetAPI, vacationAPI } from '../api';
 
 vi.mock('../api');
-const currentUser = { id: 1, role: 'SUPER_ADMIN' };
+const currentUser = { id: 1, role: 'ADMIN' };
 vi.mock('../AuthContext', () => ({ useAuth: () => ({ user: currentUser }) }));
 
 beforeEach(() => {
   vi.resetAllMocks();
-  currentUser.role = 'SUPER_ADMIN';
+  currentUser.role = 'ADMIN';
   currentUser.canReviewProjects = false;
   timesheetAPI.getPendingProjectSubmissions.mockResolvedValue({ data: [] });
   letterRequestAPI.getPendingRequests.mockResolvedValue({ data: [] });

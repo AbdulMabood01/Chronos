@@ -34,8 +34,8 @@ export default function ProjectHoursDashboard() {
   const [plannedHourDrafts, setPlannedHourDrafts] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const canView = user?.canReviewProjects || ['ADMIN', 'SUPER_ADMIN'].includes(user?.role);
-  const canPlan = user?.role === 'ADMIN';
+  const canView = user?.canReviewProjects || ['PROJECT_ADMIN', 'ADMIN'].includes(user?.role);
+  const canPlan = user?.role === 'PROJECT_ADMIN';
 
   const selectedOption = options.find((option) => option.value === selectedPeriod) || options[0];
 

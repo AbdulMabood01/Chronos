@@ -56,7 +56,7 @@ export const AuthProvider = ({ children }) => {
     return response.data;
   };
 
-  const isSuperAdmin = () => user?.role === 'SUPER_ADMIN';
+  const isAdmin = () => user?.role === 'ADMIN';
 
   const value = {
     user,
@@ -65,7 +65,7 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     updateProfile,
-    isSuperAdmin,
+    isAdmin,
   };
 
   return (
