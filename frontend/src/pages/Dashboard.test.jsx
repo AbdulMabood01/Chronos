@@ -46,7 +46,7 @@ it('prioritizes corrections and completed-month drafts, not current drafts or ap
 it('shows accurate personal summaries and hides empty sections without requesting management data', async () => {
   mount();
   await screen.findByText('12 days');
-  expect(screen.getByRole('heading', { name: 'Needs Attention' })).toBeTruthy();
+  expect(screen.getByRole('region', { name: 'Workspace summary' })).toBeTruthy();
   expect(screen.getByRole('heading', { name: 'My Projects' })).toBeTruthy();
   expect(screen.queryByRole('heading', { name: 'Team Capacity' })).toBeNull();
   expect(screen.queryByRole('region', { name: 'Company announcements' })).toBeNull();
@@ -59,12 +59,11 @@ it('keeps successful sections usable after failure and retries without showing a
   api.timesheetAPI.getMyTimesheets.mockRejectedValueOnce(new Error('offline'));
   mount();
   await screen.findByRole('alert');
-  expect(screen.queryByText(/You’re all caught up/)).toBeNull();
+  expect(screen.getByRole('alert').textContent).toContain('Some updates couldn’t load');
   expect(screen.getByText('12 days')).toBeTruthy();
   expect(within(screen.getByRole('link', { name: /Hours This Week/ })).getByText('Unavailable')).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-  await screen.findByText(/You’re all caught up/);
-  expect(screen.queryByRole('alert')).toBeNull();
+  await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
 });
 
 it('gives project admins their approval queue and permission-scoped projects', async () => {
@@ -73,9 +72,9 @@ it('gives project admins their approval queue and permission-scoped projects', a
   api.projectAPI.getHealth.mockResolvedValue({ data: [{ projectId: 10, projectCode: 'ATLAS', projectName: 'Atlas delivery', status: 'AT_RISK', loggedHours: 180, allocatedHours: 176, signals: [{ code: 'HOURS_EXCEEDED', message: '4 hours over budget' }] }] });
   api.timesheetAPI.getPendingProjectSubmissions.mockResolvedValue({ data: [{ id: 2, timesheetId: 3, projectId: 10, projectCode: 'ATLAS', userName: 'Jamie', month: 8, year: 2026, totalHours: 8 }] });
   mount();
-  const approval = await screen.findByRole('link', { name: /Jamie · Timesheet approval/ });
-  expect(approval.getAttribute('href')).toBe('/timesheet/3?projectId=10');
-  expect(screen.getByRole('link', { name: /Pending Approvals/ }).textContent).toContain('1');
+  const approvals = await screen.findByRole('link', { name: /Pending Approvals/ });
+  expect(approvals.getAttribute('href')).toBe('/admin');
+  expect(approvals.textContent).toContain('1');
   expect(screen.queryByRole('heading', { name: 'Projects', exact: true })).toBeNull();
   expect(screen.queryByRole('heading', { name: 'Project Health' })).toBeNull();
   expect(api.userAPI.getAllUsers).not.toHaveBeenCalled();
@@ -86,8 +85,7 @@ it('keeps employee project managers in the project view and reviewers in their p
   user.canManageProjects = true;
   user.canReviewProjects = true;
   mount();
-  await screen.findByText(/You’re all caught up/);
-  expect(api.projectAPI.getProjects).toHaveBeenCalled();
+  await waitFor(() => expect(api.projectAPI.getProjects).toHaveBeenCalled());
   cleanup();
   user.canManageProjects = false;
   mount();

@@ -11,7 +11,7 @@ import TimeSculpture from '../components/TimeSculpture';
 export default function EmployeeDashboard({ user, model, state, onRefresh }) {
   const [expanded, setExpanded] = useState(false);
   const items = expanded ? model.attention : model.attention.slice(0, 3);
-  const news = model.announcements.filter(item => !model.attention.some(action => action.id === `announcement-${item.id}`)).slice(0, 2);
+  const news = model.announcements.slice(0, 2);
   return <div className="page-container focus-dashboard employee-day">
     <header className="day-topline"><span><span className="day-live-dot" /> YOUR SPACE</span><time dateTime={format(new Date(), 'yyyy-MM-dd')}>{format(new Date(), 'EEEE, MMMM d')}</time></header>
     <section className="day-welcome" aria-label="Welcome">

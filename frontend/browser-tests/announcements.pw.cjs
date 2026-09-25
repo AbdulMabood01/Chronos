@@ -23,14 +23,14 @@ test('employee dashboard and acknowledgment work on desktop and mobile', async (
   await page.goto('/dashboard');
   const banner = page.getByRole('region', { name:'Company announcements' });
   await expect(banner).toBeVisible();
-  await expect(banner.getByRole('link')).toHaveCount(2);
+  await expect(banner.getByRole('link')).toHaveCount(3);
   expect((await banner.boundingBox()).height).toBeLessThan(300);
   await page.setViewportSize({ width:390, height:844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect((await banner.boundingBox()).height).toBeLessThan(400);
   await page.setViewportSize({ width:1440, height:1050 });
   await page.screenshot({ path:'test-results/announcements-dashboard-desktop.png', fullPage:true });
-  await page.getByRole('region', { name:'Needs Attention' }).getByRole('link', { name:/A new chapter for our team/ }).click();
+  await banner.getByRole('link', { name:/A new chapter for our team/ }).click();
   await expect(page).toHaveURL(/\/announcements\?id=news$/);
   await expect(page.getByRole('heading', { name:announcement.title })).toBeVisible();
   await page.getByRole('button', { name:'Acknowledge announcement' }).click();
@@ -62,7 +62,7 @@ test('homepage has no announcement banner when the feed is empty', async ({ page
 test('Admin management form and tracking fit mobile and dark theme', async ({ page }) => {
   await setup(page,'ADMIN');
   await page.goto('/announcements');
-  await page.getByRole('button', { name:'Manage announcements' }).click();
+  await expect(page.getByRole('button', { name:'New announcement' })).toBeVisible();
   await page.getByRole('button', { name:/A new chapter for our team/ }).click();
   await page.getByRole('button', { name:'View tracking' }).click();
   await expect(page.getByText('Alex Chen')).toBeVisible();

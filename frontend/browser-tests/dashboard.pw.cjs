@@ -30,7 +30,7 @@ for (const role of ['EMPLOYEE', 'PROJECT_ADMIN', 'ADMIN']) {
     page.on('pageerror', error => errors.push(error.message));
     await setup(page, role);
     await page.goto('/dashboard');
-    await expect(page.getByRole('heading', { name: 'Needs Attention' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Workspace summary' })).toBeVisible();
     if (role === 'EMPLOYEE') await expect(page.getByRole('heading', { name: 'My Projects', exact: true })).toBeVisible();
     else await expect(page.getByRole('heading', { name: /^(Project Health|Projects)$/ })).toHaveCount(0);
     await expect(page.getByRole('alert')).toHaveCount(0);
@@ -42,13 +42,13 @@ for (const role of ['EMPLOYEE', 'PROJECT_ADMIN', 'ADMIN']) {
       await page.getByRole('button', { name: 'Play animation' }).click();
     }
     if (role === 'PROJECT_ADMIN') await expect(page.getByRole('heading', { name: 'Team Capacity' })).toBeVisible();
-    const attentionTop = (await page.getByRole('heading', { name: 'Needs Attention' }).boundingBox()).y;
-    expect(attentionTop).toBeLessThan(500);
+    const summaryTop = (await page.getByRole('region', { name: 'Workspace summary' }).boundingBox()).y;
+    expect(summaryTop).toBeLessThan(500);
     await page.screenshot({ path: `test-results/dashboard-${role.toLowerCase()}-desktop.png`, fullPage: true });
     for (const width of [320, 390, 768]) {
       await page.setViewportSize({ width, height: 844 });
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-      await expect(page.getByRole('heading', { name: 'Needs Attention' })).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Workspace summary' })).toBeVisible();
       if (width === 390) await page.screenshot({ path: `test-results/dashboard-${role.toLowerCase()}-mobile.png`, fullPage: true });
     }
     await page.evaluate(() => document.body.classList.add('theme-dark'));
@@ -62,9 +62,7 @@ for (const role of ['EMPLOYEE', 'PROJECT_ADMIN', 'ADMIN']) {
       await page.getByRole('link', { name: 'Manage announcements' }).click();
       await expect(page.getByRole('button', { name: /New announcement/i })).toBeVisible();
     } else {
-      const more = page.getByRole('button', { name: /^See \d+ more$/ });
-      if (await more.count()) await more.click();
-      const link = page.getByRole('region', { name: 'Needs Attention' }).getByRole('link', { name: /Acknowledge:/ });
+      const link = page.getByRole('region', { name: 'Company announcements' }).getByRole('link', { name: /Quarterly team meeting/ });
       await expect(link).toHaveAttribute('href', '/announcements?id=news');
     }
     expect(errors).toEqual([]);

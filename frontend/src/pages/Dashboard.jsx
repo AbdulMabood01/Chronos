@@ -65,7 +65,7 @@ export default function Dashboard() {
 
   const model = buildDashboard(state.data, user, new Date());
   const attention = expanded ? model.attention : model.attention.slice(0, 3);
-  const news = model.announcements.filter(item => !model.attention.some(action => action.id === `announcement-${item.id}`)).slice(0, 2);
+  const news = model.announcements.slice(0, 2);
   const unavailable = state.loading ? 'Loading…' : 'Unavailable';
 
   if (!manager) return <EmployeeDashboard user={user} model={model} state={state} onRefresh={() => setRevision(value => value + 1)} />;

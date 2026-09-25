@@ -7,7 +7,8 @@ const health = { projectId: 10, projectCode: 'ATL', projectName: 'Atlas Platform
     { code: 'APPROVALS', severity: 'ATTENTION_NEEDED', message: '3 project timesheets awaiting approval' }],
   evaluatedOn: '2026-09-22', coverageNotes: ['Expense budgets and milestones are not tracked in this workspace.'] };
 
-test('health overview opens details, responds to mobile and dark theme, and recovers from errors', async ({ page }) => {
+// Project Health is temporarily disabled in ProjectManagement.jsx.
+test.skip('health overview opens details, responds to mobile and dark theme, and recovers from errors', async ({ page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   let fail = false;

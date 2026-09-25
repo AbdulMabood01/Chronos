@@ -29,8 +29,8 @@ test('employee overview, keyboard navigation, theme and approved timesheet', asy
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await mockWorkspace(page);
   await page.goto('/dashboard');
-  await expect(page.getByRole('heading', { name: /Welcome back/ })).toBeVisible();
-  await expect(page.getByText('64.0')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /A little focus/ })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Workspace summary' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Overview', exact: true })).toHaveAttribute('aria-current', 'page');
   await screenshot(page, 'employee-desktop');
   await page.getByRole('button', { name: 'Switch to dark theme' }).click();
@@ -46,7 +46,7 @@ test('mobile navigation, responsive dashboard and calendar', async ({ page }) =>
   await page.setViewportSize({ width: 390, height: 844 });
   await mockWorkspace(page);
   await page.goto('/dashboard');
-  await expect(page.getByRole('heading', { name: /Welcome back/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /A little focus/ })).toBeVisible();
   await screenshot(page, 'employee-mobile');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole('button', { name: 'Open navigation' }).click();
@@ -62,7 +62,7 @@ test('mobile navigation, responsive dashboard and calendar', async ({ page }) =>
 test('management navigation and approvals', async ({ page }) => {
   await mockWorkspace(page, 'ADMIN');
   await page.goto('/dashboard');
-  await expect(page.getByRole('heading', { name: 'Admin Dashboard' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /See the bigger picture/ })).toBeVisible();
   await expect(page.getByRole('link', { name: 'People', exact: true })).toBeVisible();
   await screenshot(page, 'admin-desktop');
 });

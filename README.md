@@ -278,6 +278,29 @@ docker run -p 8080:8080 -e DATABASE_URL=... chronos:1.0.0
 
 ## Configuration
 
+### Production backend settings
+
+The backend reads its configuration from process environment variables. Use the
+[root `.env.example`](.env.example) as the template for database, JWT, email,
+public URL, CORS, and initial Admin settings. Copy it to `.env`, replace the
+example URLs and fill the blank values, then have your deployment manager load
+that file as environment variables before starting the backend. Spring Boot does
+not read `.env` files automatically. Do not commit `.env`; it is ignored by Git.
+
+Set `DATABASE_URL`, `DATABASE_USERNAME`, and `DATABASE_PASSWORD` for the production
+PostgreSQL server. Set `JWT_SIGNING_KEY` to a Base64 encoded secret containing at
+least 32 random bytes. Set `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`,
+`MAIL_PASSWORD`, and `MAIL_FROM` for SMTP. Set both `FRONTEND_URL` and
+`CHRONOS_APP_URL` to the public HTTPS frontend address, and set
+`CORS_ALLOWED_ORIGINS` to that origin. `ADMIN_EMAIL` is the address that receives
+the initial Admin invitation when the database has no Admin account; an existing
+Admin is left untouched.
+
+For example, a container runtime can load the completed file with `--env-file .env`.
+For another deployment manager, configure its equivalent environment
+file setting. The backend will use local development database defaults if its
+database variables are omitted, so supply all three in production.
+
 ### Development Environment Variables
 
 **Backend** (`.env`):
