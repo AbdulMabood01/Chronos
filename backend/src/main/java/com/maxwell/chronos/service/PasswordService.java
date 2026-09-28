@@ -48,7 +48,14 @@ public class PasswordService {
 
     public void reset(String token, String password, String confirmation) {
         validateNewPassword(password, confirmation);
-        update(resetUser(token), password);
+        User user = resetUser(token);
+        update(user, password);
+        // Possession of a valid reset link proves account access. Clear failed sign-in
+        // attempts so a temporary lock does not block the new password.
+        user.setFailedLoginCount(0);
+        user.setLastFailedAttempt(null);
+        user.setLockedUntil(null);
+        user.setLockedAt(null);
     }
 
     public void change(String subject, String current, String password, String confirmation) {

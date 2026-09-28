@@ -18,6 +18,28 @@ public class SystemSettingsService {
     private final AuditService auditService;
     private final com.maxwell.chronos.repository.UserRepository users;
     private final com.maxwell.chronos.repository.LeaveAllowanceRepository allowances;
+    private final com.maxwell.chronos.repository.LeavePolicyYearRepository policies;
+
+    public record LeaveDefaultsPreview(int year, int newAllowances, int policyAllowances, int overrides,
+            java.math.BigDecimal vacationDays, java.math.BigDecimal sickDays, java.math.BigDecimal bereavementDays) {}
+
+    public LeaveDefaultsPreview previewLeaveDefaults(int year, com.maxwell.chronos.domain.User requester) {
+        if (requester == null || !requester.isAdmin())
+            throw new org.springframework.security.access.AccessDeniedException("Only Admin can manage leave policy");
+        if (year < 1900 || year > 9998) throw new IllegalArgumentException("Choose a valid leave year");
+        var vacation = leaveDays(getSetting("vacation_days_per_year").getValue());
+        var sick = leaveDays(getSetting("sick_days_per_year").getValue());
+        var bereavement = leaveDays(getSetting("bereavement_days_per_year").getValue());
+        int missing = 0, managed = 0, overrides = 0;
+        for (var employee : users.findAll()) {
+            if (employee.isAdmin() || Boolean.FALSE.equals(employee.getIsActive()) || employee.getJoiningDate() != null && employee.getJoiningDate().getYear() > year) continue;
+            var allowance = allowances.findByUserIdAndYear(employee.getId(), year);
+            if (allowance.isEmpty()) missing++;
+            else if ("POLICY".equals(allowance.get().getSource())) managed++;
+            else overrides++;
+        }
+        return new LeaveDefaultsPreview(year, missing, managed, overrides, vacation, sick, bereavement);
+    }
 
     private java.math.BigDecimal leaveDays(String value) {
         try {
@@ -31,25 +53,36 @@ public class SystemSettingsService {
     }
 
     public int applyLeaveDefaults(int year, boolean confirmed, com.maxwell.chronos.domain.User requester) {
-        if (requester == null || (!requester.isProjectAdmin() && !requester.isAdmin()))
-            throw new org.springframework.security.access.AccessDeniedException("Admin or Project Admin permission required");
+        return applyLeaveDefaults(year, confirmed, requester, null, null, null);
+    }
+
+    public int applyLeaveDefaults(int year, boolean confirmed, com.maxwell.chronos.domain.User requester,
+            java.math.BigDecimal expectedVacation, java.math.BigDecimal expectedSick,
+            java.math.BigDecimal expectedBereavement) {
+        var preview = previewLeaveDefaults(year, requester);
         if (!confirmed || year < 1900 || year > 9998) throw new IllegalArgumentException("Confirm a valid leave year");
-        var vacation = leaveDays(getSetting("vacation_days_per_year").getValue());
-        var sick = leaveDays(getSetting("sick_days_per_year").getValue());
-        var bereavement = leaveDays(getSetting("bereavement_days_per_year").getValue());
+        if (expectedVacation != null && expectedSick != null && expectedBereavement != null
+                && (preview.vacationDays().compareTo(expectedVacation) != 0
+                    || preview.sickDays().compareTo(expectedSick) != 0
+                    || preview.bereavementDays().compareTo(expectedBereavement) != 0))
+            throw new IllegalArgumentException("Leave policy values changed. Preview the policy again before applying it");
+        var policy = policies.findById(year).orElseGet(com.maxwell.chronos.domain.LeavePolicyYear::new);
+        policy.setYear(year); policy.setVacationDays(preview.vacationDays()); policy.setSickDays(preview.sickDays());
+        policy.setBereavementDays(preview.bereavementDays()); policies.save(policy);
         int count = 0;
         for (var employee : users.findAll().stream().sorted(java.util.Comparator.comparing(com.maxwell.chronos.domain.User::getId)).toList()) {
-            if (employee.isAdmin()) continue;
+            if (employee.isAdmin() || Boolean.FALSE.equals(employee.getIsActive()) || employee.getJoiningDate() != null && employee.getJoiningDate().getYear() > year) continue;
             users.findForUpdate(employee.getId()).orElseThrow();
-            var allowance = allowances.findByUserIdAndYear(employee.getId(), year)
-                    .orElseGet(com.maxwell.chronos.domain.LeaveAllowance::new);
+            var existing = allowances.findByUserIdAndYear(employee.getId(), year);
+            if (existing.isPresent() && !"POLICY".equals(existing.get().getSource())) continue;
+            var allowance = existing.orElseGet(com.maxwell.chronos.domain.LeaveAllowance::new);
             allowance.setUserId(employee.getId()); allowance.setYear(year);
-            allowance.setVacationDays(vacation); allowance.setSickDays(sick); allowance.setBereavementDays(bereavement);
-            allowance.setExtraVacationDays(java.math.BigDecimal.ZERO); allowance.setExtraSickDays(java.math.BigDecimal.ZERO);
+            allowance.setVacationDays(preview.vacationDays()); allowance.setSickDays(preview.sickDays());
+            allowance.setBereavementDays(preview.bereavementDays()); allowance.setSource("POLICY");
             allowances.save(allowance); count++;
         }
         auditService.logAction(requester.getId(), "SETTINGS_UPDATED", "LeaveAllowance", null,
-                "Applied leave defaults for " + year + " to " + count + " employees; vacation=" + vacation + "; sick=" + sick + "; bereavement=" + bereavement);
+                "Applied leave policy for " + year + " to " + count + " employees; preserved " + preview.overrides() + " overrides");
         return count;
     }
 

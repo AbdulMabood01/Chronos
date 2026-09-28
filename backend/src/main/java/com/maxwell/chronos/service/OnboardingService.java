@@ -34,6 +34,12 @@ public class OnboardingService {
                 .email(normalized).employeeId("EMP-"+UUID.randomUUID()).entraId(UUID.randomUUID().toString())
                 .role(UserRole.EMPLOYEE).isActive(true).profileCompleted(false).build());
     }
+    public void register(String firstName, String lastName, String address) {
+        String normalized = address.trim().toLowerCase(Locale.ROOT);
+        if (users.findByEmailIgnoreCase(normalized).isPresent()) return;
+        User user = create(firstName, lastName, normalized);
+        invite(user.getId());
+    }
     public void invite(Long id) {
         User user=users.findForUpdate(id).orElseThrow(() -> new IllegalArgumentException("Employee not found"));
         if (!"INVITED".equals(user.getAccountStatus())) throw new IllegalArgumentException("Only invited employees can receive an invitation");

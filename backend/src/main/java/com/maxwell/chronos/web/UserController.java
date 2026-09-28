@@ -21,9 +21,38 @@ public class UserController {
     private final com.maxwell.chronos.service.ProjectService projectService;
     private final com.maxwell.chronos.service.LeaveBalanceService leaveBalanceService;
 
+    @PatchMapping("/{id}/lock")
+    public UserDTO lockAccount(@PathVariable Long id, @RequestBody(required = false) java.util.Map<String, String> body,
+                               @AuthenticationPrincipal Jwt jwt) {
+        var actor = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
+        if (actor == null || !actor.isAdmin()) throw new org.springframework.security.access.AccessDeniedException("Forbidden");
+        return userService.lockAccount(id, actor.getId(), body == null ? null : body.get("reason"));
+    }
+
+    @PatchMapping("/{id}/unlock")
+    public UserDTO unlockAccount(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
+        var actor = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
+        if (actor == null || !actor.isAdmin()) throw new org.springframework.security.access.AccessDeniedException("Forbidden");
+        return userService.unlockAccount(id, actor.getId());
+    }
+
+    @PostMapping("/{id}/sign-out-all")
+    public void signOutAll(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
+        var actor = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
+        if (actor == null || !actor.isAdmin()) throw new org.springframework.security.access.AccessDeniedException("Forbidden");
+        userService.signOutAll(id, actor.getId());
+    }
+
     @GetMapping("/{id}/leave-balance")
     public com.maxwell.chronos.dto.LeaveBalanceDTO getLeaveBalance(@PathVariable Long id, @RequestParam int year, @AuthenticationPrincipal Jwt jwt) {
         return leaveBalanceService.getBalance(id, year, userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username")));
+    }
+
+    @GetMapping("/me/leave-balance")
+    public com.maxwell.chronos.dto.LeaveBalanceDTO getMyLeaveBalance(@RequestParam int year, @AuthenticationPrincipal Jwt jwt) {
+        var requester = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
+        if (requester == null) throw new org.springframework.security.access.AccessDeniedException("Leave balance permission required");
+        return leaveBalanceService.getBalance(requester.getId(), year, requester);
     }
 
     @PutMapping("/{id}/leave-allowance")

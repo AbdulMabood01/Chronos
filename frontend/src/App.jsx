@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './AuthContext';
 import { GlobalApiLoader, LoadingIndicator } from './components/Hourglass';
 import ProfileCompletionPrompt from './components/ProfileCompletionPrompt';
 import Login from './pages/Login';
+import Register from './pages/Register';
 import Activate from './pages/Activate';
 import { ForgotPassword, ResetPassword } from './pages/PasswordRecovery';
 import Dashboard from './pages/Dashboard';
@@ -21,6 +22,7 @@ import ProjectHoursDashboard from './pages/ProjectHoursDashboard';
 import Settings from './pages/Settings';
 import Reports from './pages/Reports';
 import EmployeeReports from './pages/EmployeeReports';
+import Expenses from './pages/Expenses';
 import { FeedbackPage, PerformanceReviewsPage } from './pages/FeedbackReviews';
 import Profile from './pages/Profile';
 import { MissingTimesheetsPage, TeamLeaveCalendarPage } from './pages/TeamManagement';
@@ -28,6 +30,7 @@ import NotFound from './pages/NotFound';
 import './styles.css';
 import './workspace.css';
 import Layout from './components/WorkspaceLayout';
+import ConnectionAndSession from './components/ConnectionAndSession';
 
 const THEME_STORAGE_KEY = 'chronos-dark-background';
 
@@ -72,6 +75,7 @@ function AppContent({ darkBackground, onToggleBackground }) {
       <Route path="/employee-reports" element={<ProtectedRoute><Navigate to="/reports" replace /></ProtectedRoute>} />
       <Route path="/reports" element={<ProtectedRoute><Layout darkBackground={darkBackground} onToggleBackground={onToggleBackground}><EmployeeReports management /></Layout></ProtectedRoute>} />
       <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
       <Route path="/activate" element={<Activate />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
@@ -106,6 +110,7 @@ function AppContent({ darkBackground, onToggleBackground }) {
           </ProtectedRoute>
         }
       />
+      <Route path="/expenses" element={<ProtectedRoute><Layout darkBackground={darkBackground} onToggleBackground={onToggleBackground}><Expenses /></Layout></ProtectedRoute>} />
       <Route
         path="/timesheets"
         element={
@@ -253,6 +258,7 @@ export default function App() {
     <Router>
       <AuthProvider>
         <GlobalApiLoader />
+        <ConnectionAndSession />
         <AppContent darkBackground={darkBackground} onToggleBackground={toggleBackground} />
         <ProfileCompletionPrompt />
       </AuthProvider>

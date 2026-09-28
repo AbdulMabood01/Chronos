@@ -122,3 +122,11 @@
     zoom: .7;
   }
 }
+.login-account-actions { display: grid; gap: 16px; margin-top: 18px; }
+.login-account-actions .account-link { justify-self: end; }
+.button.button-outline { background: transparent; color: var(--primary-color); border: 1px solid var(--primary-color); box-shadow: none; }
+.button.button-outline:hover { background: var(--surface-tint); }
+.account-link { display: inline-block; color: var(--primary-color); font-size: 13px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.account-link:hover { color: var(--primary-dark); }
+.account-card { max-width: 440px; }
+.account-card .account-link { margin-top: 20px; }

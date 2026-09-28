@@ -19,7 +19,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<ErrorResponse> handleServiceUnavailable(IllegalStateException ex) {
         return ResponseEntity.status(503).body(ErrorResponse.builder().error("Service unavailable")
-                .message("Unable to complete the request. Check service configuration and retry.").status(503).build());
+                .message("Something went wrong on our side. Please try again.").status(503).build());
     }
     @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
     public ResponseEntity<ErrorResponse> handleForbidden(org.springframework.security.access.AccessDeniedException ex) {
@@ -56,5 +56,11 @@ public class GlobalExceptionHandler {
                 .message("The request could not be read. Check the field values and try again.")
                 .status(HttpStatus.BAD_REQUEST.value())
                 .build());
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ErrorResponse> handleUnexpected(Exception ex) {
+        return ResponseEntity.status(500).body(ErrorResponse.builder().error("Request failed")
+                .message("Something went wrong on our side. Please try again.").status(500).build());
     }
 }

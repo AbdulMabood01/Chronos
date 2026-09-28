@@ -36,6 +36,7 @@ public class VacationController {
             @RequestParam String endDate,
             @RequestParam String type,
             @RequestParam(required = false) String notes,
+            @RequestParam(required = false) String specialReason,
             @AuthenticationPrincipal Jwt jwt) {
         String email = jwt.getClaimAsString("preferred_username");
         var user = userService.findUserEntityByEmail(email);
@@ -48,7 +49,7 @@ public class VacationController {
             LocalDate start = LocalDate.parse(startDate);
             LocalDate end = LocalDate.parse(endDate);
             VacationType vacationType = VacationType.valueOf(type);
-            VacationRequestDTO request = vacationService.createVacationRequest(user.getId(), start, end, vacationType, notes);
+            VacationRequestDTO request = vacationService.createVacationRequest(user.getId(), start, end, vacationType, notes, specialReason);
             return ResponseEntity.ok(request);
         } catch (IllegalArgumentException e) {
             throw e;
@@ -62,6 +63,7 @@ public class VacationController {
             @RequestParam String endDate,
             @RequestParam String type,
             @RequestParam(required = false) String notes,
+            @RequestParam(required = false) String specialReason,
             @AuthenticationPrincipal Jwt jwt) {
         String email = jwt.getClaimAsString("preferred_username");
         var user = userService.findUserEntityByEmail(email);
@@ -74,7 +76,7 @@ public class VacationController {
             LocalDate start = LocalDate.parse(startDate);
             LocalDate end = LocalDate.parse(endDate);
             VacationType vacationType = VacationType.valueOf(type);
-            VacationRequestDTO request = vacationService.updateVacationRequest(vacationId, start, end, vacationType, notes, user.getId());
+            VacationRequestDTO request = vacationService.updateVacationRequest(vacationId, start, end, vacationType, notes, specialReason, user.getId());
             return ResponseEntity.ok(request);
         } catch (IllegalArgumentException e) {
             throw e;

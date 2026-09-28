@@ -2,6 +2,7 @@ package com.maxwell.chronos.domain;
 
 import com.maxwell.chronos.enums.VacationStatus;
 import com.maxwell.chronos.enums.VacationType;
+import com.maxwell.chronos.enums.LeaveAccountingType;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -42,6 +43,13 @@ public class VacationRequest {
     @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(nullable = false)
     private VacationType vacationType;
+
+    @Column(length = 120)
+    private String specialReason;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32)
+    private LeaveAccountingType accountingType;
 
     @Column(name = "hours")
     private BigDecimal hours;

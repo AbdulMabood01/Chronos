@@ -202,7 +202,7 @@ export default function EmployeeRequests() {
 
   return (
     <div className="page-container requests-page">
-      <div className="header-bar">
+      <div className="header-bar accent-page-header">
         <div>
           <ScreenTitle title="Requests" icon="file" eyebrow="EMPLOYEE SERVICES" />
           <p className="page-subtitle">Submit employee letters for admin approval and download approved PDFs.</p>

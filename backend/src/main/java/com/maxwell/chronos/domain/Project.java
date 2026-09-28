@@ -42,6 +42,9 @@ public class Project {
     @Column(name = "total_allocated_hours", precision = 10, scale = 2)
     private BigDecimal totalAllocatedHours;
 
+    @Column(name = "expense_budget", precision = 14, scale = 2)
+    private BigDecimal expenseBudget;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "project_manager_id")
     private User projectManager;

@@ -18,6 +18,7 @@ import java.util.stream.Collectors;
 public class UserService {
     private final UserRepository userRepository;
     private final AuditService auditService;
+    private final AuthSessionService sessions;
 
     public UserDTO findById(Long id) {
         return userRepository.findById(id)
@@ -59,10 +60,12 @@ public class UserService {
     }
 
     public void deactivateUser(Long userId, Long requestingUserId) {
-        User user = userRepository.findById(userId)
+        User user = userRepository.findForUpdate(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
         
         user.setIsActive(false);
+        user.setCredentialVersion(user.getCredentialVersion() + 1);
+        sessions.revokeAll(userId);
         userRepository.save(user);
 
         auditService.logAction(requestingUserId, "USER_DEACTIVATED", "User", userId, 
@@ -78,6 +81,43 @@ public class UserService {
 
         auditService.logAction(requestingUserId, "USER_REACTIVATED", "User", userId,
                 "User: " + user.getFullName());
+    }
+
+    public UserDTO lockAccount(Long id, Long actorId, String reason) {
+        User actor = userRepository.findById(actorId).orElse(null);
+        if (actor == null || !actor.isAdmin()) throw new org.springframework.security.access.AccessDeniedException("Forbidden");
+        if (id.equals(actorId)) throw new IllegalArgumentException("You cannot lock your own account");
+        User target = userRepository.findForUpdate(id).orElseThrow(() -> new IllegalArgumentException("User not found"));
+        target.setAdminLocked(true);
+        target.setAdminLockReason(reason == null ? null : reason.substring(0, Math.min(reason.length(), 500)));
+        target.setLockedAt(java.time.Instant.now());
+        target.setCredentialVersion(target.getCredentialVersion() + 1);
+        sessions.revokeAll(id);
+        auditService.logSecurityAction(actorId, com.maxwell.chronos.enums.AuditAction.ACCOUNT_LOCKED, id);
+        return toDTO(target);
+    }
+
+    public UserDTO unlockAccount(Long id, Long actorId) {
+        User actor = userRepository.findById(actorId).orElse(null);
+        if (actor == null || !actor.isAdmin()) throw new org.springframework.security.access.AccessDeniedException("Forbidden");
+        User target = userRepository.findForUpdate(id).orElseThrow(() -> new IllegalArgumentException("User not found"));
+        target.setAdminLocked(false);
+        target.setAdminLockReason(null);
+        target.setLockedUntil(null);
+        target.setFailedLoginCount(0);
+        target.setUnlockedBy(actorId);
+        target.setUnlockedAt(java.time.Instant.now());
+        auditService.logSecurityAction(actorId, com.maxwell.chronos.enums.AuditAction.ACCOUNT_UNLOCKED, id);
+        return toDTO(target);
+    }
+
+    public void signOutAll(Long id, Long actorId) {
+        User actor = userRepository.findById(actorId).orElse(null);
+        if (actor == null || !actor.isAdmin()) throw new org.springframework.security.access.AccessDeniedException("Forbidden");
+        User target = userRepository.findForUpdate(id).orElseThrow(() -> new IllegalArgumentException("User not found"));
+        target.setCredentialVersion(target.getCredentialVersion() + 1);
+        sessions.revokeAll(id);
+        auditService.logSecurityAction(actorId, com.maxwell.chronos.enums.AuditAction.SESSIONS_REVOKED, id);
     }
 
     public void changeRole(Long userId, UserRole newRole, Long requestingUserId) {
@@ -191,6 +231,8 @@ public class UserService {
 
     private UserDTO toDTO(User user) {
         return UserDTO.builder()
+                .adminLocked(user.isAdminLocked())
+                .lockedUntil(user.getLockedUntil())
                 .accountStatus(user.getAccountStatus())
                 .timezone(user.getTimezone())
                 .id(user.getId())

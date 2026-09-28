@@ -69,6 +69,7 @@ public class ApprovalsController {
     @PostMapping("/vacation/{vacationId}/approve")
     public ResponseEntity<VacationRequestDTO> approveVacation(
             @PathVariable Long vacationId,
+            @RequestBody(required = false) java.util.Map<String, String> body,
             @AuthenticationPrincipal Jwt jwt) {
         String email = jwt.getClaimAsString("preferred_username");
         var user = userService.findUserEntityByEmail(email);
@@ -78,7 +79,9 @@ public class ApprovalsController {
         }
 
         try {
-            VacationRequestDTO vacation = vacationService.approveVacationRequest(vacationId, user.getId());
+            var accounting = body == null || body.get("accountingType") == null ? null
+                    : com.maxwell.chronos.enums.LeaveAccountingType.valueOf(body.get("accountingType"));
+            VacationRequestDTO vacation = vacationService.approveVacationRequest(vacationId, user.getId(), accounting);
             return ResponseEntity.ok(vacation);
         } catch (IllegalArgumentException e) {
             throw e;

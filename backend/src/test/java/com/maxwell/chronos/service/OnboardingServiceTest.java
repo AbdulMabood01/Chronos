@@ -41,6 +41,22 @@ class OnboardingServiceTest {
         assertThrows(IllegalArgumentException.class,()->service.create("Alice","Smith",user.getEmail()));
         verify(users,never()).saveAndFlush(any());
     }
+    @Test void registrationCreatesOnlyAnInvitedEmployeeAndEmailsActivation() {
+        when(users.saveAndFlush(any())).thenAnswer(call -> { User created = call.getArgument(0); created.setId(1L); return created; });
+        service.register(" Alice ", " Smith ", "ALICE@example.com");
+        ArgumentCaptor<User> created = ArgumentCaptor.forClass(User.class);
+        verify(users).saveAndFlush(created.capture());
+        assertEquals(UserRole.EMPLOYEE, created.getValue().getRole());
+        assertEquals("alice@example.com", created.getValue().getEmail());
+        assertNull(created.getValue().getPasswordHash());
+        verify(email).send(eq(user), anyString(), any());
+    }
+    @Test void registrationDoesNotReplaceAnExistingAccount() {
+        when(users.findByEmailIgnoreCase(user.getEmail())).thenReturn(Optional.of(user));
+        service.register("Other", "Person", "ALICE@example.com");
+        verify(users, never()).saveAndFlush(any());
+        verifyNoInteractions(email);
+    }
     @Test void invitationIsRandomHashedAndExpiresAfterConfiguredPeriod() {
         service.invite(1L);
         ArgumentCaptor<String> raw=ArgumentCaptor.forClass(String.class);

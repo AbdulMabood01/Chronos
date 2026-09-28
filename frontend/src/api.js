@@ -15,6 +15,7 @@ export const announcementAPI = {
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
+  timeout: 20000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -30,7 +31,7 @@ function dispatchApiActivityEvent(name) {
 apiClient.interceptors.request.use((config) => {
   if (!config.background) dispatchApiActivityEvent('chronos:api-start');
   const token = localStorage.getItem('authToken');
-  if (token && !config.publicAuth) {
+  if (token && !config.publicAuth && !config.headers.Authorization) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
@@ -41,13 +42,58 @@ apiClient.interceptors.request.use((config) => {
 
 apiClient.interceptors.response.use((response) => {
   if (!response.config?.background) dispatchApiActivityEvent('chronos:api-end');
+  if (typeof window !== 'undefined' && window.__chronosConnectionLost && response.config?.recoveryProbe) {
+    window.__chronosConnectionLost = false;
+    dispatchApiActivityEvent('chronos:connection-restored');
+  }
   return response;
 }, (error) => {
   if (!error.config?.background) dispatchApiActivityEvent('chronos:api-end');
+  const status = error.response?.status;
+  const leaveRequest = /^\/(?:vacation(?:\/|$)|approvals\/vacation\/|settings\/leave-defaults\/)/.test(error.config?.url || '');
+  const validationMessage = leaveRequest && (status === 400 || status === 409)
+    && typeof error.response?.data?.message === 'string'
+    ? error.response.data.message.trim() : '';
+  const passwordRequest = /^\/auth\/(?:reset-password(?:\/validate)?|change-password)$/.test(error.config?.url || '');
+  const passwordErrors = new Set([
+    'This reset link is invalid or expired. Request a new reset link.',
+    'Choose a password different from your current password.',
+    'Current password is incorrect.',
+    'Passwords do not match.',
+    'Use at least 12 characters with uppercase, lowercase and a number (maximum 72 UTF-8 bytes).',
+  ]);
+  const passwordMessage = passwordRequest && status === 400
+    && passwordErrors.has(error.response?.data?.message)
+    ? error.response.data.message : '';
+  const message = !error.response && error.code === 'ECONNABORTED'
+    ? 'The request is taking longer than expected. Please try again.'
+    : !error.response ? 'Unable to connect. Check your internet connection and try again.'
+    : status === 401 ? 'Your session has expired. Please sign in again.'
+    : status === 403 ? "You don't have permission to perform this action."
+    : status === 404 ? 'The requested item was not found.'
+    : status === 423 && error.config?.url === '/auth/login'
+      ? 'Your account is locked. Contact an administrator.'
+    : status >= 500 ? 'Something went wrong on our side. Please try again.'
+    : status === 429 && error.config?.publicAuth ? 'Unable to sign in. Check your credentials or try again later.'
+    : validationMessage || passwordMessage || (status === 400 ? 'Please check your entries and try again.'
+      : 'Unable to complete the request. Please try again.');
+  error.userMessage = message;
+  error.message = message;
+  if (error.response && typeof error.response.data === 'object' && !(error.response.data instanceof Blob)) {
+    error.response.data = { ...error.response.data, message };
+  }
+  if (!error.response && error.code !== 'ECONNABORTED' && typeof window !== 'undefined') {
+    window.__chronosConnectionLost = true;
+    dispatchApiActivityEvent('chronos:connection-lost');
+  }
+  if (status === 401 && !error.config?.publicAuth && !error.config?.skipSessionEvent) {
+    dispatchApiActivityEvent('chronos:session-expired');
+  }
   return Promise.reject(error);
 });
 
 export const authAPI = {
+  register: data => apiClient.post('/auth/register', data, { publicAuth: true }),
   forgotPassword: email => apiClient.post('/auth/forgot-password', { email }, { publicAuth: true }),
   validatePasswordReset: token => apiClient.post('/auth/reset-password/validate', { token }, { publicAuth: true }),
   resetPassword: data => apiClient.post('/auth/reset-password', data, { publicAuth: true }),
@@ -56,6 +102,26 @@ export const authAPI = {
   validateInvitation: (token) => apiClient.post('/auth/invitations/validate', { token }, { publicAuth: true }),
   activate: (token, password) => apiClient.post('/auth/activate', { token, password }, { publicAuth: true }),
   getCurrentUser: () => apiClient.get('/auth/me'),
+  activity: () => apiClient.post('/auth/activity', null, { background: true }),
+  logout: token => apiClient.post('/auth/logout', null, { background: true, skipSessionEvent: true,
+    timeout: 5000, headers: { Authorization: `Bearer ${token}` } }),
+};
+
+export const expenseAPI = {
+  mine: () => apiClient.get('/expenses/mine'),
+  pending: () => apiClient.get('/expenses/pending'),
+  project: id => apiClient.get(`/expenses/projects/${id}`),
+  totals: id => apiClient.get(`/expenses/projects/${id}/totals`),
+  detail: id => apiClient.get(`/expenses/${id}`),
+  save: (id, expense, receipt) => {
+    const data = new FormData();
+    data.append('expense', new Blob([JSON.stringify(expense)], { type: 'application/json' }));
+    if (receipt) data.append('receipt', receipt);
+    return id ? apiClient.put(`/expenses/${id}`, data, { headers: { 'Content-Type': 'multipart/form-data' } })
+      : apiClient.post('/expenses', data, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+  decide: (id, status, comment) => apiClient.post(`/expenses/${id}/decision`, { status, comment }),
+  receipt: id => apiClient.get(`/expenses/${id}/receipt`, { responseType: 'blob' }),
 };
 
 export const userAPI = {
@@ -72,11 +138,15 @@ export const userAPI = {
   getAllUsers: () => apiClient.get('/users'),
   getAllUsersAsAdmin: () => apiClient.get('/users/all'),
   getLeaveBalance: (id, year) => apiClient.get(`/users/${id}/leave-balance`, { params: { year } }),
+  getMyLeaveBalance: year => apiClient.get('/users/me/leave-balance', { params: { year } }),
   updateLeaveAllowance: (id, data) => apiClient.put(`/users/${id}/leave-allowance`, data),
   updateMyProfile: (data) => apiClient.put('/users/me/profile', data),
   deactivateUser: (id) => apiClient.patch(`/users/${id}/deactivate`),
   reactivateUser: (id) => apiClient.patch(`/users/${id}/reactivate`),
   changeRole: (id, role) => apiClient.patch(`/users/${id}/role`, null, { params: { role } }),
+  lockAccount: (id, reason) => apiClient.patch(`/users/${id}/lock`, { reason }),
+  unlockAccount: id => apiClient.patch(`/users/${id}/unlock`),
+  signOutAll: id => apiClient.post(`/users/${id}/sign-out-all`),
 };
 
 export const timesheetAPI = {
@@ -103,13 +173,13 @@ export const timesheetAPI = {
 
 export const vacationAPI = {
   getTeamCalendar: (year, month) => apiClient.get('/vacation/team-calendar', { params: { year, month } }),
-  createRequest: (startDate, endDate, vacationType, notes) => 
-    apiClient.post('/vacation', null, { params: { startDate, endDate, type: vacationType, notes } }),
-  updateRequest: (vacationId, startDate, endDate, vacationType, notes) =>
-    apiClient.put(`/vacation/${vacationId}`, null, { params: { startDate, endDate, type: vacationType, notes } }),
+  createRequest: (startDate, endDate, vacationType, notes, specialReason) =>
+    apiClient.post('/vacation', null, { params: { startDate, endDate, type: vacationType, notes, specialReason } }),
+  updateRequest: (vacationId, startDate, endDate, vacationType, notes, specialReason) =>
+    apiClient.put(`/vacation/${vacationId}`, null, { params: { startDate, endDate, type: vacationType, notes, specialReason } }),
   submitRequest: (vacationId) => apiClient.post(`/vacation/${vacationId}/submit`),
   deleteRequest: (vacationId) => apiClient.delete(`/vacation/${vacationId}`),
-  approveVacation: (vacationId) => apiClient.post(`/approvals/vacation/${vacationId}/approve`),
+  approveVacation: (vacationId, accountingType) => apiClient.post(`/approvals/vacation/${vacationId}/approve`, accountingType ? { accountingType } : null),
   rejectVacation: (vacationId, reason) => apiClient.post(`/approvals/vacation/${vacationId}/reject`, { reason }),
   getPendingRequests: () => apiClient.get('/vacation/pending'),
   getMyRequests: () => apiClient.get('/vacation/my'),
@@ -175,7 +245,10 @@ export const auditAPI = {
 };
 
 export const settingsAPI = {
-  applyLeaveDefaults: (year) => apiClient.post('/settings/leave-defaults/apply', { year, confirmed: true }),
+  previewLeaveDefaults: year => apiClient.get('/settings/leave-defaults/preview', { params: { year } }),
+  applyLeaveDefaults: (year, preview) => apiClient.post('/settings/leave-defaults/apply', { year, confirmed: true,
+    expectedVacationDays: preview?.vacationDays, expectedSickDays: preview?.sickDays,
+    expectedBereavementDays: preview?.bereavementDays }),
   getAllSettings: () => apiClient.get('/settings'),
   getSetting: (key) => apiClient.get(`/settings/${key}`),
   updateSetting: (key, value) => apiClient.put(`/settings/${key}`, { value }),

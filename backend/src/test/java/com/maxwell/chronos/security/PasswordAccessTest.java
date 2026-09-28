@@ -25,9 +25,11 @@ class PasswordAccessTest {
     @MockitoBean PasswordService passwords;
     @MockitoBean UserRepository users;
     @MockitoBean JwtDecoder decoder;
+    @MockitoBean com.maxwell.chronos.service.AuthSessionService sessions;
     User user;
     String change = "{\"currentPassword\":\"OldPassword123\",\"newPassword\":\"NewPassword123\",\"confirmation\":\"NewPassword123\"}";
     @BeforeEach void setup() {
+        when(sessions.valid(nullable(String.class), anyLong())).thenReturn(true);
         user = User.builder().id(1L).email("alice@example.com").entraId("subject").isActive(true).passwordHash("hash").build();
         when(users.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
     }

@@ -1,0 +1,81 @@
+.vacation-page .vacation-editor { background: var(--surface-color); border-color: var(--border-color); }
+.vacation-page .vacation-editor .panel-heading { margin-bottom: 1.35rem; }
+.vacation-page .vacation-editor h2 { font-size: 1.2rem; font-weight: 600; }
+.vacation-page .vacation-editor .form-group { margin-bottom: 1.15rem; }
+.vacation-page .vacation-editor .form-group label { color: var(--text-secondary); font-weight: 500; }
+.vacation-page .vacation-editor input,
+.vacation-page .vacation-editor select,
+.vacation-page .vacation-editor textarea { background: var(--surface-color); color: var(--text-primary); }
+.vacation-page .form-hint { margin: .4rem 0 0; color: var(--text-secondary); font-size: .85rem; }
+.vacation-page .summary-tile { background: var(--surface-muted); }
+.vacation-page .summary-tile strong { font-weight: 600; }
+.vacation-page .request-card { padding: 1.2rem; }
+.vacation-page .request-card h3 { font-weight: 600; }
+.vacation-page [hidden] { display: none !important; }
+.vacation-view-switch { display: flex; gap: 6px; padding: 5px; width: fit-content; max-width: 100%; border: 1px solid var(--border-color); border-radius: 12px; background: var(--surface-muted); }
+.vacation-view-switch button { border: 0; border-radius: 8px; padding: 10px 16px; background: transparent; color: var(--text-secondary); font: inherit; font-weight: 600; cursor: pointer; }
+.vacation-view-switch button.is-active { background: var(--surface-color); color: var(--text-primary); box-shadow: var(--shadow-soft); }
+.vacation-view-switch span { margin-left: 6px; color: var(--text-secondary); }
+.vacation-requests-section { margin-top: 22px; }
+.vacation-page .vacation-layout { margin-top: 22px; }
+.vacation-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.vacation-list-heading h2 { margin: 0 0 4px; }
+.vacation-list-heading p { margin: 0; color: var(--text-secondary); font-size: 13px; }
+.vacation-page .request-card.is-recent { border-color: var(--primary-color); box-shadow: var(--shadow-soft); }
+@media (max-width: 600px) { .vacation-list-heading { align-items: flex-start; flex-direction: column; } .vacation-view-switch { width: 100%; box-sizing: border-box; } .vacation-view-switch button { flex: 1; } }
+
+/* Time off workspace */
+.workspace-content .vacation-page { width: 100%; max-width: 1440px; margin: 0 auto; }
+.vacation-page-hero { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 26px; overflow: hidden; margin-bottom: 18px; padding: clamp(28px, 4vw, 46px); border: 1px solid color-mix(in srgb, var(--primary-color) 19%, var(--border-color)); border-radius: 20px; background: linear-gradient(115deg, color-mix(in srgb, var(--primary-color) 12%, var(--surface-color)), var(--surface-color) 72%); }
+.vacation-page-hero::after { content: ''; position: absolute; width: 260px; height: 260px; right: -90px; top: -155px; border: 1px solid color-mix(in srgb, var(--primary-color) 13%, transparent); border-radius: 50%; box-shadow: 0 0 0 38px color-mix(in srgb, var(--primary-color) 3%, transparent), 0 0 0 76px color-mix(in srgb, var(--primary-color) 3%, transparent); pointer-events: none; }
+.vacation-kicker { display: block; color: var(--primary-color); font-size: 10px; font-weight: 800; letter-spacing: .16em; line-height: 1.5; }
+.vacation-page .vacation-page-hero h1 { margin: 7px 0 10px; font-size: clamp(29px, 3vw, 40px); line-height: 1.13; letter-spacing: -.045em; }
+.vacation-page-hero p { margin: 0; color: var(--text-secondary); font-size: 14px; line-height: 1.65; }
+.vacation-hero-mark { position: relative; z-index: 1; display: grid; place-items: center; flex: 0 0 72px; height: 72px; border: 1px solid color-mix(in srgb, var(--primary-color) 20%, var(--border-color)); border-radius: 18px; background: var(--surface-color); color: var(--primary-color); box-shadow: var(--shadow-soft); }
+.vacation-page .record-summary { gap: 12px; margin-bottom: 20px; }
+.vacation-page .record-summary > div { border-radius: 13px; }
+.vacation-page .vacation-view-switch { width: 100%; max-width: none; gap: 26px; padding: 0 4px; margin-bottom: 22px; border: 0; border-bottom: 1px solid var(--border-color); border-radius: 0; background: transparent; }
+.vacation-page .vacation-view-switch button { min-height: 48px; padding: 11px 2px 13px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--text-secondary); font-size: 13px; font-weight: 650; box-shadow: none; }
+.vacation-page .vacation-view-switch button.is-active { border-bottom-color: var(--primary-color); color: var(--primary-color); }
+.vacation-page .vacation-view-switch button:hover { color: var(--primary-color); }
+.vacation-page .vacation-view-switch span { color: inherit; opacity: .7; }
+.vacation-page .vacation-requests-section, .vacation-page .vacation-layout, .vacation-page .vacation-balances-view { margin-top: 0; }
+.vacation-page .vacation-requests-section { padding: clamp(22px, 3vw, 34px); border: 1px solid var(--border-color); border-radius: 18px; background: var(--surface-color); box-shadow: var(--shadow-soft); }
+.vacation-page .vacation-list-heading { padding-bottom: 22px; margin-bottom: 24px; border-bottom: 1px solid var(--border-color); }
+.vacation-page .vacation-list-heading h2 { margin: 5px 0 4px; font-size: 22px; letter-spacing: -.025em; }
+.vacation-page .vacation-list-heading p { font-size: 13px; }
+.vacation-page .request-list { gap: 12px; }
+.vacation-page .request-card { align-items: flex-start; gap: 24px; padding: 21px 23px; border-radius: 13px; box-shadow: none; transition: border-color .16s, box-shadow .16s, transform .16s; }
+.vacation-page .request-card:hover { border-color: color-mix(in srgb, var(--primary-color) 35%, var(--border-color)); box-shadow: var(--shadow-soft); transform: translateY(-1px); }
+.vacation-page .request-card > div:first-child { min-width: 0; }
+.vacation-page .request-card-topline { align-items: center; gap: 12px; }
+.vacation-page .request-card h3 { margin: 0; font-size: 17px; letter-spacing: -.02em; }
+.vacation-page .request-dates { margin: 10px 0 8px; font-size: 13px; font-weight: 550; }
+.vacation-page .request-meta { color: var(--text-secondary); font-size: 12px; }
+.vacation-page .request-notes { max-width: 720px; margin: 11px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.vacation-page .request-actions { align-self: center; flex-shrink: 0; }
+.vacation-page .request-actions .button { min-height: 36px; }
+.vacation-page .request-card.is-recent { border-left: 4px solid var(--primary-color); }
+.vacation-page .empty-state { padding: 44px 24px; border-style: dashed; background: color-mix(in srgb, var(--primary-color) 3%, var(--surface-color)); box-shadow: none; }
+.vacation-page .empty-state p { margin: 0; color: var(--text-secondary); }
+.vacation-page .vacation-layout { grid-template-columns: minmax(0, 1fr) minmax(250px, 300px); gap: 22px; }
+.vacation-page .vacation-editor { padding: clamp(24px, 3vw, 38px); border-radius: 18px; box-shadow: var(--shadow-soft); }
+.vacation-form-intro { padding-bottom: 18px; margin-bottom: 23px; border-bottom: 1px solid var(--border-color); }
+.vacation-form-intro p { margin: 8px 0 0; color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
+.vacation-page .vacation-editor .panel-heading { margin-bottom: 24px; }
+.vacation-page .vacation-editor .panel-heading h2 { font-size: 22px; letter-spacing: -.025em; }
+.vacation-page .vacation-editor .panel-heading p { font-size: 12px; }
+.vacation-page .vacation-editor .form-group label { color: var(--text-primary); font-size: 12px; font-weight: 650; }
+.vacation-page .vacation-editor input, .vacation-page .vacation-editor select, .vacation-page .vacation-editor textarea { min-height: 45px; border-radius: 9px; font-size: 13px; }
+.vacation-page .vacation-editor textarea { min-height: 100px; line-height: 1.55; }
+.vacation-page .vacation-editor .compact-actions { padding-top: 18px; margin-top: 23px; border-top: 1px solid var(--border-color); }
+.vacation-guide { position: sticky; top: 96px; display: grid; gap: 17px; padding: 27px; border: 1px solid var(--border-color); border-radius: 18px; background: var(--surface-color); box-shadow: var(--shadow-card); }
+.vacation-guide h2 { margin: 0; font-size: 19px; line-height: 1.32; }
+.vacation-guide > div { display: flex; gap: 12px; align-items: flex-start; padding-top: 12px; border-top: 1px solid var(--border-color); }
+.vacation-guide > div span { color: var(--primary-color); font-size: 11px; font-weight: 800; }
+.vacation-guide p { margin: 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.vacation-guide button { display: flex; align-items: center; gap: 8px; justify-self: start; padding: 0; border: 0; background: transparent; color: var(--primary-color); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.vacation-page .vacation-balances-view > .card { margin: 0; padding: clamp(24px, 3vw, 38px); border-radius: 18px; box-shadow: var(--shadow-soft); }
+@media (max-width: 1050px) { .vacation-page .vacation-layout { grid-template-columns: minmax(0, 1fr); } .vacation-guide { position: static; } }
+@media (max-width: 700px) { .vacation-page-hero { padding: 27px; } .vacation-hero-mark { display: none; } .vacation-page .vacation-view-switch { gap: 12px; } .vacation-page .vacation-view-switch button { flex: 1; font-size: 12px; } .vacation-page .request-card { flex-direction: column; padding: 19px; } .vacation-page .request-actions { align-self: stretch; justify-content: flex-start; } .vacation-page .vacation-list-heading .button { align-self: flex-start; } }
+@media (max-width: 700px) { .vacation-page .record-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; } .vacation-page .record-summary > div { display: block; min-height: 64px; padding: 11px; } .vacation-page .record-summary-icon { display: none; } .vacation-page .record-summary small { font-size: 9px; letter-spacing: .02em; } .vacation-page .record-summary strong { font-size: 19px; } .vacation-page .request-actions .button { width: auto; flex: 1 1 75px; } }

@@ -25,6 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class FeedbackReviewAccessTest {
     @Autowired MockMvc mvc;
     @MockitoBean JwtDecoder decoder;
+    @MockitoBean com.maxwell.chronos.service.AuthSessionService sessions;
     @MockitoBean UserRepository users;
     @MockitoBean ProjectRepository projects;
     @MockitoBean JdbcTemplate db;
@@ -33,6 +34,7 @@ class FeedbackReviewAccessTest {
     String id = UUID.randomUUID().toString();
     String review = "{\"employeeId\":8,\"year\":2026,\"quarter\":3,\"summary\":\"Good work\",\"version\":0}";
     @BeforeEach void setup() {
+        when(sessions.valid(nullable(String.class), anyLong())).thenReturn(true);
         user = User.builder().id(7L).email("employee@example.com").role(UserRole.EMPLOYEE).isActive(true).entraId("subject").passwordHash("hash").build();
         when(users.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
     }
@@ -53,7 +55,7 @@ class FeedbackReviewAccessTest {
     @Test void unauthorizedAndInactiveUsersAreDenied() throws Exception {
         mvc.perform(get("/feedback-reviews/feedback")).andExpect(status().isUnauthorized());
         user.setIsActive(false);
-        mvc.perform(get("/feedback-reviews/feedback").with(token())).andExpect(status().isForbidden());
+        mvc.perform(get("/feedback-reviews/feedback").with(token())).andExpect(status().isUnauthorized());
         verifyNoInteractions(db);
     }
     @Test void ownReviewsArePublishedOnlyAndNotCached() throws Exception {

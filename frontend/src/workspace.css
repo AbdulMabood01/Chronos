@@ -67,6 +67,14 @@ a, button, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .page-container h2 { font-size: 18px; font-weight: 650; letter-spacing: -.3px; }
 .page-subtitle { color: var(--text-secondary); font-size: 13px; line-height: 1.7; }
 .header-bar { margin-bottom: 26px; gap: 20px; }
+.accent-page-header {
+  padding: 22px 24px;
+  border: 1px solid color-mix(in srgb, var(--primary-color) 32%, var(--border-color));
+  border-left: 4px solid var(--primary-color);
+  border-radius: 12px;
+  background: linear-gradient(105deg, color-mix(in srgb, var(--primary-color) 13%, var(--surface-color)), var(--surface-color) 68%);
+  box-shadow: var(--shadow-card);
+}
 .eyebrow { color: var(--primary-color); font-size: 9px; letter-spacing: 1.8px; font-weight: 750; }
 .card, .dashboard-card, .admin-panel, .table-container, .request-card, .project-card, .home-panel, .loading-panel, .empty-state { border: 1px solid var(--border-color); border-radius: 12px; background: var(--surface-color); box-shadow: var(--shadow-card); }
 .card, .admin-panel { padding: 24px; }

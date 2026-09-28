@@ -9,7 +9,7 @@ import './Login.css';
 function RecoveryCard({ title, children }) {
   return <div className="login-container"><main className="login-card">
     <BrandLogo /><h1>{title}</h1>{children}
-    <p className="login-note"><Link to="/login">Back to sign in</Link></p>
+    <Link className="account-link" to="/login">Back to sign in</Link>
   </main></div>;
 }
 

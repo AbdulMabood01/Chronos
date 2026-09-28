@@ -34,6 +34,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.springframework.jdbc.core.JdbcTemplate;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -50,6 +51,7 @@ public class ProjectService {
     private final UserRepository userRepository;
     private final AuditService auditService;
     private final NotificationService notificationService;
+    private final JdbcTemplate jdbc;
 
     public List<ProjectDTO> getProjects(User requester) {
         if (requester == null || (!requester.isAdmin() && !requester.isProjectAdmin() && !canManageProjects(requester.getId()))) {
@@ -80,8 +82,9 @@ public class ProjectService {
 
     public ProjectDTO saveProject(Long projectId, SaveProjectRequest request, User requester) {
         requireProjectAdmin(requester);
-        Project project = projectId == null ? Project.builder().isActive(true).status(ProjectStatus.ACTIVE).build()
+        Project project = projectId == null ? Project.builder().isActive(false).status(ProjectStatus.DRAFT).build()
                 : projectRepository.findById(projectId).orElseThrow(() -> new IllegalArgumentException("Project not found"));
+        ProjectStatus previousStatus = project.getStatus();
 
         Long previousManagerId = project.getProjectManager() == null ? null : project.getProjectManager().getId();
         Long previousApproverId = project.getProjectManagerHoursApprover() == null ? null : project.getProjectManagerHoursApprover().getId();
@@ -90,11 +93,11 @@ public class ProjectService {
         if (code == null || name == null) {
             throw new IllegalArgumentException("Project code and name are required");
         }
-        if (request.getProjectManagerId() == null || request.getProjectManagerHoursApproverId() == null) {
-            throw new IllegalArgumentException("Project manager and PM hours approver are required");
-        }
         if (request.getTotalAllocatedHours() != null && request.getTotalAllocatedHours().compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalArgumentException("Total allocated hours cannot be negative");
+        }
+        if (request.getExpenseBudget() != null && (request.getExpenseBudget().signum() < 0 || request.getExpenseBudget().scale() > 2)) {
+            throw new IllegalArgumentException("Expense budget must be a nonnegative monetary amount with at most two decimals");
         }
 
         projectRepository.findByCodeIgnoreCase(code)
@@ -107,7 +110,24 @@ public class ProjectService {
         project.setName(name);
         project.setDescription(clean(request.getDescription()));
         ProjectStatus status = request.getStatus() != null ? request.getStatus()
-                : Boolean.FALSE.equals(request.getIsActive()) ? ProjectStatus.ARCHIVED : ProjectStatus.ACTIVE;
+                : projectId == null ? ProjectStatus.DRAFT : project.getStatus();
+        if (projectId == null && status != ProjectStatus.DRAFT) {
+            throw new IllegalArgumentException("Create the project as a draft before activating it");
+        }
+        if (status != ProjectStatus.DRAFT && (request.getProjectManagerId() == null || request.getProjectManagerHoursApproverId() == null)) {
+            throw new IllegalArgumentException("Project manager and PM hours approver are required");
+        }
+        if (previousStatus == ProjectStatus.DRAFT && status != ProjectStatus.DRAFT && status != ProjectStatus.ACTIVE) {
+            throw new IllegalArgumentException("Activate the draft before changing it to another status");
+        }
+        if (status == ProjectStatus.ACTIVE && previousStatus == ProjectStatus.DRAFT) {
+            if (request.getProjectManagerId() == null || request.getProjectManagerHoursApproverId() == null) {
+                throw new IllegalArgumentException("Choose a project manager and PM hours approver before activation");
+            }
+            if (assignmentRepository.findByProjectIdAndIsActiveTrue(projectId).isEmpty()) {
+                throw new IllegalArgumentException("Assign at least one active team member before activation");
+            }
+        }
         if (projectId != null && (status == ProjectStatus.COMPLETED || status == ProjectStatus.ARCHIVED)
                 && (projectSubmissionRepository.findByProjectId(projectId).stream().anyMatch(submission ->
                         pendingApproval(submission) || (!submission.isPdfExportEligible()
@@ -118,6 +138,8 @@ public class ProjectService {
         project.setStatus(status);
         project.setIsActive(ProjectStatus.ACTIVE.equals(status));
         project.setTotalAllocatedHours(request.getTotalAllocatedHours());
+        BigDecimal previousBudget = project.getExpenseBudget();
+        project.setExpenseBudget(request.getExpenseBudget());
 
         if (request.getProjectManagerId() != null) {
             User manager = userRepository.findById(request.getProjectManagerId())
@@ -138,7 +160,11 @@ public class ProjectService {
         }
 
         Project saved = projectRepository.save(project);
-        if (projectId != null && (!Objects.equals(previousManagerId, request.getProjectManagerId())
+        if (!Objects.equals(previousBudget, saved.getExpenseBudget())) {
+            jdbc.update("INSERT INTO project_expense_budget_history(project_id,actor_id,previous_budget,new_budget) VALUES (?,?,?,?)",
+                    saved.getId(), requester.getId(), previousBudget, saved.getExpenseBudget());
+        }
+        if (projectId != null && status != ProjectStatus.DRAFT && (!Objects.equals(previousManagerId, request.getProjectManagerId())
                 || !Objects.equals(previousApproverId, request.getProjectManagerHoursApproverId()))) {
             transferPendingApprovals(saved, requester, previousManagerId, previousApproverId);
         }
@@ -449,6 +475,7 @@ public class ProjectService {
                 .isActive(project.getIsActive())
                 .status(project.getStatus())
                 .totalAllocatedHours(project.getTotalAllocatedHours())
+                .expenseBudget(project.getExpenseBudget())
                 .pendingApprovalCount(projectSubmissionRepository.findByProjectId(project.getId()).stream().filter(this::pendingApproval).count())
                 .projectManagerId(project.getProjectManager() != null ? project.getProjectManager().getId() : null)
                 .projectManagerName(project.getProjectManager() != null ? project.getProjectManager().getFullName() : null)

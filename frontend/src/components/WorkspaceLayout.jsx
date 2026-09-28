@@ -19,7 +19,7 @@ export default function WorkspaceLayout({ children, darkBackground, onToggleBack
   const primary = [
     ['/dashboard', 'Overview', 'grid'],
     ['/announcements', 'Announcements', 'bell'],
-    ...(!systemAdmin ? [['/timesheets', 'Timesheets', 'clock'], ['/vacation', 'Time off', 'calendar']] : []),
+    ...(!systemAdmin ? [['/timesheets', 'Timesheets', 'clock'], ['/expenses', 'Expenses', 'file'], ['/vacation', 'Time off', 'calendar']] : []),
     ['/requests', 'Letters & requests', 'file'],
     ...(!systemAdmin ? [['/workplace-reports', 'Reports', 'file']] : []),
     ...(reviewer && !projectManager ? [['/admin', 'Approvals', 'check']] : []),

@@ -19,6 +19,9 @@ export default function UserManagement() {
   const [error, setError] = useState('');
   const [invitationBusy, setInvitationBusy] = useState(null);
   const [notice, setNotice] = useState('');
+  const [manageTarget, setManageTarget] = useState(null);
+  const [lockTarget, setLockTarget] = useState(null);
+  const [lockReason, setLockReason] = useState('');
   const [search, setSearch] = useState('');
   const [addPanel, setAddPanel] = useState(null);
   const [profileUser, setProfileUser] = useState(null);
@@ -68,6 +71,7 @@ export default function UserManagement() {
       if (revoke) await userAPI.revokeInvitation(id);
       else await userAPI.sendInvitation(id);
       setNotice(revoke ? 'Invitation revoked.' : 'Invitation email sent. Any earlier link is now invalid.');
+      setManageTarget(null);
     } catch (err) { setError(err.response?.data?.message || 'Unable to update invitation.'); }
     finally { setInvitationBusy(null); }
   };
@@ -77,6 +81,7 @@ export default function UserManagement() {
     try {
       await userAPI.deactivateUser(id);
       await loadUsers();
+      setManageTarget(null);
     } catch (err) {
       setError('Failed to deactivate user');
     }
@@ -86,6 +91,7 @@ export default function UserManagement() {
     try {
       await userAPI.reactivateUser(id);
       await loadUsers();
+      setManageTarget(null);
     } catch (err) {
       setError('Failed to reactivate user');
     }
@@ -100,6 +106,20 @@ export default function UserManagement() {
     } catch (err) {
       setError('Failed to change role');
     }
+  };
+
+  const securityAction = async (id, action) => {
+    const label = action === 'lock' ? 'Lock Account' : action === 'unlock' ? 'Unlock Account' : 'Sign Out All Sessions';
+    if (action !== 'lock' && !window.confirm(`${label} for this user?`)) return;
+    if (action === 'lock' && !lockReason.trim()) { setError('Enter a reason for locking this account.'); return; }
+    setError(''); setNotice('');
+    try {
+      if (action === 'lock') await userAPI.lockAccount(id, lockReason.trim());
+      else if (action === 'unlock') await userAPI.unlockAccount(id);
+      else await userAPI.signOutAll(id);
+      if (action === 'lock') { setLockTarget(null); setLockReason(''); }
+      await loadUsers(); setNotice(`${label} completed.`); setManageTarget(null);
+    } catch (err) { setError(err.userMessage || 'Unable to update account security. Please try again.'); }
   };
 
   if (!canManageUsers) {
@@ -206,8 +226,8 @@ export default function UserManagement() {
                   )}
                 </td>
                 <td>
-                  <span className={`status-badge ${targetUser.isActive ? 'status-approved' : 'status-rejected'}`}>
-                    {targetUser.accountStatus || (targetUser.isActive ? 'Active' : 'Inactive')}
+                  <span className={`status-badge ${targetUser.isActive && !targetUser.adminLocked ? 'status-approved' : 'status-rejected'}`}>
+                    {targetUser.adminLocked ? 'Locked' : targetUser.accountStatus || (targetUser.isActive ? 'Active' : 'Inactive')}
                   </span>
                 </td>
                 <td>
@@ -217,27 +237,44 @@ export default function UserManagement() {
                   </button>
                 </td>
                 <td>
-                  <div className="action-buttons wrap-actions">
-                    {targetUser.accountStatus === 'INVITED' && <>
-                      <button className="button button-small" disabled={invitationBusy !== null} onClick={() => handleInvitation(targetUser.id)}>Send / resend invitation</button>
-                      <button className="button button-small" disabled={invitationBusy !== null} onClick={() => handleInvitation(targetUser.id, true)}>Revoke invitation</button>
-                    </>}
-                    {targetUser.role !== 'ADMIN' && (targetUser.isActive ? (
-                      <button className="button button-small button-danger" onClick={() => handleDeactivate(targetUser.id)}>
-                        Deactivate
-                      </button>
-                    ) : (
-                      <button className="button button-small button-success" onClick={() => handleReactivate(targetUser.id)}>
-                        Reactivate
-                      </button>
-                    ))}
-                  </div>
+                  {targetUser.id !== user.id && <button type="button" className="button button-small button-secondary manage-user-button" onClick={() => setManageTarget(targetUser)} aria-label={`Manage ${targetUser.firstName} ${targetUser.lastName}`}>Manage</button>}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      {manageTarget && <div className="modal-backdrop"><div className="modal-card people-manage-dialog" role="dialog" aria-modal="true" aria-labelledby="manage-person-title">
+        <h2 id="manage-person-title">Manage {manageTarget.firstName} {manageTarget.lastName}</h2>
+        <div className="people-manage-actions">
+          {manageTarget.accountStatus === 'INVITED' && <div><h3>Invitation</h3><div className="people-manage-action-row">
+            <button type="button" className="button button-secondary" disabled={invitationBusy !== null} onClick={() => handleInvitation(manageTarget.id)}>Send / resend invitation</button>
+            <button type="button" className="button button-secondary" disabled={invitationBusy !== null} onClick={() => handleInvitation(manageTarget.id, true)}>Revoke invitation</button>
+          </div></div>}
+          {manageTarget.role !== 'ADMIN' && <div><h3>Employment status</h3><div className="people-manage-action-row">
+            {manageTarget.isActive
+              ? <button type="button" className="button button-danger" onClick={() => handleDeactivate(manageTarget.id)}>Deactivate</button>
+              : <button type="button" className="button button-success" onClick={() => handleReactivate(manageTarget.id)}>Reactivate</button>}
+          </div></div>}
+          <div><h3>Account security</h3><div className="people-manage-action-row">
+            {manageTarget.adminLocked
+              ? <button type="button" className="button button-success" onClick={() => securityAction(manageTarget.id, 'unlock')}>Unlock Account</button>
+              : <button type="button" className="button button-danger" onClick={() => { setLockTarget(manageTarget); setManageTarget(null); setLockReason(''); }}>Lock Account</button>}
+            <button type="button" className="button button-secondary" onClick={() => securityAction(manageTarget.id, 'sign-out')}>Sign Out All Sessions</button>
+          </div></div>
+        </div>
+        <div className="action-bar compact-actions"><button type="button" className="button button-secondary" onClick={() => setManageTarget(null)}>Close</button></div>
+      </div></div>}
+      {lockTarget && <div className="modal-backdrop"><div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="lock-account-title">
+        <h2 id="lock-account-title">Lock Account</h2>
+        <p>Lock {lockTarget.firstName} {lockTarget.lastName} and sign out all active sessions.</p>
+        <label htmlFor="lock-account-reason">Reason</label>
+        <textarea id="lock-account-reason" value={lockReason} maxLength={500} onChange={event => setLockReason(event.target.value)} autoFocus />
+        <div className="action-bar compact-actions">
+          <button type="button" className="button button-secondary" onClick={() => setLockTarget(null)}>Cancel</button>
+          <button type="button" className="button button-danger" onClick={() => securityAction(lockTarget.id, 'lock')} disabled={!lockReason.trim()}>Lock Account</button>
+        </div>
+      </div></div>}
     </div>
   );
 }

@@ -118,6 +118,16 @@ public class User {
     @com.fasterxml.jackson.annotation.JsonIgnore
     private long credentialVersion;
 
+    @com.fasterxml.jackson.annotation.JsonIgnore private int failedLoginCount;
+    @com.fasterxml.jackson.annotation.JsonIgnore private java.time.Instant lastFailedAttempt;
+    @com.fasterxml.jackson.annotation.JsonIgnore private java.time.Instant lockedUntil;
+    @com.fasterxml.jackson.annotation.JsonIgnore private int lockoutCycles;
+    @com.fasterxml.jackson.annotation.JsonIgnore private boolean adminLocked;
+    @com.fasterxml.jackson.annotation.JsonIgnore @Column(length = 500) private String adminLockReason;
+    @com.fasterxml.jackson.annotation.JsonIgnore private java.time.Instant lockedAt;
+    @com.fasterxml.jackson.annotation.JsonIgnore private Long unlockedBy;
+    @com.fasterxml.jackson.annotation.JsonIgnore private java.time.Instant unlockedAt;
+
     public String getAccountStatus() {
         return !Boolean.TRUE.equals(isActive) ? "INACTIVE" : passwordHash == null ? "INVITED" : "ACTIVE";
     }

@@ -12,6 +12,7 @@ beforeEach(() => { vi.clearAllMocks(); employeeReportsAPI.mine.mockResolvedValue
 it('explains anonymous retention and submits a receipt without exposing stored data', async () => {
   employeeReportsAPI.submit.mockResolvedValue({ data: { reportId: 'private-reference', status: 'SUBMITTED' } });
   render(<EmployeeReports />);
+  fireEvent.click(screen.getByRole('button', { name: 'Create report' }));
   fireEvent.change(screen.getByLabelText('Report category'), { target: { value: 'SEXUAL_HARASSMENT' } });
   fireEvent.change(screen.getByLabelText('Report title / subject'), { target: { value: 'Concern' } });
   fireEvent.change(screen.getByLabelText('Incident description'), { target: { value: 'Details' } });
@@ -35,6 +36,7 @@ it('loads HR filters and displays anonymous reports without identity', async () 
   employeeReportsAPI.list.mockResolvedValue({ data: [{ id: 'one', subject: 'Concern', category: 'SEXUAL_HARASSMENT', status: 'SUBMITTED', submitted_at: '2026-09-21T12:00:00Z' }] });
   employeeReportsAPI.detail.mockResolvedValue({ data: { id: 'one', subject: 'Concern', description: 'Details', anonymous: true, category: 'SEXUAL_HARASSMENT', status: 'SUBMITTED', submitted_at: '2026-09-21T12:00:00Z', attachments: [], history: [] } });
   render(<EmployeeReports management />);
+  fireEvent.click(screen.getByRole('button', { name: 'Show filters' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
   await screen.findByText('Submitted By: Anonymous');
   fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'SEXUAL_HARASSMENT' } });
@@ -86,12 +88,14 @@ it('refreshes Submitted Reports immediately after an identified submission', asy
   employeeReportsAPI.submit.mockResolvedValue({ data: { reportId: 'new', status: 'SUBMITTED' } });
   render(<EmployeeReports />);
   await screen.findByText('No submitted reports yet.');
+  fireEvent.click(screen.getByRole('button', { name: 'Create report' }));
   fireEvent.change(screen.getByLabelText('Report category'), { target: { value: 'SAFETY_CONCERN' } });
   fireEvent.change(screen.getByLabelText('Report title / subject'), { target: { value: 'New concern' } });
   fireEvent.change(screen.getByLabelText('Incident description'), { target: { value: 'Details' } });
   fireEvent.click(screen.getByLabelText('I understand what information is retained.'));
   fireEvent.click(screen.getByRole('button', { name: 'Submit confidential report' }));
   expect(await screen.findByRole('button', { name: 'View New concern' })).toBeTruthy();
+  expect(screen.getByText(/Report submitted. Save your Report ID for reference/)).toBeTruthy();
   expect(employeeReportsAPI.mine).toHaveBeenCalledTimes(2);
 });
 

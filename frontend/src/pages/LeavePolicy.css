@@ -1,0 +1,12 @@
+.leave-policy-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 1rem; margin: 1.3rem 0; }
+.leave-policy-controls label { display: grid; gap: .45rem; color: var(--text-secondary); font-size: .9rem; font-weight: 500; }
+.leave-policy-controls input { width: 7rem; padding: .65rem; border: 1px solid var(--border-color); border-radius: .5rem; background: var(--surface-color); color: var(--text-primary); font: inherit; }
+.leave-policy-preview { display: grid; gap: .8rem; max-width: 720px; padding: 1.2rem; border: 1px solid var(--border-color); border-radius: .75rem; background: var(--surface-muted); }
+.leave-policy-preview h3, .leave-policy-preview p { margin: 0; }
+.leave-policy-preview h3 { font-size: 1.1rem; font-weight: 600; }
+.leave-policy-preview p { color: var(--text-secondary); }
+.leave-policy-preview dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .8rem; margin: .25rem 0; }
+.leave-policy-preview dl div { padding: .8rem; border: 1px solid var(--border-color); border-radius: .6rem; background: var(--surface-color); }
+.leave-policy-preview dt { color: var(--text-secondary); font-size: .8rem; }
+.leave-policy-preview dd { margin: .2rem 0 0; font-size: 1.2rem; font-weight: 600; }
+.leave-policy-preview .button { justify-self: start; }

@@ -3,6 +3,7 @@ import { useAuth } from '../AuthContext';
 import { employeeReportsAPI } from '../api';
 import './EmployeeReports.css';
 import SubmittedReports from './SubmittedReports';
+import Icon from '../components/Icon';
 
 export const categories = {
   SEXUAL_HARASSMENT: 'Sexual Harassment', WORKPLACE_HARASSMENT: 'Workplace Harassment or Bullying',
@@ -43,29 +44,35 @@ function SubmissionForm({ onSubmitted }) {
       body.append('report', new Blob([JSON.stringify({ ...form, incidentAt: form.incidentAt || null })], { type: 'application/json' }));
       files.forEach(file => body.append('attachments', file));
       const response = await employeeReportsAPI.submit(body);
-      setReceipt({ ...response.data, anonymous: form.anonymous }); setForm(emptyForm); setFiles([]); onSubmitted();
+      setReceipt({ ...response.data, anonymous: form.anonymous }); setForm(emptyForm); setFiles([]); onSubmitted(response.data, form.anonymous);
     } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); }
   }
-  if (receipt) return <section className="concern-card" role="status"><h2>Report submitted confidentially</h2><p>Your report is available to HR Admins for review.</p><p>Save your Report ID for reference when contacting HR. This ID does not grant access to the report.</p><strong className="report-reference">{receipt.reportId}</strong><p>Status: Submitted</p><button type="button" className="button button-primary" onClick={() => setReceipt(null)}>Submit another report</button><ReportProgress status={receipt.status} /><small>{receipt.anonymous ? "Anonymous reports are not linked to your account and do not appear in Submitted Reports. Contact HR with your Report ID for updates." : "Follow your report in Submitted Reports below."}</small></section>;
+  if (receipt) return <section className="concern-card" role="status"><h2>Report submitted confidentially</h2><p>Your report is available to HR Admins for review.</p><p>Save your Report ID for reference when contacting HR. This ID does not grant access to the report.</p><strong className="report-reference">{receipt.reportId}</strong><p>Status: Submitted</p><button type="button" className="button button-primary" onClick={() => setReceipt(null)}>Submit another report</button><ReportProgress status={receipt.status} /><small>{receipt.anonymous ? "Anonymous reports are not linked to your account and do not appear in Submitted Reports. Contact HR with your Report ID for updates." : "Follow your report in Submitted Reports."}</small></section>;
   return <form className="concern-card concern-form" onSubmit={submit}>
-    <p>Share a workplace concern directly with HR. Only authorized HR Admins can review reports, attachments, and internal notes.</p>
+    <div className="report-section-intro"><span className="report-kicker">NEW REPORT</span><h2>Tell us what happened</h2><p>Share a workplace concern directly with HR. Only authorized HR Admins can review reports, attachments, and internal notes.</p></div>
     {error && <div role="alert" className="concern-error">{error}</div>}
     <fieldset disabled={busy}>
+      <div className="report-form-section"><div className="report-section-heading"><span>01</span><div><h3>The concern</h3><p>Start with the essentials so HR can understand the situation.</p></div></div>
       <label>Report category<select name="category" required value={form.category} onChange={change}><option value="">Select a category</option>{Object.entries(categories).map(([key, text]) => <option key={key} value={key}>{text}</option>)}</select></label>
       <label>Report title / subject<input name="subject" required maxLength={200} value={form.subject} onChange={change} /></label>
       <label>Incident description<textarea name="description" required maxLength={20000} rows={7} value={form.description} onChange={change} /></label>
+      </div>
+      <div className="report-form-section"><div className="report-section-heading"><span>02</span><div><h3>Supporting details</h3><p>Add any context that could help with the review.</p></div></div>
       <div className="concern-columns"><label>Date and time of incident (optional)<input type="datetime-local" name="incidentAt" value={form.incidentAt} onChange={change} /><small>Use the local time at the incident location.</small></label>
       <label>Location (optional)<input name="location" maxLength={500} value={form.location} onChange={change} /></label></div>
       <label>People involved (optional)<textarea name="peopleInvolved" maxLength={5000} value={form.peopleInvolved} onChange={change} /></label>
       <label>Witnesses (optional)<textarea name="witnesses" maxLength={5000} value={form.witnesses} onChange={change} /></label>
       <label>Supporting attachments (optional)<input type="file" multiple accept={form.anonymous ? '.png,.jpg,.jpeg,.gif,.pdf,.txt' : '.png,.jpg,.jpeg,.gif,.webp,.pdf,.doc,.docx,.txt,.odt'} onChange={e => setFiles(Array.from(e.target.files))} /><small>{form.anonymous ? 'Still PNG/JPG/GIF, PDF (up to 30 pages), or plain UTF-8 text. Export Word/ODT documents as PDF first.' : 'Images, PDF, Word, text, or ODT.'} Up to 5 files; 10 MB each, 20 MB total.</small></label>
       {files.length > 0 && <ul>{files.map((file, index) => <li key={index}>{file.name} ({Math.ceil(file.size / 1024)} KB)</li>)}</ul>}
+      </div>
+      <div className="report-form-section report-form-section-last"><div className="report-section-heading"><span>03</span><div><h3>Privacy &amp; submission</h3><p>Choose how your report is identified and review what is retained.</p></div></div>
       <p className="concern-help">Identified reports appear in Submitted Reports. Anonymous reports cannot be linked to your account for tracking.</p><label className="concern-check"><input type="checkbox" name="anonymous" checked={form.anonymous} onChange={e => { change(e); setForm(current => ({ ...current, privacyAcknowledged: false })); }} />Report Anonymously</label>
       <div className="concern-privacy"><h3>Before you submit</h3>
         <p>{form.anonymous ? 'Your report will not store a link to your account or show your name or email to HR. You still sign in to submit. The report ID, submission time, incident details, and processed attachments are retained. Original filenames are replaced. Images are re-encoded and PDFs are flattened to remove hidden metadata, authors, comments, links, and embedded files. Original uploaded bytes are not stored for new anonymous reports.' : 'Your name and email will be available to HR with this report. The report ID, submission time, incident details, and original attachments are retained.'}</p>
         <p>Review your text and visible attachment contents for names or identifying details before submitting. Automatic metadata removal cannot hide information visible in a screenshot or document. Technical operators with database or infrastructure access may access stored data; authentication or server logs may allow timing or network correlation. This is not a guarantee of untraceability.</p>
         <p>Report contents are excluded from the general audit feed and notifications. HR review actions are retained in a confidential report history.</p>
         <label className="concern-check"><input required type="checkbox" name="privacyAcknowledged" checked={form.privacyAcknowledged} onChange={change} />I understand what information is retained.</label>
+      </div>
       </div>
       <footer className="concern-submit-bar">
         <div className="concern-form-progress"><div className="concern-progress-heading"><strong>{busy ? 'Submitting report…' : completed === 4 ? 'Required fields complete' : 'Report preparation'}</strong><span>{completed} / 4</span></div><progress aria-label="Required fields completed" value={completed} max={4} /><small>Category, subject, description, and privacy acknowledgment. Optional details do not affect progress.</small></div>
@@ -86,6 +93,7 @@ function Management() {
   const [loading, setLoading] = useState(true);
   const [refresh, setRefresh] = useState(0);
   const [listError, setListError] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const detailRef = useRef(null);
   useEffect(() => {
     let active = true, pending = false;
@@ -127,19 +135,24 @@ function Management() {
     } catch(e) { setError(errorMessage(e)); } finally { setBusy(false); }
   }
   return <>
-    <div hidden={!!selected}><p>Confidential • HR Admin access only. Review and download actions are recorded.</p>
+    <div hidden={!!selected}><p className="report-confidential-note"><Icon name="check" size={16}/> Confidential HR access. Review and download actions are recorded.</p>
     {error && <div className="concern-error" role="alert">{error}</div>}
     {listError && <div className="concern-error" role="alert">{listError}</div>}
-    <section className="concern-card concern-filters"><div className="concern-filter-heading"><h2>Find a report</h2><p>Filter by report details or submission date.</p></div>
+    <section className="concern-card concern-filters"><div className="concern-filter-heading"><div><span className="report-kicker">CASE FINDER</span><h2>Find a report</h2><p>Filter by report details or submission date.</p></div><button type="button" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(open => !open)}><Icon name="search" size={16}/>{filtersOpen ? 'Hide filters' : 'Show filters'}</button></div>
+      <div className="report-filter-fields" hidden={!filtersOpen}>
       <label>Search Report ID<input type="search" maxLength={36} placeholder="Full or partial Report ID" value={filters.reportId} onChange={e => { setFilters({ ...filters, reportId: e.target.value }); setPage(0); }} /></label>
       <label>Submitted by<select value={filters.anonymous} onChange={e => { setFilters({ ...filters, anonymous: e.target.value }); setPage(0); }}><option value="">Anonymous and identified</option><option value="true">Anonymous</option><option value="false">Identified</option></select></label>
       <label>Category<select value={filters.category} onChange={e => { setFilters({ ...filters, category: e.target.value }); setPage(0); }}><option value="">All categories</option>{Object.entries(categories).map(([key, text]) => <option key={key} value={key}>{text}</option>)}</select></label>
       <label>Status<select value={filters.status} onChange={e => { setFilters({ ...filters, status: e.target.value }); setPage(0); }}><option value="">All statuses</option>{statuses.map(s => <option key={s} value={s}>{label(s)}</option>)}</select></label>
       {['from','to'].map(key => <label key={key}>{key === 'from' ? 'Submitted from (UTC)' : 'Submitted through (UTC)'}<input type="date" value={filters[key]} onChange={e => { setFilters({ ...filters, [key]: e.target.value }); setPage(0); }} /></label>)}
+      </div>
     </section>
     <section className="concern-card">
-      <div className="concern-heading"><div><h2>Employee reports</h2><p className="concern-help">Newest first · Automatically refreshes every 15 seconds</p></div><button disabled={loading} onClick={() => setRefresh(v => v + 1)}>Refresh reports</button></div>
-      {loading ? <p role="status">Loading reports…</p> : listError ? <p>Reports could not be loaded. Retry using Refresh reports.</p> : rows.length === 0 ? <p>No reports match these filters.</p> : <div className="concern-table"><table><thead><tr><th>Report ID</th><th>Category</th><th>Subject</th><th>Submitted date</th><th>Submitted by</th><th>Status</th><th>Last updated</th><th><span className="sr-only">Actions</span></th></tr></thead><tbody>{rows.map(row => <tr key={row.id}><td><code className="concern-id">{row.id}</code></td><td>{categories[row.category]}</td><td><strong>{row.subject}</strong></td><td>{dateTime(row.submitted_at)}</td><td>{row.anonymous ? 'Anonymous' : row.submitted_by || 'Unavailable'}</td><td><span className="concern-status">{label(row.status)}</span></td><td>{dateTime(row.updated_at || row.submitted_at)}</td><td className="concern-actions"><button disabled={busy} onClick={() => open(row.id)}>Review</button></td></tr>)}</tbody></table></div>}
+      <div className="concern-heading"><div><h2>Employee reports</h2><p className="concern-help">Newest first · Refresh to see updates</p></div><button disabled={loading} onClick={() => setRefresh(v => v + 1)}>Refresh reports</button></div>
+      {loading ? <p role="status">Loading reports…</p> : listError ? <p>Reports could not be loaded. Retry using Refresh reports.</p> : rows.length === 0 ? <div className="report-empty"><Icon name="search" size={26}/><h3>No reports match these filters.</h3><p>Try changing a filter or searching another Report ID.</p></div> : <div className="report-case-list">{rows.map(row => <article className="report-case" key={row.id}>
+        <div className="report-case-main"><div className="report-case-top"><span className="report-category">{categories[row.category]}</span><span className={`concern-status report-status-${String(row.status).toLowerCase()}`}>{label(row.status)}</span></div><h3>{row.subject}</h3><div className="report-case-meta"><span>{row.anonymous ? 'Anonymous' : row.submitted_by || 'Unavailable'}</span><span>Submitted {dateTime(row.submitted_at)}</span><span>Updated {dateTime(row.updated_at || row.submitted_at)}</span></div><code className="concern-id">{row.id}</code></div>
+        <button className="report-case-action" disabled={busy} onClick={() => open(row.id)}>Review <Icon name="arrow" size={16}/></button>
+      </article>)}</div>}
       <div className="concern-pagination"><button disabled={page === 0 || loading} onClick={() => setPage(p => p - 1)}>Previous</button><span>Page {page + 1}</span><button disabled={rows.length < 50 || loading} onClick={() => setPage(p => p + 1)}>Next</button></div>
     </section>
     </div>{selected && <section ref={detailRef} tabIndex={-1} className="concern-card concern-details" aria-label="Report details"><div className="concern-heading"><h2>{selected.subject}</h2><button disabled={busy} onClick={() => setSelected(null)}>Close details</button></div>
@@ -165,5 +178,8 @@ function Management() {
 export default function EmployeeReports({ management = false }) {
   const { user } = useAuth();
   if (management && user?.role !== 'ADMIN') return <p>Only HR Admins can access employee reports.</p>;
-  return <div className={`page-container employee-concerns ${management ? 'concern-management' : ''}`}><h1>Reports</h1>{management ? <Management /> : <SubmittedReports SubmissionForm={SubmissionForm} />}</div>;
+  return <div className={`page-container employee-concerns ${management ? 'concern-management' : ''}`}>
+    <header className="report-page-hero"><div className="report-hero-copy"><span className="report-kicker">{management ? 'HR CASE MANAGEMENT' : 'PRIVATE WORKPLACE CHANNEL'}</span><h1>{management ? 'Report review' : 'Workplace reports'}</h1><p>{management ? 'Review confidential submissions, follow case progress, and record the next step.' : 'Share a concern with HR and follow the progress of reports you submitted with your name.'}</p></div><div className="report-hero-mark" aria-hidden="true"><Icon name="file" size={30}/></div></header>
+    {management ? <Management /> : <SubmittedReports SubmissionForm={SubmissionForm} />}
+  </div>;
 }

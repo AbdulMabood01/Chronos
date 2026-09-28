@@ -26,12 +26,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class ReportDownloadTest {
     @Autowired MockMvc mvc;
     @MockitoBean JwtDecoder decoder;
+    @MockitoBean com.maxwell.chronos.service.AuthSessionService sessions;
     @MockitoBean UserRepository users;
     @MockitoBean UserService service;
     @MockitoBean ReportService reports;
     User employee;
 
     @BeforeEach void setup() {
+        when(sessions.valid(nullable(String.class), anyLong())).thenReturn(true);
         employee = User.builder().id(1L).email("employee@example.com").entraId("employee-subject")
                 .role(UserRole.EMPLOYEE).isActive(true).passwordHash("test-account-hash").build();
         when(users.findByEmail(employee.getEmail())).thenReturn(Optional.of(employee));

@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Chronos runtime architecture",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/AbdulMabood01/Chronos",
+      "revision": "8b8a16eadae0697020617164fdce5eb5f8a566d7"
+    },
+    "viewBox": [1360, 760]
+  },
+  "components": [
+    { "id": "browser", "type": "external", "label": "Employee browser", "sublabel": "Employee and manager UI", "pos": [45, 315], "size": [165, 76] },
+    { "id": "react", "type": "frontend", "label": "React client", "sublabel": "Routes, Axios, local token", "pos": [275, 315], "size": [180, 76], "sources": [{ "path": "frontend/src/App.jsx" }, { "path": "frontend/src/api.js", "line": 3 }] },
+    { "id": "security", "type": "security", "label": "Spring Security", "sublabel": "JWT, user and rate filters", "pos": [535, 315], "size": [190, 76], "sources": [{ "path": "backend/src/main/java/com/maxwell/chronos/config/SecurityConfig.java", "line": 28 }, { "path": "backend/src/main/java/com/maxwell/chronos/security/AuthenticationRateLimitFilter.java" }] },
+    { "id": "api", "type": "backend", "label": "REST API and services", "sublabel": "Time, leave, users, approvals", "pos": [805, 315], "size": [205, 76], "sources": [{ "path": "backend/src/main/java/com/maxwell/chronos/web/TimesheetController.java" }, { "path": "backend/src/main/java/com/maxwell/chronos/web/VacationController.java" }] },
+    { "id": "postgres", "type": "database", "label": "PostgreSQL", "sublabel": "Business data and email outbox", "pos": [1090, 315], "size": [195, 76], "sources": [{ "path": "backend/src/main/resources/application.properties", "line": 10 }, { "path": "backend/src/main/java/com/maxwell/chronos/service/EmailAlertService.java" }] },
+    { "id": "scheduler", "type": "backend", "label": "Scheduled jobs", "sublabel": "Reminders and outbox polling", "pos": [805, 545], "size": [205, 76], "sources": [{ "path": "backend/src/main/java/com/maxwell/chronos/ChronosApplication.java", "line": 7 }, { "path": "backend/src/main/java/com/maxwell/chronos/service/EmailAlertDispatcher.java", "line": 31 }] },
+    { "id": "smtp", "type": "external", "label": "SMTP server", "sublabel": "Configured email delivery", "pos": [810, 90], "size": [195, 76], "sources": [{ "path": "backend/src/main/resources/application.properties", "line": 73 }, { "path": "backend/src/main/java/com/maxwell/chronos/service/InvitationEmailService.java" }] }
+  ],
+  "connections": [
+    { "id": "ui", "from": "browser", "to": "react", "label": "Uses web UI" },
+    { "id": "requests", "from": "react", "to": "security", "label": "HTTP /api + bearer JWT", "labelDy": -32 },
+    { "id": "authorized", "from": "security", "to": "api", "label": "Authorized requests", "labelDy": -32 },
+    { "id": "storage", "from": "api", "to": "postgres", "label": "JPA / JDBC" },
+    { "id": "scheduled-work", "from": "scheduler", "to": "api", "label": "Run background services", "fromSide": "top", "toSide": "bottom" },
+    { "id": "email", "from": "api", "to": "smtp", "label": "Send email when configured", "fromSide": "top", "toSide": "bottom" }
+  ]
+}

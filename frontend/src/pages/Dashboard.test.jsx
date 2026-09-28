@@ -17,7 +17,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   Object.assign(user, { id: 7, role: 'EMPLOYEE', canManageProjects: false, canReviewProjects: false });
   for (const group of Object.values(api)) if (group && typeof group === 'object') for (const method of Object.values(group)) if (vi.isMockFunction(method)) method.mockResolvedValue({ data: [] });
-  api.userAPI.getLeaveBalance.mockResolvedValue({ data: base().balance });
+  api.userAPI.getMyLeaveBalance.mockResolvedValue({ data: base().balance });
   api.projectAPI.getAssignedProjects.mockResolvedValue({ data: [project] });
 });
 afterEach(cleanup);
@@ -105,7 +105,7 @@ it('gives admins organization summaries and announcement management without proj
   expect(screen.getByRole('link', { name: 'Manage announcements' }).getAttribute('href')).toBe('/announcements?manage=true');
   expect(api.timesheetAPI.getMyTimesheets).not.toHaveBeenCalled();
   expect(api.timesheetAPI.getPendingProjectSubmissions).not.toHaveBeenCalled();
-  expect(api.userAPI.getLeaveBalance).not.toHaveBeenCalled();
+  expect(api.userAPI.getMyLeaveBalance).not.toHaveBeenCalled();
 });
 
 it('limits announcements to three recent relevant items and keeps acknowledgment actions', () => {

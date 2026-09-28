@@ -70,20 +70,51 @@
   .employee-identity { gap: 1rem; }
 }
 
-/* Spacious directory, scoped away from the employee detail workspace. */
-.people-directory { display: flex; flex-direction: column; gap: 24px; }
-.people-directory .header-bar { margin: 0; align-items: center; gap: 24px; flex-wrap: wrap; }
-.people-header-actions { display: flex; flex-wrap: wrap; gap: 12px; }
-.people-directory .user-stats { margin: 0; gap: 20px; }
-.people-directory .user-stats > div { padding: 20px 24px; border-radius: 14px; background: var(--surface-color); }
-.people-directory .record-search { max-width: none; margin: 0; padding: 14px 18px; }
-.people-directory .admin-table { margin: 0; border: 1px solid var(--border-color); border-radius: 16px; background: var(--surface-color); }
-.people-directory .data-table { min-width: 900px; }
-.people-directory .data-table th { padding: 18px 22px; font-size: 12px; }
-.people-directory .data-table td { padding: 22px; vertical-align: middle; }
-.people-directory .data-table td:first-child { min-width: 240px; }
-.people-directory .table-subtext { margin-top: 8px; line-height: 1.6; overflow-wrap: anywhere; }
-.people-directory .wrap-actions { gap: 10px; }
+/* Keep the directory and its summary compact so the people list stays in view. */
+.people-directory { display: flex; flex-direction: column; gap: 14px; max-width: 1440px; }
+.people-directory .header-bar { margin: 0; align-items: center; gap: 16px; flex-wrap: wrap; }
+.people-header-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.people-directory .user-stats {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 20px;
+  margin: 0;
+  padding: 10px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--surface-color);
+}
+.people-directory .user-stats > div {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.people-directory .user-stats span { margin: 0; font-size: .8rem; }
+.people-directory .user-stats strong { font-size: 1.1rem; line-height: 1.2; }
+body.theme-dark .people-directory .user-stats > div { background: transparent; }
+.people-directory .record-search { max-width: none; margin: 0; padding: 10px 14px; }
+.people-directory .admin-table { margin: 0; overflow-x: auto; border: 1px solid var(--border-color); border-radius: 16px; background: var(--surface-color); }
+.people-directory .data-table { min-width: 760px; }
+.people-directory .data-table th { padding: 12px 14px; font-size: 12px; }
+.people-directory .data-table td { padding: 12px 14px; vertical-align: middle; }
+.people-directory .data-table td:first-child { min-width: 220px; }
+.people-directory .table-subtext { margin: 4px 0 0; line-height: 1.4; overflow-wrap: anywhere; }
+.people-directory .wrap-actions { gap: 6px; }
+.people-directory .wrap-actions .button-small { padding: 6px 9px; font-size: .78rem; }
+.people-directory .manage-user-button { white-space: nowrap; }
+.people-manage-dialog { max-height: calc(100vh - 2rem); overflow-y: auto; }
+.people-manage-dialog h2 { margin: 0 0 18px; }
+.people-manage-actions { display: grid; gap: 16px; }
+.people-manage-actions > div + div { border-top: 1px solid var(--border-color); padding-top: 16px; }
+.people-manage-actions h3 { margin: 0 0 10px; color: var(--text-secondary); font-size: .8rem; }
+.people-manage-action-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.people-manage-dialog .compact-actions { margin-top: 22px; justify-content: flex-end; }
 .people-directory .data-table select { min-width: 145px; min-height: 40px; }
 .people-directory .employee-section > p { color: var(--text-secondary); line-height: 1.7; margin: 12px 0 24px; }
 .people-directory .employee-section form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; align-items: end; }
@@ -99,4 +130,13 @@
   .people-directory .employee-section form { grid-template-columns: 1fr; }
   .people-header-actions { width: 100%; }
   .people-header-actions .button { flex: 1; }
+  .people-directory .data-table,
+  .people-directory .data-table tbody { display: block; min-width: 0; }
+  .people-directory .data-table thead { display: none; }
+  .people-directory .data-table tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 14px; border-bottom: 1px solid var(--border-color); }
+  .people-directory .data-table tbody tr:last-child { border-bottom: 0; }
+  .people-directory .data-table td { display: block; min-width: 0; padding: 0; border: 0; }
+  .people-directory .data-table td:first-child { grid-column: 1 / -1; min-width: 0; }
+  .people-directory .data-table td:nth-child(3),
+  .people-directory .data-table td:nth-child(5) { justify-self: end; }
 }

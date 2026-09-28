@@ -18,6 +18,8 @@ import java.util.Optional;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(UserController.class)
@@ -26,12 +28,14 @@ class AccountAccessTest {
     @MockitoBean com.maxwell.chronos.service.LeaveBalanceService leaveBalances;
     @Autowired MockMvc mvc;
     @MockitoBean JwtDecoder decoder;
+    @MockitoBean com.maxwell.chronos.service.AuthSessionService sessions;
     @MockitoBean UserRepository users;
     @MockitoBean UserService service;
     @MockitoBean com.maxwell.chronos.service.ProjectService projects;
     User employee;
 
     @BeforeEach void setup() {
+        when(sessions.valid(nullable(String.class), anyLong())).thenReturn(true);
         employee = User.builder().id(1L).email("employee@example.com").entraId("employee-subject")
                 .role(UserRole.EMPLOYEE).isActive(true).passwordHash("test-account-hash").build();
         when(users.findByEmail(employee.getEmail())).thenReturn(Optional.of(employee));
@@ -69,12 +73,31 @@ class AccountAccessTest {
 
     @Test void existingTokenStopsWorkingAfterDeactivation() throws Exception {
         employee.setIsActive(false);
-        mvc.perform(get("/users").with(token())).andExpect(status().isForbidden());
+        mvc.perform(get("/users").with(token())).andExpect(status().isUnauthorized());
         verify(service, never()).getEmployeeDirectory();
     }
 
     @Test void emailCannotBeUsedWithAnotherSubject() throws Exception {
         mvc.perform(get("/users").with(jwt().jwt(j -> j.subject("someone-else")
-                .claim("preferred_username", employee.getEmail())))).andExpect(status().isForbidden());
+                .claim("preferred_username", employee.getEmail())))).andExpect(status().isUnauthorized());
+    }
+
+    @Test void revokedSessionCannotUseProtectedApis() throws Exception {
+        when(sessions.valid(nullable(String.class), anyLong())).thenReturn(false);
+        mvc.perform(get("/users").with(token())).andExpect(status().isUnauthorized());
+        verify(service, never()).getEmployeeDirectory();
+    }
+
+    @Test void employeeAndProjectAdminCannotUseSecurityControls() throws Exception {
+        for (UserRole role : java.util.List.of(UserRole.EMPLOYEE, UserRole.PROJECT_ADMIN)) {
+            employee.setRole(role);
+            mvc.perform(patch("/users/2/lock").contentType("application/json").content("{}").with(token()))
+                    .andExpect(status().isForbidden());
+            mvc.perform(patch("/users/2/unlock").with(token())).andExpect(status().isForbidden());
+            mvc.perform(post("/users/2/sign-out-all").with(token())).andExpect(status().isForbidden());
+        }
+        verify(service, never()).lockAccount(anyLong(), anyLong(), any());
+        verify(service, never()).unlockAccount(anyLong(), anyLong());
+        verify(service, never()).signOutAll(anyLong(), anyLong());
     }
 }

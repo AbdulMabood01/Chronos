@@ -6,6 +6,7 @@ import com.maxwell.chronos.domain.VacationRequest;
 import com.maxwell.chronos.dto.VacationRequestDTO;
 import com.maxwell.chronos.enums.VacationStatus;
 import com.maxwell.chronos.enums.VacationType;
+import com.maxwell.chronos.enums.LeaveAccountingType;
 import com.maxwell.chronos.repository.ProjectAssignmentRepository;
 import com.maxwell.chronos.repository.TimesheetRepository;
 import com.maxwell.chronos.repository.UserRepository;
@@ -35,21 +36,29 @@ public class VacationService {
     private final ProjectAssignmentRepository projectAssignmentRepository;
     private final AuditService auditService;
     private final NotificationService notificationService;
+    private final LeaveBalanceService leaveBalanceService;
 
     public VacationRequestDTO createVacationRequest(Long userId, LocalDate startDate, LocalDate endDate, 
                                                    VacationType vacationType, String notes) {
+        return createVacationRequest(userId, startDate, endDate, vacationType, notes, null);
+    }
+
+    public VacationRequestDTO createVacationRequest(Long userId, LocalDate startDate, LocalDate endDate,
+                                                   VacationType vacationType, String notes, String specialReason) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
         if (startDate.isAfter(endDate)) {
             throw new IllegalArgumentException("Start date cannot be after end date");
         }
+        validateSpecialReason(vacationType, specialReason, notes);
 
         VacationRequest vacation = VacationRequest.builder()
                 .user(user)
                 .startDate(startDate)
                 .endDate(endDate)
                 .vacationType(vacationType)
+                .specialReason(vacationType == VacationType.SPECIAL ? specialReason.trim() : null)
                 .hours(calculateWorkingDays(startDate, endDate))
                 .status(VacationStatus.DRAFT)
                 .notes(notes)
@@ -64,12 +73,18 @@ public class VacationService {
 
     public VacationRequestDTO updateVacationRequest(Long vacationId, LocalDate startDate, LocalDate endDate,
                                                    VacationType vacationType, String notes, Long userId) {
+        return updateVacationRequest(vacationId, startDate, endDate, vacationType, notes, null, userId);
+    }
+
+    public VacationRequestDTO updateVacationRequest(Long vacationId, LocalDate startDate, LocalDate endDate,
+                                                   VacationType vacationType, String notes, String specialReason, Long userId) {
         VacationRequest vacation = vacationRequestRepository.findById(vacationId)
                 .orElseThrow(() -> new IllegalArgumentException("Vacation request not found"));
 
         if (startDate.isAfter(endDate)) {
             throw new IllegalArgumentException("Start date cannot be after end date");
         }
+        validateSpecialReason(vacationType, specialReason, notes);
 
         if (!vacation.getUser().getId().equals(userId)) {
             throw new IllegalArgumentException("User cannot edit another user's vacation request");
@@ -82,6 +97,8 @@ public class VacationService {
         vacation.setStartDate(startDate);
         vacation.setEndDate(endDate);
         vacation.setVacationType(vacationType);
+        vacation.setSpecialReason(vacationType == VacationType.SPECIAL ? specialReason.trim() : null);
+        vacation.setAccountingType(null);
         vacation.setHours(calculateWorkingDays(startDate, endDate));
         vacation.setNotes(notes);
         vacation.setStatus(VacationStatus.DRAFT);
@@ -147,6 +164,11 @@ public class VacationService {
     }
 
     public VacationRequestDTO approveVacationRequest(Long vacationId, Long approvingUserId) {
+        return approveVacationRequest(vacationId, approvingUserId, null);
+    }
+
+    public VacationRequestDTO approveVacationRequest(Long vacationId, Long approvingUserId,
+                                                     LeaveAccountingType requestedAccounting) {
         User approvingUser = userRepository.findById(approvingUserId)
                 .orElseThrow(() -> new IllegalArgumentException("Approving user not found"));
 
@@ -159,6 +181,9 @@ public class VacationService {
         }
 
         userRepository.findForUpdate(vacation.getUser().getId()).orElseThrow();
+        var accounting = accountingForApproval(vacation, requestedAccounting);
+        leaveBalanceService.validateApproval(vacation, accounting);
+        vacation.setAccountingType(accounting);
         vacation.setStatus(VacationStatus.APPROVED);
         vacation.setApprovedAt(java.time.LocalDateTime.now());
         vacation.setApprovedBy(approvingUser);
@@ -258,6 +283,26 @@ public class VacationService {
         }
 
         return new BigDecimal(workingDays * 8); // 8 hours per day
+    }
+
+    private void validateSpecialReason(VacationType type, String reason, String notes) {
+        if (type == VacationType.SPECIAL && (reason == null || reason.isBlank() || reason.trim().length() > 120))
+            throw new IllegalArgumentException("Choose a special leave reason");
+        if (type == VacationType.SPECIAL && "Other".equalsIgnoreCase(reason) && (notes == null || notes.isBlank()))
+            throw new IllegalArgumentException("Describe the special leave reason in Notes");
+    }
+
+    private LeaveAccountingType accountingForApproval(VacationRequest request, LeaveAccountingType selected) {
+        return switch (request.getVacationType()) {
+            case VACATION -> LeaveAccountingType.VACATION;
+            case SICK -> LeaveAccountingType.SICK;
+            case BEREAVEMENT -> LeaveAccountingType.BEREAVEMENT;
+            case UNPAID_LEAVE -> LeaveAccountingType.UNPAID;
+            default -> {
+                if (selected == null) throw new IllegalArgumentException("Choose how this special leave is counted before approval");
+                yield selected;
+            }
+        };
     }
 
     private void zeroApprovedVacationHours(VacationRequest vacation) {
@@ -371,6 +416,8 @@ public class VacationService {
                 .startDate(vacation.getStartDate())
                 .endDate(vacation.getEndDate())
                 .vacationType(vacation.getVacationType())
+                .specialReason(vacation.getSpecialReason())
+                .accountingType(vacation.getAccountingType())
                 .hours(vacation.getHours())
                 .status(vacation.getStatus())
                 .notes(vacation.getNotes())

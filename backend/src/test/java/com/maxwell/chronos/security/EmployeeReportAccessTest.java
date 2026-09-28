@@ -26,12 +26,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class EmployeeReportAccessTest {
     @Autowired MockMvc mvc;
     @MockitoBean JwtDecoder decoder;
+    @MockitoBean com.maxwell.chronos.service.AuthSessionService sessions;
     @MockitoBean UserRepository users;
     @MockitoBean JdbcTemplate db;
     @MockitoBean com.maxwell.chronos.service.EmailAlertService emailAlerts;
     User user;
     String id = UUID.randomUUID().toString();
     @BeforeEach void setup() {
+        when(sessions.valid(nullable(String.class), anyLong())).thenReturn(true);
         user = User.builder().id(7L).email("employee@example.com").role(UserRole.EMPLOYEE)
             .isActive(true).entraId("subject").passwordHash("hash").build();
         when(users.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
@@ -53,7 +55,7 @@ class EmployeeReportAccessTest {
     @Test void unauthenticatedAndInactiveAccountsAreDenied() throws Exception {
         mvc.perform(get("/employee-reports")).andExpect(status().isUnauthorized());
         user.setIsActive(false);
-        mvc.perform(get("/employee-reports").with(token())).andExpect(status().isForbidden());
+        mvc.perform(get("/employee-reports").with(token())).andExpect(status().isUnauthorized());
         verifyNoInteractions(db);
     }
     @Test void systemAdminCanListWithNoStore() throws Exception {

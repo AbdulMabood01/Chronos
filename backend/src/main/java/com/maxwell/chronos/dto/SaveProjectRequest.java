@@ -20,6 +20,7 @@ public class SaveProjectRequest {
     private Boolean isActive;
     private ProjectStatus status;
     private BigDecimal totalAllocatedHours;
+    private BigDecimal expenseBudget;
     private Long projectManagerId;
     private Long projectManagerHoursApproverId;
     private LocalDate projectManagerStartDate;

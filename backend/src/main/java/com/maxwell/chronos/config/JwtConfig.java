@@ -10,6 +10,7 @@ import javax.crypto.spec.SecretKeySpec;
 import java.util.Base64;
 @Configuration
 public class JwtConfig {
+    @Bean public java.time.Clock securityClock() { return java.time.Clock.systemUTC(); }
     @Bean public PasswordEncoder passwordEncoder() { return new BCryptPasswordEncoder(12); }
     @Bean public SecretKey jwtKey(@Value("${chronos.jwtSigningKey}") String value) {
         byte[] bytes=Base64.getDecoder().decode(value);

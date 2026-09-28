@@ -14,5 +14,6 @@ public enum VacationType {
     FAMILY_CARE,
     RELIGIOUS,
     UNPAID_LEAVE,
+    SPECIAL,
     OTHER
 }

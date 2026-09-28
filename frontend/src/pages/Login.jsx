@@ -6,7 +6,7 @@ import '../styles.css';
 import './Login.css';
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, sessionExpired } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState('');
@@ -23,7 +23,8 @@ export default function Login() {
       await login(email, password);
       navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.status === 429 ? 'Too many attempts. Please wait a minute.' : 'Login failed. Check your email and password.');
+      setError(err.response?.status === 401 || err.response?.status === 429
+        ? 'Unable to sign in. Check your credentials or try again later.' : err.userMessage || 'Unable to sign in. Check your credentials or try again later.');
     } finally {
       setLoading(false);
     }
@@ -48,6 +49,7 @@ export default function Login() {
         <BrandLogo /><span className="eyebrow">WELCOME TO CHRONOS</span><h1>Make yourself at home.</h1><p className="signin-subtitle">Sign in to your employee workspace.</p>
 
         {location.state?.passwordChanged && <p role="status" className="inline-alert">Password changed. Sign in with your new password.</p>}
+        {sessionExpired && <p role="alert" className="inline-alert">Your session has expired. Please sign in again.</p>}
         <form onSubmit={handleLogin}>
           <div className="form-group">
             <label htmlFor="email">Work email</label>
@@ -62,11 +64,11 @@ export default function Login() {
           </button>
         </form>
 
-        <p className="login-note"><Link to="/forgot-password">Forgot password?</Link></p>
+        <div className="login-account-actions">
+          <Link className="account-link" to="/forgot-password">Forgot password?</Link>
+          <Link className="button button-outline" to="/register">Register as an employee</Link>
+        </div>
         {error && <p className="error-message" role="alert">{error}</p>}
-        <p className="login-note">
-          New employees: use the invitation email from your administrator to activate your account.
-        </p>
       </div>
     </div></div>
   );

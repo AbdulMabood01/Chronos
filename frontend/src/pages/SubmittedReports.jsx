@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { employeeReportsAPI } from '../api';
 import { categories, ReportProgress } from './EmployeeReports';
+import Icon from '../components/Icon';
 
 const label = value => value.replaceAll('_', ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 const date = value => value ? new Date(value).toLocaleString() : '—';
@@ -13,6 +14,9 @@ export default function SubmittedReports({ SubmissionForm }) {
   const [selected, setSelected] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [view, setView] = useState('submitted');
+  const [latestReportId, setLatestReportId] = useState('');
+  const [formVersion, setFormVersion] = useState(0);
   const heading = useRef(null);
   const returnId = useRef(null);
   useEffect(() => {
@@ -40,11 +44,21 @@ export default function SubmittedReports({ SubmissionForm }) {
   }, [selectedId, loading]);
   return <>
     <div hidden={!!selectedId}>
-      <SubmissionForm onSubmitted={() => { setPage(0); setRefresh(v => v + 1); }} />
-      <section className="concern-card" aria-label="Submitted Reports">
-        <div className="concern-heading"><div><h2>Submitted Reports</h2><p className="concern-help">Your identified reports · Automatically refreshes every 15 seconds</p></div><button disabled={loading} onClick={() => setRefresh(v => v + 1)}>Refresh reports</button></div>
+      <nav className="concern-view-switch" aria-label="Report views">
+        <button type="button" className={view === 'submitted' ? 'is-active' : ''} aria-current={view === 'submitted' ? 'page' : undefined} onClick={() => setView('submitted')}>Submitted reports</button>
+        <button type="button" className={view === 'create' ? 'is-active' : ''} aria-current={view === 'create' ? 'page' : undefined} onClick={() => setView('create')}>Create report</button>
+      </nav>
+      <div hidden={view !== 'create'} className="report-compose-layout"><SubmissionForm key={formVersion} onSubmitted={(receipt, anonymous) => { setPage(0); setRefresh(v => v + 1); if (anonymous) { setLatestReportId(''); } else { setLatestReportId(receipt.reportId); setFormVersion(v => v + 1); setView('submitted'); } }} />
+        <aside className="report-compose-aside"><span className="report-kicker">BEFORE YOU BEGIN</span><h2>A clear account helps HR respond</h2><p>Describe what happened in your own words. Include dates, people, and supporting files when you have them.</p><div><Icon name="check" size={18}/><span>Only authorized HR Admins can review submissions.</span></div><div><Icon name="file" size={18}/><span>You can follow identified reports from this page.</span></div><div><Icon name="users" size={18}/><span>Anonymous reports cannot be linked to your account.</span></div></aside>
+      </div>
+      <section className="concern-card report-list-panel" hidden={view !== 'submitted'} aria-label="Submitted Reports">
+        <div className="concern-heading"><div><span className="report-kicker">YOUR CASES</span><h2>Submitted Reports</h2><p className="concern-help">Identified reports are kept here so you can follow their progress.</p></div><button disabled={loading} onClick={() => setRefresh(v => v + 1)}><Icon name="clock" size={16}/> Refresh reports</button></div>
+        {latestReportId && <div className="concern-submission-notice" role="status">Report submitted. Save your Report ID for reference: <strong className="report-reference">{latestReportId}</strong></div>}
         {!selectedId && error && <p role="alert" className="concern-error">{error}</p>}
-        {loading && !selectedId ? <p role="status">Loading reports…</p> : !rows.length ? <p>{error ? 'Reports could not be loaded. Please refresh to retry.' : 'No submitted reports yet.'}</p> : <div className="concern-table"><table><thead><tr><th>Report</th><th>Submitted</th><th>Status</th><th>Last updated</th><th>Actions</th></tr></thead><tbody>{rows.map(row => <tr key={row.id}><td><strong>{row.subject}</strong><small>{categories[row.category]}</small><code className="concern-id">{row.id}</code></td><td>{date(row.submitted_at)}</td><td><span className="concern-status">{label(row.status)}</span></td><td>{date(row.updated_at || row.submitted_at)}</td><td className="concern-actions"><button id={'view-report-' + row.id} aria-label={'View ' + row.subject} onClick={() => { returnId.current = row.id; setSelected(null); setSelectedId(row.id); }}>View</button></td></tr>)}</tbody></table></div>}
+        {loading && !selectedId ? <p role="status">Loading reports…</p> : !rows.length ? <div className="report-empty"><Icon name="file" size={28}/><h3>{error ? 'Reports could not be loaded.' : 'No submitted reports yet.'}</h3><p>{error ? 'Use Refresh reports to try again.' : 'Reports submitted with your name will appear here. You can start one whenever you are ready.'}</p>{!error && <button className="button button-primary" onClick={() => setView('create')}>Create a report <Icon name="arrow" size={16}/></button>}</div> : <div className="report-case-list">{rows.map(row => <article className="report-case" key={row.id}>
+          <div className="report-case-main"><div className="report-case-top"><span className="report-category">{categories[row.category]}</span><span className={`concern-status report-status-${String(row.status).toLowerCase()}`}>{label(row.status)}</span></div><h3>{row.subject}</h3><div className="report-case-meta"><span>Submitted {date(row.submitted_at)}</span><span>Updated {date(row.updated_at || row.submitted_at)}</span></div><code className="concern-id">{row.id}</code></div>
+          <button className="report-case-action" id={'view-report-' + row.id} aria-label={'View ' + row.subject} onClick={() => { returnId.current = row.id; setSelected(null); setSelectedId(row.id); }}>View report <Icon name="arrow" size={16}/></button>
+        </article>)}</div>}
         <div className="concern-pagination"><button disabled={!page || loading} onClick={() => setPage(p => p - 1)}>Previous</button><span>Page {page + 1}</span><button disabled={rows.length < 50 || loading} onClick={() => setPage(p => p + 1)}>Next</button></div>
       </section>
     </div>

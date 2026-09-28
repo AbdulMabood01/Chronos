@@ -20,6 +20,7 @@ class LeaveBalanceServiceTest {
     @Mock VacationRequestRepository requests;
     @Mock UserRepository users;
     @Mock AuditService audit;
+    @Mock LeavePolicyYearRepository policies;
     @InjectMocks LeaveBalanceService service;
     User employee = User.builder().id(1L).role(UserRole.EMPLOYEE).build();
     User admin = User.builder().id(2L).role(UserRole.ADMIN).build();
@@ -84,5 +85,51 @@ class LeaveBalanceServiceTest {
         assertEquals(BigDecimal.ZERO, balance.bereavement().usedDays());
         assertEquals(BigDecimal.ZERO, balance.vacation().usedDays());
         assertEquals(balance, service.getBalance(1L, 2026, employee));
+    }
+
+    @Test void specialLeaveDoesNotConsumeQuotaUnlessReviewerChoosesABalance() {
+        var special = request("2026-09-07", "2026-09-08", VacationType.SPECIAL, VacationStatus.APPROVED);
+        special.setAccountingType(LeaveAccountingType.PAID_NO_QUOTA);
+        stubRequests(special);
+        assertEquals(BigDecimal.ZERO, service.getBalance(1L, 2026, employee).vacation().usedDays());
+        special.setAccountingType(LeaveAccountingType.VACATION);
+        assertEquals(BigDecimal.valueOf(2), service.getBalance(1L, 2026, employee).vacation().usedDays());
+    }
+
+    @Test void approvalChecksTheCurrentAllowanceAndKeepsExtraGrantPolicyManaged() {
+        var policy = new LeavePolicyYear(); policy.setYear(2026);
+        policy.setVacationDays(BigDecimal.valueOf(2)); policy.setSickDays(BigDecimal.valueOf(5));
+        policy.setBereavementDays(BigDecimal.ONE);
+        var allowance = new LeaveAllowance(); allowance.setId(3L); allowance.setSource("POLICY");
+        allowance.setVacationDays(BigDecimal.valueOf(2));
+        when(allowances.findByUserIdAndYear(1L, 2026)).thenReturn(Optional.of(allowance));
+        when(policies.findById(2026)).thenReturn(Optional.of(policy));
+        stubRequests();
+        var request = request("2026-09-07", "2026-09-09", VacationType.VACATION, VacationStatus.SUBMITTED);
+        assertThrows(IllegalArgumentException.class, () -> service.validateApproval(request, LeaveAccountingType.VACATION));
+        assertDoesNotThrow(() -> service.validateApproval(request, LeaveAccountingType.PAID_NO_QUOTA));
+        when(users.findForUpdate(1L)).thenReturn(Optional.of(employee));
+        service.update(1L, new LeaveAllowanceRequest(2026, BigDecimal.valueOf(2), BigDecimal.valueOf(5),
+                BigDecimal.valueOf(2), BigDecimal.ZERO, "Extra grant", BigDecimal.ONE), admin);
+        assertEquals("POLICY", allowance.getSource());
+        assertEquals(BigDecimal.valueOf(2), allowance.getExtraVacationDays());
+        assertDoesNotThrow(() -> service.validateApproval(request, LeaveAccountingType.VACATION));
+    }
+
+    @Test void publishedYearPolicyAssignsAnEligibleEmployeeOnFirstBalanceRead() {
+        var policy = new LeavePolicyYear(); policy.setYear(2026);
+        policy.setVacationDays(BigDecimal.valueOf(15)); policy.setSickDays(BigDecimal.valueOf(5));
+        policy.setBereavementDays(BigDecimal.valueOf(3));
+        when(policies.findById(2026)).thenReturn(Optional.of(policy));
+        when(users.findById(1L)).thenReturn(Optional.of(employee));
+        when(allowances.save(any(LeaveAllowance.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubRequests();
+
+        var balance = service.getBalance(1L, 2026, employee);
+        assertTrue(balance.configured());
+        assertEquals("POLICY", balance.source());
+        assertEquals(BigDecimal.valueOf(15), balance.vacation().remainingDays());
+        verify(allowances).save(argThat(value -> value.getUserId().equals(1L)
+                && "POLICY".equals(value.getSource()) && value.getYear() == 2026));
     }
 }

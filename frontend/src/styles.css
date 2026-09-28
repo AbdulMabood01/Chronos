@@ -3627,3 +3627,5 @@ body.theme-dark .gross-pay-tile strong {
 .highlighted-workspace .report-panel .form-group:nth-child(4) { --cell-accent: #bf861f; }
 .highlighted-workspace .timesheet-filter-row select { border: 1px solid #518eae; border-left: 4px solid #518eae; background: color-mix(in srgb, #518eae 9%, var(--surface-color)); min-height: 46px; }
 .highlighted-workspace .timesheet-filter-row #timesheet-project-select { border-color: #278569; background: color-mix(in srgb, #278569 9%, var(--surface-color)); }
+.connection-banner { position: fixed; z-index: 1100; top: 0; left: 0; right: 0; padding: .8rem 1rem; text-align: center; color: #fff; background: #8b3434; box-shadow: 0 2px 12px #0003; }
+.connection-restored { background: #21664e; }

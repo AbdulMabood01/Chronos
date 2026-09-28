@@ -13,8 +13,11 @@ import java.io.IOException;
 /** Recheck account status even when the caller still has an unexpired JWT. */
 public class ActiveUserFilter extends OncePerRequestFilter {
     private final UserRepository users;
+    private final com.maxwell.chronos.service.AuthSessionService sessions;
 
-    public ActiveUserFilter(UserRepository users) { this.users = users; }
+    public ActiveUserFilter(UserRepository users, com.maxwell.chronos.service.AuthSessionService sessions) {
+        this.users = users; this.sessions = sessions;
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
@@ -30,9 +33,10 @@ public class ActiveUserFilter extends OncePerRequestFilter {
             }
             if (email == null || auth.getToken().getSubject() == null
                     || user == null
-                    || (user != null && (!"ACTIVE".equals(user.getAccountStatus())
-                        || !auth.getToken().getSubject().equals(user.getEntraId())))) {
-                response.sendError(403, "Account is inactive or unavailable");
+                    || (user != null && (!"ACTIVE".equals(user.getAccountStatus()) || user.isAdminLocked()
+                        || !auth.getToken().getSubject().equals(user.getEntraId())
+                        || !sessions.valid(auth.getToken().getId(), user.getId())))) {
+                response.sendError(401, "Your session has expired. Please sign in again.");
                 return;
             }
         }

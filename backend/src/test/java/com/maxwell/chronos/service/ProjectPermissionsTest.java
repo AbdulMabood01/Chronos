@@ -25,6 +25,7 @@ class ProjectPermissionsTest {
     @Mock UserRepository users;
     @Mock AuditService audit;
     @Mock NotificationService notifications;
+    @Mock org.springframework.jdbc.core.JdbcTemplate jdbc;
     @InjectMocks ProjectService service;
     User systemAdmin = User.builder().id(1L).role(UserRole.ADMIN).build();
     User admin = User.builder().id(2L).role(UserRole.PROJECT_ADMIN).isActive(true).build();
@@ -87,10 +88,53 @@ class ProjectPermissionsTest {
         var result = service.saveProject(null, request, admin);
         assertEquals(3L, result.getProjectManagerId());
         assertEquals(4L, result.getProjectManagerHoursApproverId());
+        assertEquals(ProjectStatus.DRAFT, result.getStatus());
         assertEquals(UserRole.EMPLOYEE, manager.getRole());
         assertEquals(UserRole.EMPLOYEE, approver.getRole());
         verify(users, never()).save(any());
         verify(assignments, never()).save(any());
+    }
+
+    @Test void projectAdminCanCreateIncompleteDraftButCannotCreateActiveProject() {
+        var draft = SaveProjectRequest.builder().code("DRAFT").name("Draft project").build();
+        when(projects.save(any())).thenAnswer(call -> { Project p = call.getArgument(0); p.setId(30L); return p; });
+        assertEquals(ProjectStatus.DRAFT, service.saveProject(null, draft, admin).getStatus());
+        verify(assignments, never()).save(any());
+
+        draft.setStatus(ProjectStatus.ACTIVE);
+        assertThrows(IllegalArgumentException.class, () -> service.saveProject(null, draft, admin));
+    }
+
+    @Test void activatingDraftRequiresRoutingAndAnAssignedTeamMember() {
+        var project = Project.builder().id(30L).code("DRAFT").name("Draft project")
+                .status(ProjectStatus.DRAFT).isActive(false).build();
+        when(projects.findById(30L)).thenReturn(Optional.of(project));
+        var request = SaveProjectRequest.builder().code("DRAFT").name("Draft project")
+                .status(ProjectStatus.ACTIVE).build();
+        assertThrows(IllegalArgumentException.class, () -> service.saveProject(30L, request, admin));
+
+        request.setProjectManagerId(3L);
+        request.setProjectManagerHoursApproverId(4L);
+        when(assignments.findByProjectIdAndIsActiveTrue(30L)).thenReturn(List.of());
+        assertThrows(IllegalArgumentException.class, () -> service.saveProject(30L, request, admin));
+
+        when(assignments.findByProjectIdAndIsActiveTrue(30L)).thenReturn(List.of(ProjectAssignment.builder().isActive(true).build()));
+        when(users.findById(3L)).thenReturn(Optional.of(manager));
+        when(users.findById(4L)).thenReturn(Optional.of(approver));
+        when(projects.save(any())).thenAnswer(call -> call.getArgument(0));
+        assertEquals(ProjectStatus.ACTIVE, service.saveProject(30L, request, admin).getStatus());
+    }
+
+    @Test void projectAdminCanSetExpenseBudgetAndRecordsInitialValue() {
+        var request = new SaveProjectRequest();
+        request.setCode("EXP"); request.setName("Expenses");
+        request.setProjectManagerId(3L); request.setProjectManagerHoursApproverId(4L);
+        request.setExpenseBudget(new BigDecimal("250.00"));
+        when(users.findById(3L)).thenReturn(Optional.of(manager));
+        when(users.findById(4L)).thenReturn(Optional.of(approver));
+        when(projects.save(any())).thenAnswer(call -> { Project p = call.getArgument(0); p.setId(20L); return p; });
+        assertEquals(new BigDecimal("250.00"), service.saveProject(null,request,admin).getExpenseBudget());
+        verify(jdbc).update(startsWith("INSERT INTO project_expense_budget_history"),eq(20L),eq(2L),isNull(),eq(new BigDecimal("250.00")));
     }
 
     @Test void adminCanUseProjectManagerAsPmHoursApprover() {

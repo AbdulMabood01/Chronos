@@ -45,6 +45,22 @@ class PasswordServiceTest {
         assertNull(user.getPasswordResetHash());
         assertThrows(IllegalArgumentException.class, () -> service.reset(token, OLD, OLD));
     }
+    @Test void resetClearsTemporaryLoginLockButKeepsAdminLock() {
+        String token = issue();
+        user.setFailedLoginCount(4);
+        user.setLastFailedAttempt(Instant.now());
+        user.setLockedUntil(Instant.now().plusSeconds(900));
+        user.setLockedAt(Instant.now());
+        user.setAdminLocked(true);
+
+        service.reset(token, NEXT, NEXT);
+
+        assertEquals(0, user.getFailedLoginCount());
+        assertNull(user.getLastFailedAttempt());
+        assertNull(user.getLockedUntil());
+        assertNull(user.getLockedAt());
+        assertTrue(user.isAdminLocked());
+    }
     @Test void expiredMalformedAndInactiveLinksAreRejected() {
         assertThrows(IllegalArgumentException.class, () -> service.validate("bad"));
         String token = issue();

@@ -2,6 +2,7 @@ package com.maxwell.chronos.dto;
 
 import com.maxwell.chronos.enums.VacationStatus;
 import com.maxwell.chronos.enums.VacationType;
+import com.maxwell.chronos.enums.LeaveAccountingType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -22,6 +23,8 @@ public class VacationRequestDTO {
     private LocalDate startDate;
     private LocalDate endDate;
     private VacationType vacationType;
+    private String specialReason;
+    private LeaveAccountingType accountingType;
     private BigDecimal hours;
     private VacationStatus status;
     private String notes;

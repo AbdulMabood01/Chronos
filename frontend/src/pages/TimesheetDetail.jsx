@@ -6,6 +6,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { timesheetAPI, reportsAPI, projectAPI } from '../api';
+import { hasActiveAssignment } from '../utils/projectAssignments';
 import {
   addMonths,
   endOfMonth,
@@ -119,6 +120,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
   const [rejectReason, setRejectReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [assignedProjects, setAssignedProjects] = useState([]);
+  const [assignmentsLoaded, setAssignmentsLoaded] = useState(false);
   const favoritesKey = 'chronos:project-favorites:' + user?.id;
   const [favorites, setFavorites] = useState([]);
   useEffect(() => {
@@ -270,8 +272,9 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
       try {
         const response = await projectAPI.getAssignedProjects(selectedPeriod.year, selectedPeriod.month);
         setAssignedProjects(response.data || []);
+        setAssignmentsLoaded(true);
       } catch (err) {
-        setAssignedProjects([]);
+        setError(err.userMessage || 'Unable to load assigned projects. Please try again.');
       }
     };
 
@@ -316,6 +319,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
     if (isOwner) assignedProjects.forEach(project => projects.set(String(project.id), project));
     return Array.from(projects.values()).sort((a, b) => Number(favorites.includes(String(b.id))) - Number(favorites.includes(String(a.id))) || String(a.code).localeCompare(String(b.code)));
   }, [assignedProjects, isOwner, timesheetProjectOptions, favorites]);
+  const hasCurrentProject = assignedProjects.some(project => hasActiveAssignment(project, user?.id, format(new Date(), 'yyyy-MM-dd')));
   const selectedProject = projectOptions.find((project) => String(project.id) === String(selectedProjectId));
   const selectedAssignment = (selectedProject?.assignments || []).find((assignment) => String(assignment.userId) === String(timesheet?.userId));
   const isOffboarded = selectedAssignment?.isActive === false;
@@ -439,6 +443,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
   const getDayClassName = (day) => {
     const classes = ['calendar-day'];
     if (isWeekend(day.date)) classes.push('calendar-day-weekend');
+    if (Number(day.hours) > 0) classes.push('calendar-day-logged');
     if (day.vacationDay) classes.push(`calendar-day-status-${day.vacationDay.status.toLowerCase()}`);
     if (day.isApprovedVacation) classes.push('calendar-day-vacation');
     return classes.join(' ');
@@ -678,13 +683,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
       const projectCode = (selectedProject?.code || 'project').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
       downloadBlob(response.data, `${safeName},${projectCode},${format(new Date(timesheet.year, timesheet.month - 1, 1), 'MMMM')},${timesheet.year}.pdf`);
     } catch (err) {
-      let message = err.response?.data?.message;
-      if (err.response?.data instanceof Blob) {
-        try {
-          message = JSON.parse(await err.response.data.text()).message;
-        } catch { /* A proxy may return an HTML error instead of JSON. */ }
-      }
-      setError(message || 'Failed to export timesheet. Please try again.');
+      setError(err.userMessage || 'Failed to export timesheet. Please try again.');
     }
   };
 
@@ -708,12 +707,14 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
   const leadingBlanks = days.length > 0 ? getDay(days[0].date) : 0;
 
   return (
-    <div className={`page-container highlighted-workspace timesheet-page${isReviewView ? ' timesheet-review' : ''}`}>
-      <div className="header-bar timesheet-page-header">
+    <div className={`page-container timesheet-page${isReviewView ? ' timesheet-review' : ''}`}>
+      <div className="header-bar accent-page-header timesheet-page-header">
         <div>
-          {isReviewView ? <div><span className="eyebrow">TIMESHEET REVIEW</span><h1>{timesheet.userName || "Timesheet"}</h1></div> : <ScreenTitle title="Timesheet" icon="clock" eyebrow="TIME & ATTENDANCE" />}
+          <ScreenTitle title={isReviewView ? 'Timesheet Review' : 'Timesheet'} icon="clock" eyebrow="TIME & ATTENDANCE" />
           <p className="page-subtitle">
-            {selectedProject ? `${selectedProject.code} - ${selectedProject.name || 'Project'}` : format(new Date(timesheet.year, timesheet.month - 1, 1), 'MMMM yyyy')}
+            {isReviewView
+              ? `Review ${timesheet.userName || 'employee'}'s recorded hours and submission.`
+              : 'Record hours and manage your monthly submissions.'}
           </p>
         </div>
         {!openCurrentMonth && <button className="button button-secondary" onClick={() => navigate(-1)}>Back</button>}
@@ -763,9 +764,11 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
 
       {isOwner && isFutureMonth && <p className="login-note" role="status">This month is read-only. You can enter hours when this month begins.</p>}
       {isOwner && membershipNotice && <div className={`offboarding-notice notice-${membershipLabel.toLowerCase().replaceAll(" ", "-")}`} role="status" aria-live="polite"><span className="offboarding-notice-label">{selectedProject?.name || selectedProject?.code} - {membershipLabel}</span><strong>{membershipNotice}</strong><p>{projectOnHold ? "Hour entry is paused while this project is on hold. Your timesheet history remains available to view." : isOffboarded || projectEnded ? "Your timesheet history is available below for reference. You can no longer enter or change hours for this project." : "Your assignment dates have ended. Hours can only be recorded within your assigned dates and the permitted timesheet period."}</p></div>}
-      {isOwner && projectOptions.length === 0 ? (
+      {isOwner && assignmentsLoaded && !hasCurrentProject && projectOptions.length > 0 && openCurrentMonth && <div className="empty-state" role="status"><h2>No projects assigned</h2><p>You aren't currently assigned to any active projects. Contact your Project Admin if you believe this is incorrect.</p></div>}
+      {isOwner && assignmentsLoaded && projectOptions.length === 0 ? (
         <div className="empty-state">
-          <p>No project has been assigned to you yet.</p>
+          <h2>No projects assigned</h2>
+          <p>You aren't currently assigned to any active projects. Contact your Project Admin if you believe this is incorrect.</p>
         </div>
       ) : (
         <>

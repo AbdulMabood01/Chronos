@@ -23,6 +23,12 @@ public class SettingsController {
         return user != null && user.isAdmin();
     }
 
+    @GetMapping("/leave-defaults/preview")
+    public SystemSettingsService.LeaveDefaultsPreview previewLeaveDefaults(@RequestParam int year, @AuthenticationPrincipal Jwt jwt) {
+        return systemSettingsService.previewLeaveDefaults(year,
+                userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username")));
+    }
+
     @PostMapping("/leave-defaults/apply")
     public java.util.Map<String, Integer> applyLeaveDefaults(
             @jakarta.validation.Valid @RequestBody com.maxwell.chronos.dto.ApplyLeaveDefaultsRequest input,
@@ -31,7 +37,8 @@ public class SettingsController {
         if (!canManageSettings(user)) {
             throw new org.springframework.security.access.AccessDeniedException("Only Admin can manage settings");
         }
-        return java.util.Map.of("updated", systemSettingsService.applyLeaveDefaults(input.year(), input.confirmed(), user));
+        return java.util.Map.of("updated", systemSettingsService.applyLeaveDefaults(input.year(), input.confirmed(), user,
+                input.expectedVacationDays(), input.expectedSickDays(), input.expectedBereavementDays()));
     }
 
     @GetMapping

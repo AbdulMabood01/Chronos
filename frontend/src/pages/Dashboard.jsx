@@ -35,7 +35,7 @@ export default function Dashboard() {
       } : {
         projects: () => projectAPI.getAssignedProjects(),
         sheets: () => timesheetAPI.getMyTimesheets(),
-        balance: () => userAPI.getLeaveBalance(user.id, now.getFullYear()),
+        balance: () => userAPI.getMyLeaveBalance(now.getFullYear()),
       }),
       ...(reviewer && !systemAdmin ? { approvals: () => timesheetAPI.getPendingProjectSubmissions() } : {}),
       ...(systemAdmin ? {

@@ -15,7 +15,7 @@ class VacationConflictTest {
         var vacations = mock(VacationRequestRepository.class);
         var service = new VacationService(vacations, mock(UserRepository.class), mock(TimesheetRepository.class),
                 mock(TimesheetProjectSubmissionRepository.class), mock(ProjectAssignmentRepository.class),
-                mock(AuditService.class), mock(NotificationService.class));
+                mock(AuditService.class), mock(NotificationService.class), mock(LeaveBalanceService.class));
         var user = User.builder().id(1L).role(UserRole.ADMIN).build();
         var vacation = VacationRequest.builder().id(3L).user(user).status(VacationStatus.DRAFT).build();
         when(vacations.findById(3L)).thenReturn(Optional.of(vacation));
@@ -28,7 +28,7 @@ class VacationConflictTest {
         var vacations = mock(VacationRequestRepository.class);
         var assignments = mock(ProjectAssignmentRepository.class);
         var service = new VacationService(vacations, mock(UserRepository.class), mock(TimesheetRepository.class),
-                mock(TimesheetProjectSubmissionRepository.class), assignments, mock(AuditService.class), mock(NotificationService.class));
+                mock(TimesheetProjectSubmissionRepository.class), assignments, mock(AuditService.class), mock(NotificationService.class), mock(LeaveBalanceService.class));
         var employee = User.builder().id(1L).role(UserRole.EMPLOYEE).build();
         var manager = User.builder().id(2L).role(UserRole.EMPLOYEE).isActive(true).build();
         var project = Project.builder().id(4L).projectManager(manager).build();
@@ -47,12 +47,12 @@ class VacationConflictTest {
         var sheets = mock(TimesheetRepository.class);
         var submissions = mock(TimesheetProjectSubmissionRepository.class);
         var service = new VacationService(vacations, users, sheets, submissions, mock(ProjectAssignmentRepository.class),
-                mock(AuditService.class), mock(NotificationService.class));
+                mock(AuditService.class), mock(NotificationService.class), mock(LeaveBalanceService.class));
         var employee = User.builder().id(1L).build();
         var admin = User.builder().id(2L).role(UserRole.ADMIN).build();
         var date = LocalDate.of(2026,9,10);
         var vacation = VacationRequest.builder().id(3L).user(employee).startDate(date).endDate(date)
-                .status(VacationStatus.SUBMITTED).build();
+                .vacationType(VacationType.VACATION).status(VacationStatus.SUBMITTED).build();
         var project = Project.builder().id(4L).build();
         var sheet = Timesheet.builder().id(5L).user(employee).status(TimesheetStatus.APPROVED).build();
         var entry = TimeEntry.builder().id(6L).project(project).entryDate(date).hours(BigDecimal.TEN).build();

@@ -22,6 +22,7 @@ public class ProjectDTO {
     private Boolean isActive;
     private ProjectStatus status;
     private BigDecimal totalAllocatedHours;
+    private BigDecimal expenseBudget;
     private Long projectManagerId;
     private String projectManagerName;
     private Long projectManagerHoursApproverId;

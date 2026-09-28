@@ -5,7 +5,8 @@ import ScreenTitle from '../components/ScreenTitle';
 import Icon from '../components/Icon';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { format, startOfMonth, subMonths } from 'date-fns';
-import { projectAPI, userAPI } from '../api';
+import { projectAPI, userAPI, expenseAPI } from '../api';
+import { ProjectExpenseHistory } from './Expenses';
 import { useAuth } from '../AuthContext';
 import { LoadingIndicator } from '../components/Hourglass';
 import '../styles.css';
@@ -16,6 +17,7 @@ const projectTabs = [
   { id: 'overview', label: 'Overview', icon: 'grid' },
   { id: 'team', label: 'Team', icon: 'users' },
   { id: 'hours', label: 'Hours', icon: 'clock' },
+  { id: 'expenses', label: 'Expenses', icon: 'file' },
   { id: 'settings', label: 'Project Details', icon: 'settings' },
 ];
 
@@ -23,10 +25,10 @@ const emptyForm = {
   code: '',
   name: '',
   description: '',
-  status: 'ACTIVE',
+  status: 'DRAFT',
   projectManagerId: '',
   projectManagerHoursApproverId: '',
-  isActive: true,
+  isActive: false,
 };
 
 function monthOptions() {
@@ -46,6 +48,20 @@ function hours(value) {
   return Number(value || 0).toFixed(2);
 }
 
+function money(value) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
+}
+
+function chartHours(value) {
+  return Number(value || 0) >= 10000
+    ? new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(Number(value))
+    : hours(value);
+}
+
+function chartMoney(value) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 }).format(Number(value || 0));
+}
+
 function percent(value, total) {
   if (!total) return 0;
   return Math.max(0, Math.min(100, (Number(value || 0) / total) * 100));
@@ -53,6 +69,12 @@ function percent(value, total) {
 
 function dateText(value) {
   return value ? format(new Date(`${value}T00:00:00`), 'MMM dd, yyyy') : '-';
+}
+
+function dateTimeText(value) {
+  if (!value) return 'Not available';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'Not available' : format(date, 'MMM d, yyyy');
 }
 
 function labelize(value) {
@@ -111,6 +133,15 @@ export default function ProjectManagement() {
   const [plannedHourDrafts, setPlannedHourDrafts] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [savingProject, setSavingProject] = useState(false);
+  const [budgetDraft, setBudgetDraft] = useState('');
+  const [budgetError, setBudgetError] = useState('');
+  const [savingBudget, setSavingBudget] = useState(false);
+  const [codeEdited, setCodeEdited] = useState(false);
+  const originalForm = useRef(JSON.stringify(emptyForm));
+  const [expenseTotals, setExpenseTotals] = useState(null);
   const favoritesKey = 'chronos:project-favorites:' + user?.id;
   const [favorites, setFavorites] = useState([]);
 
@@ -121,6 +152,20 @@ export default function ProjectManagement() {
   const activeUsers = useMemo(() => users.filter((item) => item.isActive), [users]);
   const eligibleReviewers = activeUsers.filter((item) => item.role !== 'ADMIN');
   const selectedProject = isCreatingProject ? null : projects.find((project) => project.id === selectedProjectId) || null;
+  const projectFormDirty = JSON.stringify(form) !== originalForm.current;
+  const budgetDirty = Boolean(selectedProject) && String(budgetDraft) !== String(selectedProject.expenseBudget ?? '');
+  useEffect(() => {
+    if (!(projectFormDirty || budgetDirty) || !(isCreatingProject || selectedProject)) return;
+    const warn = (event) => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [projectFormDirty, budgetDirty, isCreatingProject, selectedProject]);
+  useEffect(() => {
+    if (!selectedProjectId) { setExpenseTotals(null); return; }
+    let active = true;
+    expenseAPI.totals(selectedProjectId).then(res => { if (active) setExpenseTotals(res.data); }).catch(() => { if (active) setExpenseTotals(null); });
+    return () => { active = false; };
+  }, [selectedProjectId, projects]);
   const selectedDashboard = dashboardProjects.find((project) => project.projectId === selectedProject?.id);
   const dashboardEmployeesByUserId = useMemo(() => {
     const rows = {};
@@ -199,7 +244,8 @@ export default function ProjectManagement() {
     }
   };
 
-  const selectProject = (project) => {
+  const selectProject = (project, skipUnsavedPrompt = false) => {
+    if (!skipUnsavedPrompt && (projectFormDirty || budgetDirty) && (isCreatingProject || selectedProject) && !window.confirm('Discard unsaved project changes?')) return;
     const managerAssignment = (project?.assignments || []).find((assignment) => assignment.userId === project?.projectManagerId);
     setSelectedProjectId(project?.id || null);
     setIsCreatingProject(false);
@@ -211,7 +257,7 @@ export default function ProjectManagement() {
     setAssignBillRate('');
     setAssignHours('');
     setOffboarding(null);
-    setForm({
+    const nextForm = {
       code: project?.code || '',
       name: project?.name || '',
       description: project?.description || '',
@@ -219,10 +265,17 @@ export default function ProjectManagement() {
       projectManagerId: project?.projectManagerId || '',
       projectManagerHoursApproverId: project?.projectManagerHoursApproverId || '',
       isActive: project?.isActive ?? true,
-    });
+    };
+    setForm(nextForm);
+    originalForm.current = JSON.stringify(nextForm);
+    setBudgetDraft(project?.expenseBudget == null ? '' : String(project.expenseBudget));
+    setBudgetError('');
+    setFieldErrors({});
+    setSuccess('');
   };
 
   const startNewProject = () => {
+    if ((projectFormDirty || budgetDirty) && (isCreatingProject || selectedProject) && !window.confirm('Discard unsaved project changes?')) return;
     setSelectedProjectId(null);
     setIsCreatingProject(true);
     setActiveTab('settings');
@@ -234,11 +287,18 @@ export default function ProjectManagement() {
     setAssignHours('');
     setOffboarding(null);
     setForm(emptyForm);
+    originalForm.current = JSON.stringify(emptyForm);
+    setBudgetDraft('');
+    setBudgetError('');
+    setCodeEdited(false);
+    setFieldErrors({});
+    setSuccess('');
   };
 
   const cancelProjectEdit = () => {
+    if ((projectFormDirty || budgetDirty) && !window.confirm('Discard unsaved project changes?')) return;
     if (selectedProject) {
-      selectProject(selectedProject);
+      selectProject(selectedProject, true);
     } else {
       setIsCreatingProject(false);
       setSelectedProjectId(null);
@@ -282,26 +342,43 @@ export default function ProjectManagement() {
   };
 
   const handleProjectSearch = (value) => {
+    if (selectedProjectId && (projectFormDirty || budgetDirty) && !window.confirm('Discard unsaved project changes?')) return;
     setProjectSearch(value);
     if (selectedProjectId) {
       setSelectedProjectId(null);
       setIsCreatingProject(false);
+      setForm(emptyForm);
+      originalForm.current = JSON.stringify(emptyForm);
+      setBudgetDraft('');
     }
   };
 
   const saveProject = async (event) => {
     event.preventDefault();
-    if (!canManage) return;
-    if (!form.projectManagerId || !form.projectManagerHoursApproverId) {
+    if (!canManage || savingProject) return;
+    if (budgetDirty) {
+      setError('Save or reset the expense budget before saving project details.');
+      return;
+    }
+    const duplicate = projects.some(project => project.code?.toLowerCase() === form.code.trim().toLowerCase() && project.id !== selectedProject?.id);
+    if (duplicate) {
+      setFieldErrors({ code: 'This project code is already in use.' });
+      return;
+    }
+    if (!isCreatingProject && form.status !== 'DRAFT' && (!form.projectManagerId || !form.projectManagerHoursApproverId)) {
       setError('Project Manager and PM Hours Approver are required');
       return;
     }
     const payload = {
       ...form,
-      isActive: form.status === 'ACTIVE',
-      projectManagerId: Number(form.projectManagerId),
-      projectManagerHoursApproverId: Number(form.projectManagerHoursApproverId),
+      status: isCreatingProject ? 'DRAFT' : form.status,
+      isActive: !isCreatingProject && form.status === 'ACTIVE',
+      projectManagerId: form.projectManagerId ? Number(form.projectManagerId) : null,
+      projectManagerHoursApproverId: form.projectManagerHoursApproverId ? Number(form.projectManagerHoursApproverId) : null,
+      expenseBudget: selectedProject?.expenseBudget ?? null,
     };
+    setSavingProject(true);
+    setFieldErrors({});
     try {
       const response = selectedProject?.id
         ? await projectAPI.updateProject(selectedProjectId, payload)
@@ -311,8 +388,9 @@ export default function ProjectManagement() {
       if (!selectedProject?.id && savedProject?.id) {
         setProjects((current) => [...current.filter((project) => project.id !== savedProject.id), savedProject]);
         setProjectSearch(savedProject.code + ' - ' + savedProject.name);
-        setActiveTab('team');
-        setAssignDraft(String(payload.projectManagerId));
+        setProjectFilter('DRAFT');
+        setActiveTab('settings');
+        setAssignDraft('');
         setAssignBillRate('');
         setAssignStartDate('');
         setAssignEndDate('');
@@ -320,9 +398,75 @@ export default function ProjectManagement() {
       }
       setSelectedProjectId(savedProject?.id || selectedProjectId);
       setIsCreatingProject(false);
+      setBudgetDraft(savedProject?.expenseBudget == null ? '' : String(savedProject.expenseBudget));
+      const nextForm = { ...form, status: payload.status, isActive: payload.isActive };
+      setForm(nextForm);
+      originalForm.current = JSON.stringify(nextForm);
+      setSuccess(selectedProject ? 'Project details saved.' : 'Draft created. Complete the setup steps below, then activate the project.');
       setError('');
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to save project. Check required fields and project code uniqueness.');
+      const message = err.response?.data?.message || 'Failed to save project.';
+      if (/code already exists/i.test(message)) setFieldErrors({ code: 'This project code is already in use.' });
+      else setError(message);
+    } finally {
+      setSavingProject(false);
+    }
+  };
+
+  const activateProject = async () => {
+    if (!selectedProject || savingProject || projectFormDirty || budgetDirty) return;
+    setSavingProject(true);
+    try {
+      const response = await projectAPI.updateProject(selectedProject.id, {
+        ...form, status: 'ACTIVE', isActive: true,
+        projectManagerId: Number(form.projectManagerId),
+        projectManagerHoursApproverId: Number(form.projectManagerHoursApproverId),
+        expenseBudget: selectedProject.expenseBudget ?? null,
+      });
+      await loadData();
+      setProjects(current => [...current.filter(project => project.id !== selectedProject.id), response.data]);
+      const nextForm = { ...form, status: 'ACTIVE', isActive: true };
+      setForm(nextForm);
+      originalForm.current = JSON.stringify(nextForm);
+      setProjectFilter('ACTIVE');
+      setSuccess('Project activated. The team can now use it.');
+      setError('');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Could not activate the project. Complete the setup steps first.');
+    } finally {
+      setSavingProject(false);
+    }
+  };
+
+  const saveExpenseBudget = async () => {
+    if (!canManage || !selectedProject || savingBudget || !budgetDirty) return;
+    const value = budgetDraft.trim();
+    if (value && !/^\d+(\.\d{1,2})?$/.test(value)) {
+      setBudgetError('Enter a nonnegative amount with no more than two decimal places.');
+      return;
+    }
+    setSavingBudget(true);
+    setBudgetError('');
+    try {
+      const response = await projectAPI.updateProject(selectedProject.id, {
+        code: selectedProject.code,
+        name: selectedProject.name,
+        description: selectedProject.description,
+        status: selectedProject.status,
+        isActive: selectedProject.isActive,
+        projectManagerId: selectedProject.projectManagerId,
+        projectManagerHoursApproverId: selectedProject.projectManagerHoursApproverId,
+        expenseBudget: value ? Number(value) : null,
+      });
+      const saved = response.data;
+      setProjects(current => current.map(project => project.id === saved.id ? saved : project));
+      setBudgetDraft(saved.expenseBudget == null ? '' : String(saved.expenseBudget));
+      setSuccess('Expense budget saved.');
+      setError('');
+    } catch (err) {
+      setBudgetError(err.response?.data?.message || 'Could not save the expense budget.');
+    } finally {
+      setSavingBudget(false);
     }
   };
 
@@ -452,6 +596,11 @@ export default function ProjectManagement() {
     allocationEnd += percent(slice.value, chartTotal) * 3.6;
     return `${slice.color} ${start}deg ${allocationEnd}deg`;
   });
+  const expenseBudget = expenseTotals?.budget == null ? null : Number(expenseTotals.budget);
+  const approvedExpenses = Number(expenseTotals?.approved || 0);
+  const pendingExpenses = Number(expenseTotals?.pending || 0);
+  const approvedBudgetPercent = expenseBudget > 0 ? Number(percent(approvedExpenses, expenseBudget).toFixed(2)) : 0;
+  const pendingBudgetPercent = expenseBudget > 0 ? Number(Math.min(100 - approvedBudgetPercent, percent(pendingExpenses, expenseBudget)).toFixed(2)) : 0;
   const unassignedUsers = activeUsers.filter((item) =>
     !(selectedProject?.assignments || []).some((assignment) => assignment.userId === item.id && assignment.isActive)
   );
@@ -475,6 +624,7 @@ export default function ProjectManagement() {
       </div>
 
       <ValidationMessage message={error} onDismiss={() => setError('')} />
+      {success && <div className="pc-project-success" role="status">{success}</div>}
       {/* Temporarily disabled: Project Health.
       {!selectedProject && !isCreatingProject && ['PROJECT_ADMIN', 'ADMIN'].includes(user?.role) && <ProjectHealthOverview state={healthState} onOpen={id => selectProject(projects.find(project => project.id === id))} />}
       */}
@@ -491,10 +641,13 @@ export default function ProjectManagement() {
             id="project-filter"
             value={projectFilter}
             onChange={(event) => {
+              if (projectFormDirty && (isCreatingProject || selectedProject) && !window.confirm('Discard unsaved project changes?')) return;
               setProjectFilter(event.target.value);
               setSelectedProjectId(null);
               setProjectSearch('');
               setIsCreatingProject(false);
+              setForm(emptyForm);
+              originalForm.current = JSON.stringify(emptyForm);
             }}
           >
             <option value="ACTIVE">Active</option>
@@ -555,6 +708,23 @@ export default function ProjectManagement() {
           <span className={statusClass(selectedProject?.status || form.status)}>{labelize(selectedProject?.status || form.status)}</span>
         </div>
 
+        {selectedProject?.status === 'DRAFT' && canManage && (
+          <section className="pc-setup-panel" aria-label="Project setup">
+            <div><span className="pc-project-code">PROJECT SETUP</span><h3>Prepare this draft for activation</h3><p>Save changes to Project Details before activating.</p></div>
+            <ul className="pc-setup-list">
+              <li className={selectedProject.projectManagerId ? 'complete' : ''}>Choose a project manager</li>
+              <li className={selectedProject.projectManagerHoursApproverId ? 'complete' : ''}>Confirm the PM hours approver</li>
+              <li className={activeAssignments.length ? 'complete' : ''}>Assign at least one team member</li>
+              <li className={activeAssignments.some(assignment => assignment.userId === selectedProject.projectManagerId) ? 'complete' : ''}>Assign the PM if they will log hours (optional)</li>
+            </ul>
+            <div className="pc-setup-actions">
+              <button type="button" className="button button-secondary" onClick={() => setActiveTab('settings')}>Set approval routing</button>
+              <button type="button" className="button button-secondary" onClick={() => setActiveTab('team')}>Add team</button>
+              <button type="button" className="button button-primary" disabled={savingProject || projectFormDirty || !selectedProject.projectManagerId || !selectedProject.projectManagerHoursApproverId || !activeAssignments.length} onClick={activateProject}>Activate Project</button>
+            </div>
+          </section>
+        )}
+
       {/* Temporarily disabled: Project Health.
         {selectedProject && <ProjectHealthCard state={healthState} health={healthState.projects.find(project => project.projectId === selectedProject.id)} />}
       */}
@@ -568,14 +738,21 @@ export default function ProjectManagement() {
               type="button"
               aria-pressed={activeTab === tab.id}
               aria-controls="project-tab-content"
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => {
+                if (activeTab === 'expenses' && tab.id !== 'expenses' && budgetDirty) {
+                  if (!window.confirm('Discard the unsaved expense budget?')) return;
+                  setBudgetDraft(selectedProject?.expenseBudget == null ? '' : String(selectedProject.expenseBudget));
+                  setBudgetError('');
+                }
+                setActiveTab(tab.id);
+              }}
             >
               <Icon name={tab.icon} size={17} />{tab.label}
             </button>
           ))}
         </div>
 
-        <fieldset id="project-tab-content" disabled={!canManage} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+        <fieldset id="project-tab-content" disabled={!canManage && activeTab !== 'expenses'} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
         {activeTab === 'overview' && selectedProject && (
           <>
             <div className="project-section-heading pc-overview-heading"><div><span>PROJECT SNAPSHOT</span><h3>Every hour, accounted for</h3></div><p>{selectedOption.label}</p></div>
@@ -587,9 +764,10 @@ export default function ProjectManagement() {
             </div>
             <div className="project-overview-hero">
               <div className="project-donut-card">
+                <h3 className="project-chart-title">Project Hours</h3>
                 <div className="project-donut-left">
                   <div className="project-status-donut" role="img" aria-label={`Total project hours: ${hours(projectHours)}, summed across all project resources`} style={{ background: `radial-gradient(circle at center, var(--surface-color) 0 56%, transparent 57%), conic-gradient(${chartTotal > 0 ? allocationSegments.join(', ') : 'var(--border-color) 0deg 360deg'})` }}>
-                    <span>{hours(projectHours)}</span>
+                    <span>{chartHours(projectHours)}</span>
                     <small>total project hours</small>
                   </div>
                   <div className="project-chart-legend">
@@ -617,12 +795,37 @@ export default function ProjectManagement() {
                 </aside>
                 */}
               </div>
+              <div className="project-donut-card project-expense-card">
+                <h3 className="project-chart-title">Project Expenses</h3>
+                <div className="project-donut-left">
+                  <div className="project-status-donut" role="img" aria-label={`Project expenses: ${Number(expenseTotals?.approved || 0).toFixed(2)} approved, ${Number(expenseTotals?.pending || 0).toFixed(2)} pending, ${expenseTotals?.remaining == null ? 'no budget set' : Number(expenseTotals.remaining).toFixed(2) + ' remaining'}`} style={{ background: `radial-gradient(circle at center, var(--surface-color) 0 56%, transparent 57%), conic-gradient(var(--pc-approved) 0deg ${percent(expenseTotals?.approved, Math.max(Number(expenseTotals?.budget || 0), Number(expenseTotals?.approved || 0))) * 3.6}deg, var(--border-color) ${percent(expenseTotals?.approved, Math.max(Number(expenseTotals?.budget || 0), Number(expenseTotals?.approved || 0))) * 3.6}deg 360deg)` }}>
+                    <span>{chartMoney(expenseTotals?.approved)}</span>
+                    <small>approved expenses</small>
+                  </div>
+                  <div className="project-chart-legend">
+                    <span><i style={{ background: 'var(--pc-approved)' }} />Approved Expenses<strong>{money(expenseTotals?.approved)}</strong></span>
+                    <span><i style={{ background: 'var(--border-color)' }} />Remaining Budget<strong>{expenseTotals?.remaining == null ? 'Not set' : money(expenseTotals.remaining)}</strong></span>
+                    <span><i style={{ background: 'var(--pc-submitted)' }} />Pending Expenses<strong>{money(expenseTotals?.pending)}</strong></span>
+                    <span><i />Expense Budget<strong>{expenseTotals?.budget == null ? 'Not set' : money(expenseTotals.budget)}</strong></span>
+                  </div>
+                </div>
+                {canManage && expenseTotals?.budget != null && (Number(expenseTotals.budget) === 0 ? Number(expenseTotals.approved || 0) + Number(expenseTotals.pending || 0) > 0 : (Number(expenseTotals?.approved || 0) + Number(expenseTotals?.pending || 0)) / Number(expenseTotals.budget) >= .8) && <p role="alert" className="expense-budget-warning">Approved and pending expenses {Number(expenseTotals.approved || 0) + Number(expenseTotals.pending || 0) >= Number(expenseTotals.budget) ? 'meet or exceed' : 'are approaching'} the expense budget.</p>}
+              </div>
             </div>
             <div className="pc-plan-progress">
               <div><strong>Project hours used</strong><span>{Number(projectHours) > 0 ? `${Math.round(logged / projectHours * 100)}% of ${hours(projectHours)} total project hrs` : projectHours == null ? 'Total project hours not set' : '0.00 total project hrs'}</span></div>
               <div className="pc-progress-track" role="meter" aria-label="Selected month usage of total project hours" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent(logged, Number(projectHours))} aria-valuetext={`${hours(logged)} hours logged in ${selectedOption.label}; total project hours: ${projectHours == null ? 'not set' : hours(projectHours)}`}><span style={{ width: `${percent(logged, Number(projectHours))}%` }} /></div>
               <p>Total project hours are the sum of hours assigned to all project resources.</p>
             </div>
+            {expenseTotals && <div className="pc-plan-progress pc-expense-progress">
+              <div><strong>Expense budget used</strong><span>{expenseBudget > 0 ? `${Math.round(approvedExpenses / expenseBudget * 100)}% approved of ${money(expenseBudget)}` : expenseBudget == null ? 'Expense budget not set' : 'Expense budget is $0.00'}</span></div>
+              {expenseBudget > 0 && <div className="pc-progress-track pc-expense-progress-track" role="meter" aria-label="Approved expense budget used" aria-valuemin={0} aria-valuemax={100} aria-valuenow={approvedBudgetPercent} aria-valuetext={`${money(approvedExpenses)} approved of ${money(expenseBudget)} budget; ${money(pendingExpenses)} pending`}>
+                <span className="pc-expense-approved" style={{ width: `${approvedBudgetPercent}%` }} />
+                <span className="pc-expense-pending" style={{ width: `${pendingBudgetPercent}%` }} />
+              </div>}
+              <p className="pc-budget-breakdown"><span><i className="pc-expense-approved" />Approved {money(approvedExpenses)}</span><span><i className="pc-expense-pending" />Pending {money(pendingExpenses)}</span><span>Remaining {expenseBudget == null ? 'Not set' : money(expenseTotals.remaining)}</span></p>
+              <p>Pending expenses are shown separately and are not counted as spent.</p>
+            </div>}
           </>
         )}
 
@@ -753,78 +956,109 @@ export default function ProjectManagement() {
           </div>
         )}
 
-        {activeTab === 'settings' && (
-          <div className="project-tab-surface project-details-surface">
-            <div className="project-section-heading">
-              <div>
-                <span>PROJECT DETAILS</span>
-                <h3>{selectedProject ? 'Edit project identity and routing' : 'Create a new project workspace'}</h3>
+        {activeTab === 'expenses' && selectedProject && (
+          <div className="pc-expenses-workspace">
+            <section className="pc-expense-budget-panel" aria-label="Project expense budget">
+              <div className="pc-expense-budget-heading">
+                <div><span className="pc-project-code">EXPENSE PLANNING</span><h3>Expense budget</h3><p>Track approved spending here. Pending claims remain separate until reviewed.</p></div>
+                <span className={statusClass(selectedProject.status)}>{labelize(selectedProject.status)}</span>
               </div>
-              <p>{selectedProject ? 'Changes save when you submit' : 'Manager and approver are required'}</p>
-            </div>
-            <div className="pc-form-section-title"><Icon name="briefcase" size={19} /><div><h4>Project essentials</h4><p>Define the project identity and status. Total hours are calculated from resource assignments.</p></div></div>
-            <div className="form-row pc-essentials-row">
-              <div className="form-group">
-                <label htmlFor="projectmanagement-field-1">Project Code</label>
-                <input id="projectmanagement-field-1" value={form.code} onChange={(event) => setForm({ ...form, code: event.target.value })} required />
+              <div className="pc-expense-budget-metrics">
+                <div><span>Budget</span><strong>{expenseBudget == null ? 'Not set' : money(expenseBudget)}</strong></div>
+                <div><span>Approved</span><strong>{money(approvedExpenses)}</strong></div>
+                <div><span>Pending</span><strong>{money(pendingExpenses)}</strong></div>
+                <div><span>Remaining</span><strong>{expenseBudget == null ? 'Not set' : money(expenseTotals?.remaining)}</strong></div>
               </div>
-              <div className="form-group">
-                <label htmlFor="projectmanagement-field-2">Project Name</label>
-                <input id="projectmanagement-field-2" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required />
-              </div>
-              <div className="form-group">
-                <label htmlFor="projectmanagement-field-3">Status</label>
-                <select id="projectmanagement-field-3" required value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value, isActive: event.target.value === 'ACTIVE' })}>
-                  {projectStatuses.map((status) => <option key={status} value={status}>{labelize(status)}</option>)}
-                </select>
-              </div>
-
-            </div>
-            <div className="pc-form-section-title"><Icon name="users" size={19} /><div><h4>Ownership & approval routing</h4><p>Team hours go to the primary PM. Choose who approves the PM�s own hours; the primary PM can also approve their own hours. Onboard the PM through Team to log hours.</p></div></div>
-            <div className="form-row pc-routing-row">
-              <div className="form-group">
-                <label htmlFor="projectmanagement-field-5">Primary Project Manager</label>
-                <select id="projectmanagement-field-5" required value={form.projectManagerId} onChange={(event) => {
-                  const managerAssignment = (selectedProject?.assignments || []).find((assignment) => String(assignment.userId) === event.target.value);
-                  setForm({
-                    ...form,
-                    projectManagerId: event.target.value,
-                  });
-                }}>
-                  <option value="">Select PM</option>
-                  {!canManage && selectedProject?.projectManagerId && <option value={selectedProject.projectManagerId}>{selectedProject.projectManagerName || selectedProject.projectManagerId}</option>}
-                  {eligibleReviewers.map((item) => <option key={item.id} value={item.id}>{item.firstName} {item.lastName}</option>)}
-                </select>
-              </div>
-              <div className="form-group">
-                <label htmlFor="projectmanagement-field-6">Approver for the PM�s own hours</label>
-                <select id="projectmanagement-field-6" required value={form.projectManagerHoursApproverId} onChange={(event) => setForm({ ...form, projectManagerHoursApproverId: event.target.value })}>
-                  <option value="">Select approver</option>
-                  {!canManage && selectedProject?.projectManagerHoursApproverId && <option value={selectedProject.projectManagerHoursApproverId}>{selectedProject.projectManagerHoursApproverName || selectedProject.projectManagerHoursApproverId}</option>}
-                  {eligibleReviewers.map((item) => <option key={item.id} value={item.id}>{item.firstName} {item.lastName}</option>)}
-                </select>
-              </div>
-            </div>
-            {selectedProject && (String(form.projectManagerId) !== String(selectedProject.projectManagerId) || String(form.projectManagerHoursApproverId) !== String(selectedProject.projectManagerHoursApproverId)) && (
-              <div role="status">
-                <strong>Approval handover</strong>
-                <p>Primary PM: {selectedProject.projectManagerName} to {eligibleReviewers.find((item) => String(item.id) === String(form.projectManagerId))?.firstName || 'Select PM'}.</p>
-                <p>{selectedProject.pendingApprovalCount || 0} pending submissions will be checked and transferred where the responsible approver changes. Incoming approvers will be notified. Completed approvals keep their history.</p>
-                <p>The outgoing PM stays on the team. To end their membership, use Team and Offboard, which includes a replacement PM step. Onboard the incoming PM through Team if they need to log hours.</p>
-              </div>
-            )}
-            <div className="pc-form-section-title"><Icon name="file" size={19} /><div><h4>Additional context</h4><p>Give the team a short description of the project and its purpose.</p></div></div>
-            <div className="form-group">
-              <label htmlFor="projectmanagement-field-7">Description</label>
-              <textarea id="projectmanagement-field-7" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
-            </div>
-            {canManage && <div className="compact-actions">
-              <button className="button button-primary" type="submit">{selectedProject ? (String(form.projectManagerId) !== String(selectedProject.projectManagerId) || String(form.projectManagerHoursApproverId) !== String(selectedProject.projectManagerHoursApproverId) ? 'Save and transfer pending approvals' : 'Save Project') : 'Create Project'}</button>
-              <button className="button button-secondary" type="button" onClick={cancelProjectEdit}>Cancel</button>
-            </div>}
+              {canManage && <div className="pc-budget-editor">
+                <div className="form-group">
+                  <label htmlFor="project-expense-budget">Expense Budget</label>
+                  <input id="project-expense-budget" type="number" inputMode="decimal" min="0" step="0.01" placeholder="No budget set" value={budgetDraft} aria-invalid={Boolean(budgetError)} aria-describedby={budgetError ? 'pc-budget-error' : undefined} onChange={event => { setBudgetDraft(event.target.value); setBudgetError(''); }} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); saveExpenseBudget(); } }} />
+                  <small className="pc-field-hint">Optional. You can update this without changing other project details.</small>
+                  {budgetError && <small id="pc-budget-error" className="pc-field-error" role="alert">{budgetError}</small>}
+                </div>
+                <button type="button" className="button button-primary" disabled={savingBudget || !budgetDirty} onClick={saveExpenseBudget}>{savingBudget ? 'Saving...' : 'Save Budget'}</button>
+              </div>}
+            </section>
+            <ProjectExpenseHistory projectId={selectedProject.id} showSummary={false} />
           </div>
         )}
 
+        {activeTab === 'settings' && (
+          <div className="project-tab-surface project-details-surface">
+            <div className="pc-details-heading">
+              <div><span className="pc-project-code">PROJECT PROFILE</span><h3>{selectedProject ? 'Project details' : 'Create a project draft'}</h3><p>{selectedProject ? 'Keep the project identity, ownership, and status current.' : 'Start with the essentials. Set the expense budget in Expenses after creating the draft.'}</p></div>
+              {selectedProject && <span className={statusClass(selectedProject.status)}>{labelize(selectedProject.status)}</span>}
+            </div>
+            <div className="pc-details-grid">
+              <section className="pc-detail-card pc-identity-card" aria-labelledby="pc-identity-title">
+                <div className="pc-detail-card-heading"><span className="pc-detail-icon"><Icon name="briefcase" size={19} /></span><div><h4 id="pc-identity-title">Identity</h4><p>What the team will see across Chronos.</p></div></div>
+                <div className="pc-detail-fields">
+                  <div className="form-group">
+                    <label htmlFor="projectmanagement-field-2">Project Name</label>
+                    <input id="projectmanagement-field-2" maxLength={150} value={form.name} onChange={(event) => { const name = event.target.value; setForm({ ...form, name, code: isCreatingProject && !codeEdited ? name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) : form.code }); }} required />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="projectmanagement-field-1">Project Code</label>
+                    <input id="projectmanagement-field-1" maxLength={50} aria-invalid={Boolean(fieldErrors.code)} aria-describedby={fieldErrors.code ? 'project-code-error' : undefined} value={form.code} onChange={(event) => { setCodeEdited(true); setFieldErrors({ ...fieldErrors, code: '' }); setForm({ ...form, code: event.target.value.toUpperCase() }); }} required />
+                    {isCreatingProject && <small className="pc-field-hint">Suggested from the name. You can edit it.</small>}
+                    {fieldErrors.code && <small id="project-code-error" className="pc-field-error" role="alert">{fieldErrors.code}</small>}
+                  </div>
+                  <div className="form-group pc-description-field">
+                    <label htmlFor="projectmanagement-field-7">Description</label>
+                    <textarea id="projectmanagement-field-7" maxLength={500} placeholder="What is this project for?" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
+                    <small className="pc-field-hint">A short purpose helps the team identify the right project.</small>
+                  </div>
+                </div>
+              </section>
+              {!isCreatingProject && <section className="pc-detail-card pc-routing-card" aria-labelledby="pc-routing-title">
+                <div className="pc-detail-card-heading"><span className="pc-detail-icon"><Icon name="users" size={19} /></span><div><h4 id="pc-routing-title">Ownership & approvals</h4><p>Who leads the project and reviews the PM's hours.</p></div></div>
+                <div className="pc-detail-fields">
+                  <div className="form-group">
+                    <label htmlFor="projectmanagement-field-5">Primary Project Manager</label>
+                    <select id="projectmanagement-field-5" required={form.status !== 'DRAFT'} value={form.projectManagerId} onChange={(event) => setForm({ ...form, projectManagerId: event.target.value, projectManagerHoursApproverId: !form.projectManagerHoursApproverId || String(form.projectManagerHoursApproverId) === String(form.projectManagerId) ? event.target.value : form.projectManagerHoursApproverId })}>
+                      <option value="">Select PM</option>
+                      {!canManage && selectedProject?.projectManagerId && <option value={selectedProject.projectManagerId}>{selectedProject.projectManagerName || selectedProject.projectManagerId}</option>}
+                      {eligibleReviewers.map((item) => <option key={item.id} value={item.id}>{item.firstName} {item.lastName}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="projectmanagement-field-6">Approver for the PM's own hours</label>
+                    <select id="projectmanagement-field-6" required={form.status !== 'DRAFT'} value={form.projectManagerHoursApproverId} onChange={(event) => setForm({ ...form, projectManagerHoursApproverId: event.target.value })}>
+                      <option value="">Select approver</option>
+                      {!canManage && selectedProject?.projectManagerHoursApproverId && <option value={selectedProject.projectManagerHoursApproverId}>{selectedProject.projectManagerHoursApproverName || selectedProject.projectManagerHoursApproverId}</option>}
+                      {eligibleReviewers.map((item) => <option key={item.id} value={item.id}>{item.firstName} {item.lastName}</option>)}
+                    </select>
+                    <small className="pc-field-hint">Defaults to the PM. Assign the PM in Team if they will log hours.</small>
+                  </div>
+                </div>
+                {selectedProject?.status !== 'DRAFT' && selectedProject && (String(form.projectManagerId) !== String(selectedProject.projectManagerId) || String(form.projectManagerHoursApproverId) !== String(selectedProject.projectManagerHoursApproverId)) && <div className="pc-handover-note" role="status"><strong>Approval handover</strong><p>{selectedProject.pendingApprovalCount || 0} pending submissions will move to the responsible approver when you save. Completed approvals keep their history. The outgoing PM stays on the team until offboarded.</p></div>}
+              </section>}
+              {selectedProject && <section className="pc-detail-card pc-lifecycle-card" aria-labelledby="pc-lifecycle-title">
+                <div className="pc-detail-card-heading"><span className="pc-detail-icon"><Icon name="clock" size={19} /></span><div><h4 id="pc-lifecycle-title">Lifecycle</h4><p>Status and useful project context in one place.</p></div></div>
+                <div className="pc-lifecycle-content">
+                  <div className="form-group">
+                    <label htmlFor="projectmanagement-field-3">Status</label>
+                    <select id="projectmanagement-field-3" required value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value, isActive: event.target.value === 'ACTIVE' })}>
+                      {projectStatuses.filter(status => selectedProject.status !== 'DRAFT' || status === 'DRAFT').map((status) => <option key={status} value={status}>{labelize(status)}</option>)}
+                    </select>
+                    {selectedProject.status === 'DRAFT' && <small className="pc-field-hint">Use Activate Project above after setup is complete.</small>}
+                  </div>
+                  <dl className="pc-detail-facts">
+                    <div><dt>Active team</dt><dd>{activeAssignments.length} member{activeAssignments.length === 1 ? '' : 's'}</dd></div>
+                    <div><dt>Assigned hours</dt><dd>{hours(activeAssignments.reduce((sum, assignment) => sum + Number(assignment.plannedHours || 0), 0))}</dd></div>
+                    <div><dt>Pending approvals</dt><dd>{selectedProject.pendingApprovalCount || 0}</dd></div>
+                    <div><dt>Created</dt><dd>{dateTimeText(selectedProject.createdAt)}</dd></div>
+                    <div><dt>Last updated</dt><dd>{dateTimeText(selectedProject.updatedAt)}</dd></div>
+                  </dl>
+                </div>
+              </section>}
+            </div>
+            {canManage && <div className="pc-details-actions">
+              <p>{isCreatingProject ? 'The draft stays private until activation.' : 'Changes to project details save together.'}</p>
+              <div><button className="button button-secondary" type="button" onClick={cancelProjectEdit}>Cancel</button><button className="button button-primary" type="submit" disabled={savingProject}>{savingProject ? 'Saving...' : selectedProject ? (selectedProject.status !== 'DRAFT' && (String(form.projectManagerId) !== String(selectedProject.projectManagerId) || String(form.projectManagerHoursApproverId) !== String(selectedProject.projectManagerHoursApproverId)) ? 'Save and transfer pending approvals' : 'Save Project') : 'Create Draft'}</button></div>
+            </div>}
+          </div>
+        )}
         </fieldset>
       </form>
       )}

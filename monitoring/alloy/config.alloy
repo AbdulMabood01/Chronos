@@ -1,0 +1,44 @@
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+local.file_match "chronos" {
+  path_targets = [{
+    "__path__"   = "/var/log/chronos/*.json",
+    "application" = "chronos",
+    "environment" = "local",
+  }]
+  sync_period = "5s"
+}
+
+loki.source.file "chronos" {
+  targets       = local.file_match.chronos.targets
+  forward_to    = [loki.process.chronos.receiver]
+  tail_from_end = false
+}
+
+loki.process "chronos" {
+  stage.json {
+    expressions = {
+      level = "log.level",
+    }
+  }
+
+  // Log level is intentionally the only parsed dynamic label. Trace IDs,
+  // logger names, paths, users, and messages remain searchable JSON fields to
+  // avoid high-cardinality Loki indexes.
+  stage.labels {
+    values = {
+      level = "",
+    }
+  }
+
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

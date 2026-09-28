@@ -15,6 +15,8 @@ import java.time.LocalDateTime;
 @Builder
 public class UserDTO {
     private String accountStatus;
+    private boolean adminLocked;
+    private java.time.Instant lockedUntil;
     private String timezone;
     private String phoneNumber;
 

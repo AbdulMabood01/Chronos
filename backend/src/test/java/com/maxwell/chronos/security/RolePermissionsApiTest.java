@@ -26,6 +26,8 @@ class RolePermissionsApiTest {
     @MockitoBean com.maxwell.chronos.service.LeaveBalanceService leaveBalances;
     @Autowired MockMvc mvc;
     @MockitoBean JwtDecoder decoder;
+    @MockitoBean org.springframework.jdbc.core.JdbcTemplate db;
+    @MockitoBean com.maxwell.chronos.service.AuthSessionService sessions;
     @MockitoBean UserService userService;
     @MockitoBean UserRepository users;
     @MockitoBean ProjectRepository projects;
@@ -40,6 +42,7 @@ class RolePermissionsApiTest {
     User user;
 
     @BeforeEach void setup() {
+        when(sessions.valid(nullable(String.class), anyLong())).thenReturn(true);
         user = User.builder().id(1L).email("admin@example.com").entraId("subject")
                 .role(UserRole.ADMIN).isActive(true).passwordHash("test-account-hash").ssnLast4("1234").build();
         when(users.findByEmail(user.getEmail())).thenReturn(Optional.of(user));

@@ -17,6 +17,18 @@ import java.util.Map;
 public class AuthController {
     private final UserService userService;
     private final com.maxwell.chronos.service.ProjectService projectService;
+    private final com.maxwell.chronos.service.AuthSessionService sessions;
+
+    @PostMapping("/activity")
+    public ResponseEntity<Map<String, Object>> activity(@AuthenticationPrincipal Jwt jwt) {
+        Long id = ((Number) jwt.getClaim("employee_id")).longValue();
+        var expires = sessions.touch(jwt.getId(), id);
+        return expires == null ? ResponseEntity.status(401).build()
+                : ResponseEntity.ok(Map.of("expiresAt", expires.toString()));
+    }
+
+    @PostMapping("/logout")
+    public void logout(@AuthenticationPrincipal Jwt jwt) { sessions.revoke(jwt.getId()); }
 
     private AuthResponse toAuthResponse(com.maxwell.chronos.domain.User user) {
         return AuthResponse.builder()

@@ -42,6 +42,14 @@ public class AuditService {
         }
     }
 
+    public void logSecurityAction(Long actorId, AuditAction action, Long targetId) {
+        ObjectNode details = objectMapper.createObjectNode();
+        details.put("message", action.name());
+        auditLogRepository.save(AuditLog.builder()
+                .user(userRepository.findById(actorId).orElseThrow())
+                .action(action).entityType("User").entityId(targetId).details(details).build());
+    }
+
     public List<AuditLogDTO> getAuditLogs() {
         return auditLogRepository.findAll().stream()
                 .map(this::toDTO)

@@ -1,4 +1,10 @@
 .employee-concerns { max-width: 1200px; margin: auto; }
+.concern-view-switch { display: flex; gap: 6px; padding: 5px; width: fit-content; max-width: 100%; border: 1px solid var(--border-color); border-radius: 12px; background: var(--surface-muted); }
+.concern-view-switch button { border: 0; border-radius: 8px; padding: 10px 16px; background: transparent; color: var(--text-secondary); font: inherit; font-weight: 600; cursor: pointer; }
+.concern-view-switch button.is-active { background: var(--surface-color); color: var(--text-primary); box-shadow: var(--shadow-soft); }
+.concern-submission-notice { padding: 14px 16px; margin: 0 0 18px; border: 1px solid var(--primary-color); border-radius: 10px; background: var(--surface-tint); line-height: 1.5; }
+.concern-submission-notice .report-reference { margin-top: 4px; }
+@media (max-width: 600px) { .concern-view-switch { width: 100%; box-sizing: border-box; } .concern-view-switch button { flex: 1; } }
 .concern-card { background: var(--surface-color); color: var(--text-primary); border: 1px solid var(--border-color); box-shadow: var(--shadow-card); border-radius: 12px; padding: 24px; margin: 20px 0; }
 .concern-form label, .concern-filters label { display: flex; flex-direction: column; gap: 7px; margin-bottom: 18px; font-weight: 600; }
 .concern-form input:not([type=checkbox]), .concern-form textarea, .concern-form select, .concern-filters input, .concern-filters select { width: 100%; min-height: 42px; padding: 11px 12px; border: 1px solid var(--border-color); border-radius: 7px; font: inherit; color: var(--text-primary); background: var(--surface-color); box-sizing: border-box; transition: border-color .15s, box-shadow .15s; }
@@ -82,3 +88,90 @@
 .concern-management .concern-details > p { line-height: 1.8; }
 @media (max-width: 1000px) { .concern-management .concern-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 650px) { .concern-management .concern-filters { grid-template-columns: 1fr; } }
+
+/* Reports workspace */
+.workspace-content .employee-concerns { width: 100%; max-width: 1440px; margin: 0 auto; }
+.employee-concerns { --report-ink: #263745; --report-accent: #8c244b; }
+.report-page-hero { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 28px; overflow: hidden; padding: clamp(28px, 4vw, 48px); margin-bottom: 22px; border: 1px solid color-mix(in srgb, var(--primary-color) 19%, var(--border-color)); border-radius: 20px; background: linear-gradient(115deg, color-mix(in srgb, var(--primary-color) 12%, var(--surface-color)), var(--surface-color) 72%); }
+.report-page-hero::after { content: ''; position: absolute; width: 270px; height: 270px; right: -90px; top: -155px; border: 1px solid color-mix(in srgb, var(--primary-color) 13%, transparent); border-radius: 50%; box-shadow: 0 0 0 38px color-mix(in srgb, var(--primary-color) 3%, transparent), 0 0 0 76px color-mix(in srgb, var(--primary-color) 3%, transparent); pointer-events: none; }
+.report-hero-copy { position: relative; z-index: 1; max-width: 670px; }
+.report-kicker { display: block; color: var(--primary-color); font-size: 10px; font-weight: 800; letter-spacing: .16em; line-height: 1.5; }
+.employee-concerns .report-page-hero h1 { margin: 7px 0 10px; font-size: clamp(29px, 3vw, 40px); line-height: 1.13; letter-spacing: -.045em; }
+.report-page-hero p { max-width: 580px; margin: 0; color: var(--text-secondary); font-size: 14px; line-height: 1.65; }
+.report-hero-mark { position: relative; z-index: 1; display: grid; place-items: center; flex: 0 0 72px; height: 72px; border: 1px solid color-mix(in srgb, var(--primary-color) 20%, var(--border-color)); border-radius: 18px; background: var(--surface-color); color: var(--primary-color); box-shadow: var(--shadow-soft); }
+.employee-concerns .concern-card { border-radius: 18px; box-shadow: var(--shadow-soft); margin: 0; }
+.employee-concerns .concern-view-switch { width: 100%; max-width: none; gap: 26px; padding: 0 4px; margin: 0 0 22px; border: 0; border-bottom: 1px solid var(--border-color); border-radius: 0; background: transparent; }
+.employee-concerns .concern-view-switch button:not(.button) { min-height: 48px; padding: 11px 2px 13px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--text-secondary); font-size: 13px; font-weight: 650; box-shadow: none; }
+.employee-concerns .concern-view-switch button.is-active:not(.button) { border-bottom-color: var(--primary-color); color: var(--primary-color); }
+.employee-concerns .concern-view-switch button:hover:not(.button) { color: var(--primary-color); }
+.employee-concerns .report-list-panel { padding: clamp(22px, 3vw, 34px); }
+.report-list-panel > .concern-heading { align-items: flex-end; margin-bottom: 25px; padding-bottom: 23px; border-bottom: 1px solid var(--border-color); }
+.report-list-panel .concern-heading h2, .concern-management .concern-heading h2 { margin: 5px 0 4px; font-size: 22px; letter-spacing: -.025em; }
+.report-list-panel .concern-help { margin: 0; font-size: 13px; }
+.report-case-list { display: grid; gap: 12px; }
+.report-case { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 20px; min-width: 0; padding: 20px 22px; border: 1px solid var(--border-color); border-radius: 13px; background: var(--surface-color); transition: border-color .16s, box-shadow .16s, transform .16s; }
+.report-case:hover { border-color: color-mix(in srgb, var(--primary-color) 37%, var(--border-color)); box-shadow: var(--shadow-soft); transform: translateY(-1px); }
+.report-case-main { min-width: 0; }
+.report-case-top { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
+.report-category { color: var(--primary-color); font-size: 10px; font-weight: 800; letter-spacing: .105em; text-transform: uppercase; }
+.report-case h3 { margin: 9px 0 10px; color: var(--text-primary); font-size: 17px; font-weight: 680; letter-spacing: -.025em; line-height: 1.35; overflow-wrap: anywhere; }
+.report-case-meta { display: flex; flex-wrap: wrap; gap: 8px 19px; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.report-case-meta span + span::before { content: '·'; margin-right: 19px; color: var(--border-color); }
+.report-case .concern-id { min-width: 0; max-width: none; margin-top: 11px; color: var(--text-secondary); font-size: 11px; }
+.employee-concerns .report-case-action:not(.button) { min-width: 116px; padding: 10px 14px; border-color: color-mix(in srgb, var(--primary-color) 25%, var(--border-color)); background: color-mix(in srgb, var(--primary-color) 7%, var(--surface-color)); color: var(--primary-color); font-size: 12px; }
+.employee-concerns .report-case-action:hover:not(.button) { background: color-mix(in srgb, var(--primary-color) 13%, var(--surface-color)); }
+.report-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; min-height: 215px; justify-content: center; padding: 24px clamp(18px, 4vw, 48px); border: 1px dashed color-mix(in srgb, var(--primary-color) 25%, var(--border-color)); border-radius: 14px; background: color-mix(in srgb, var(--primary-color) 3%, var(--surface-color)); }
+.report-empty > svg { color: var(--primary-color); }
+.report-empty h3 { margin: 0; font-size: 18px; }
+.report-empty p { max-width: 480px; margin: 0 0 8px; color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
+.report-compose-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(250px, 300px); align-items: start; gap: 22px; }
+.report-compose-layout > .concern-form { min-width: 0; padding: clamp(24px, 3.2vw, 42px); }
+.report-compose-aside { position: sticky; top: 96px; display: grid; gap: 17px; padding: 27px; border: 1px solid var(--border-color); border-radius: 18px; background: var(--surface-color); box-shadow: var(--shadow-card); }
+.report-compose-aside h2 { margin: 0; font-size: 19px; line-height: 1.32; }
+.report-compose-aside > p { margin: 0 0 5px; color: var(--text-secondary); font-size: 13px; line-height: 1.65; }
+.report-compose-aside > div { display: flex; align-items: flex-start; gap: 10px; padding-top: 13px; border-top: 1px solid var(--border-color); color: var(--text-secondary); font-size: 12px; line-height: 1.55; }
+.report-compose-aside > div svg { flex-shrink: 0; color: var(--primary-color); }
+.report-section-intro { padding-bottom: 26px; border-bottom: 1px solid var(--border-color); }
+.report-section-intro h2 { margin: 6px 0 8px; font-size: 25px; letter-spacing: -.03em; }
+.report-section-intro p { margin: 0; max-width: 660px; color: var(--text-secondary); font-size: 13px; line-height: 1.65; }
+.report-form-section { padding: 29px 0; border-bottom: 1px solid var(--border-color); }
+.report-form-section-last { border: 0; }
+.report-section-heading { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 24px; }
+.report-section-heading > span { display: grid; place-items: center; flex: 0 0 32px; height: 32px; border-radius: 9px; background: var(--surface-tint); color: var(--primary-color); font-size: 11px; font-weight: 800; }
+.report-section-heading h3 { margin: 1px 0 3px; font-size: 17px; }
+.report-section-heading p { margin: 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.employee-concerns .concern-form label { color: var(--text-primary); font-size: 12px; }
+.employee-concerns .concern-form input:not([type=checkbox]), .employee-concerns .concern-form textarea, .employee-concerns .concern-form select, .employee-concerns .concern-filters input, .employee-concerns .concern-filters select { min-height: 46px; border-radius: 9px; background: var(--surface-color); font-size: 13px; }
+.employee-concerns .concern-form textarea { line-height: 1.55; }
+.employee-concerns .concern-form textarea[name=description] { min-height: 160px; }
+.employee-concerns .concern-privacy { border: 1px solid var(--border-color); border-radius: 12px; background: var(--surface-muted); font-size: 12px; line-height: 1.7; }
+.employee-concerns .concern-privacy h3 { margin-top: 0; }
+.employee-concerns .concern-submit-bar { bottom: 14px; border-radius: 12px; }
+.employee-concerns .concern-pagination { margin-top: 22px; padding-top: 17px; border-top: 1px solid var(--border-color); font-size: 12px; }
+.employee-concerns .concern-submission-notice { border-left: 4px solid var(--primary-color); border-radius: 10px; background: color-mix(in srgb, var(--primary-color) 7%, var(--surface-color)); font-size: 13px; }
+.employee-concerns .concern-details { max-width: 980px; padding: clamp(24px, 4vw, 48px); margin: 0 auto; }
+.employee-concerns .concern-details > .concern-heading { padding-bottom: 20px; margin-bottom: 22px; border-bottom: 1px solid var(--border-color); }
+.employee-concerns .concern-details h2 { font-size: 26px; }
+.employee-concerns .concern-progress { border-radius: 12px; }
+.concern-management .concern-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; padding: 28px; }
+.concern-management .concern-filter-heading { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding-bottom: 18px; }
+.concern-management .concern-filter-heading svg { color: var(--primary-color); }
+.concern-management .concern-filter-heading h2 { margin: 5px 0 4px; font-size: 21px; }
+.concern-management .concern-filter-heading p { font-size: 12px; }
+.concern-management .concern-card { margin: 0 0 20px; }
+.concern-management .concern-card:not(.concern-filters):not(.concern-details) { padding: 28px; }
+.concern-management .report-case-list { margin-top: 6px; }
+.employee-concerns .concern-view-switch button.is-active:not(.button):hover:not(:disabled) { background: transparent; color: var(--primary-color); }
+.employee-concerns .report-section-intro h2 { font-size: 25px; }
+.employee-concerns .report-section-heading h3 { font-size: 17px; }
+.employee-concerns .concern-submit-bar { position: sticky; bottom: 14px; margin-top: 4px; z-index: 3; background: var(--surface-color); box-shadow: var(--shadow-soft); }
+.concern-management .concern-filters { display: block; padding: 20px 28px; }
+.report-confidential-note { display: flex; align-items: center; gap: 8px; margin: 0 0 16px; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.report-confidential-note svg { flex-shrink: 0; color: var(--primary-color); }
+.concern-management .concern-filter-heading { grid-column: auto; padding: 0; border: 0; }
+.concern-management .concern-filter-heading button { white-space: nowrap; }
+.concern-management .report-filter-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; padding-top: 22px; margin-top: 20px; border-top: 1px solid var(--border-color); }
+@media (max-width: 1050px) { .concern-management .report-filter-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .concern-management .report-filter-fields { grid-template-columns: minmax(0, 1fr); } .concern-management .concern-filters { padding: 20px; } }
+@media (max-width: 1050px) { .report-compose-layout { grid-template-columns: minmax(0, 1fr); } .report-compose-aside { position: static; grid-template-columns: repeat(3, minmax(0, 1fr)); } .report-compose-aside .report-kicker, .report-compose-aside h2, .report-compose-aside > p { grid-column: 1 / -1; } .concern-management .concern-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .report-page-hero { padding: 27px; } .report-hero-mark { display: none; } .employee-concerns .concern-view-switch { gap: 20px; } .report-case { grid-template-columns: minmax(0, 1fr); padding: 19px; } .report-case-meta span + span::before { display: none; } .employee-concerns .report-case-action:not(.button) { justify-self: start; } .report-compose-aside { grid-template-columns: 1fr; } .report-compose-aside .report-kicker, .report-compose-aside h2, .report-compose-aside > p { grid-column: auto; } .concern-management .concern-filters { grid-template-columns: 1fr; } .employee-concerns .concern-submit-bar { bottom: 8px; } .employee-concerns .concern-form-progress small { display: none; } }

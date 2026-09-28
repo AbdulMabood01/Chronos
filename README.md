@@ -133,6 +133,12 @@ npm run dev
 
 Open [http://localhost:5173](http://localhost:5173) in your browser.
 
+### Local observability
+
+An optional local Grafana, Prometheus, Loki, Tempo, and OpenTelemetry setup is
+available under [`monitoring/`](monitoring/README.md). It is profile-gated and
+does not change normal application startup.
+
 ### API Testing
 
 ```bash
@@ -283,9 +289,12 @@ docker run -p 8080:8080 -e DATABASE_URL=... chronos:1.0.0
 The backend reads its configuration from process environment variables. Use the
 [root `.env.example`](.env.example) as the template for database, JWT, email,
 public URL, CORS, and initial Admin settings. Copy it to `.env`, replace the
-example URLs and fill the blank values, then have your deployment manager load
-that file as environment variables before starting the backend. Spring Boot does
-not read `.env` files automatically. Do not commit `.env`; it is ignored by Git.
+example URLs and fill the blank values. Local backend runs from the repository
+root or `backend` directory also load this `.env` file. Process environment
+variables take precedence. For production, have your deployment manager load
+the file as environment variables before starting the backend. Do not commit
+`.env`; it is ignored by Git.
+Restart the backend after changing `.env`; password reset links use `FRONTEND_URL`.
 
 Set `DATABASE_URL`, `DATABASE_USERNAME`, and `DATABASE_PASSWORD` for the production
 PostgreSQL server. Set `JWT_SIGNING_KEY` to a Base64 encoded secret containing at

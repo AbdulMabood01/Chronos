@@ -3,7 +3,7 @@ import React from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ProjectManagement from './ProjectManagement';
-import { projectAPI, userAPI } from '../api';
+import { projectAPI, userAPI, expenseAPI } from '../api';
 vi.mock('../api');
 vi.mock('../AuthContext', () => ({ useAuth: () => ({ user: currentUser }) }));
 const currentUser = { id: 1, role: 'ADMIN' };
@@ -21,6 +21,8 @@ beforeEach(() => {
   projectAPI.getProjects.mockResolvedValue({ data: [project] });
   userAPI.getAllUsers.mockResolvedValue({ data: [] });
   projectAPI.getHoursDashboard.mockResolvedValue({ data: [{ projectId: 10, employees: [{ userId: 3, userName: 'Employee', plannedHours: 40, timesheetId: 20 }] }] });
+  expenseAPI.totals.mockResolvedValue({ data: { budget: 100, approved: 20, pending: 10, remaining: 80 } });
+  expenseAPI.project.mockResolvedValue({ data: [] });
 });
 afterEach(cleanup);
 
@@ -46,6 +48,19 @@ it('lets Admin read all project tabs without write controls', async () => {
   expect(projectAPI.updatePlannedHours).not.toHaveBeenCalled();
   expect(screen.queryByRole('link', { name: 'Open' })).toBeNull();
   expect(screen.queryByRole('columnheader', { name: 'Action' })).toBeNull();
+});
+
+it('shows pending expenses separately from the approved-spend chart and warns the Project Admin', async () => {
+  currentUser.role = 'PROJECT_ADMIN';
+  expenseAPI.totals.mockResolvedValue({ data: { budget: 100, approved: 30, pending: 55, remaining: 70 } });
+  await selectProject();
+  expect(await screen.findByRole('img', { name: /Project expenses: 30.00 approved, 55.00 pending, 70.00 remaining/ })).toBeTruthy();
+  expect(screen.getByText(/Approved and pending expenses are approaching the expense budget/)).toBeTruthy();
+  const budgetMeter = screen.getByRole('meter', { name: 'Approved expense budget used' });
+  expect(budgetMeter.getAttribute('aria-valuenow')).toBe('30');
+  expect(budgetMeter.querySelector('.pc-expense-approved').style.width).toBe('30%');
+  expect(budgetMeter.querySelector('.pc-expense-pending').style.width).toBe('55%');
+  expect(screen.getByText('Pending $55.00')).toBeTruthy();
 });
 
 it('shows editable assigned project hours from the assignment instead of monthly dashboard plans', async () => {
@@ -85,44 +100,121 @@ it('retains Admin project editing', async () => {
   expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
 });
 
-it('creates a project with routing only and leaves onboarding to Team', async () => {
+it('shows useful project context in Details and keeps budget editing in Expenses', async () => {
+  currentUser.role = 'PROJECT_ADMIN';
+  projectAPI.getProjects.mockResolvedValue({ data: [{ ...project, expenseBudget: 100, createdAt: '2026-09-01T12:00:00', updatedAt: '2026-09-12T12:00:00', pendingApprovalCount: 2 }] });
+  await selectProject();
+  fireEvent.click(screen.getByRole('button', { name: 'Project Details' }));
+  expect(screen.getByText('Ownership & approvals')).toBeTruthy();
+  expect(screen.getByText('Lifecycle')).toBeTruthy();
+  expect(screen.getByText('Sep 1, 2026')).toBeTruthy();
+  expect(screen.getByText('Sep 12, 2026')).toBeTruthy();
+  expect(screen.queryByLabelText('Expense Budget')).toBeNull();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Expenses' }));
+  expect(screen.getByLabelText('Expense Budget').value).toBe('100');
+  expect(screen.getByRole('button', { name: 'Save Budget' }).disabled).toBe(true);
+});
+
+it('saves the expense budget without changing project details or reverting it later', async () => {
   currentUser.role = 'PROJECT_ADMIN';
   userAPI.getAllUsers.mockResolvedValue({ data: [
-    { id: 3, firstName: 'Project', lastName: 'Manager', isActive: true, hourlyRate: 70 },
-    { id: 4, firstName: 'Hours', lastName: 'Approver', isActive: true, hourlyRate: 80 },
+    { id: 3, firstName: 'Project', lastName: 'Manager', role: 'EMPLOYEE', isActive: true },
+    { id: 4, firstName: 'Hours', lastName: 'Approver', role: 'EMPLOYEE', isActive: true },
   ] });
-  projectAPI.createProject.mockResolvedValue({ data: { ...project, id: 11, assignments: [] } });
+  projectAPI.getProjects.mockResolvedValue({ data: [{ ...project, expenseBudget: 100 }] });
+  projectAPI.updateProject.mockResolvedValue({ data: { ...project, expenseBudget: 250 } });
+  await selectProject();
+  fireEvent.click(screen.getByRole('button', { name: 'Expenses' }));
+  fireEvent.change(screen.getByLabelText('Expense Budget'), { target: { value: '250' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save Budget' }));
+  await waitFor(() => expect(projectAPI.updateProject).toHaveBeenCalledWith(10, expect.objectContaining({ code: 'P1', name: 'Atlas', expenseBudget: 250, projectManagerId: 3 })));
+  await screen.findByText('Expense budget saved.');
+  fireEvent.click(screen.getByRole('button', { name: 'Project Details' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save Project' }));
+  await waitFor(() => expect(projectAPI.updateProject).toHaveBeenCalledTimes(2));
+  expect(projectAPI.updateProject.mock.calls[1][1].expenseBudget).toBe(250);
+});
+
+it('validates budget precision and warns before leaving an unsaved budget', async () => {
+  currentUser.role = 'PROJECT_ADMIN';
+  projectAPI.getProjects.mockResolvedValue({ data: [{ ...project, expenseBudget: 100 }] });
+  await selectProject();
+  fireEvent.click(screen.getByRole('button', { name: 'Expenses' }));
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Expense Budget' }), { target: { value: '100.123' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save Budget' }));
+  expect(screen.getByText('Enter a nonnegative amount with no more than two decimal places.')).toBeTruthy();
+  expect(projectAPI.updateProject).not.toHaveBeenCalled();
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  fireEvent.click(screen.getByRole('button', { name: 'Project Details' }));
+  expect(screen.getByRole('spinbutton', { name: 'Expense Budget' })).toBeTruthy();
+  confirm.mockReturnValue(true);
+  fireEvent.click(screen.getByRole('button', { name: 'Project Details' }));
+  expect(screen.queryByRole('spinbutton', { name: 'Expense Budget' })).toBeNull();
+  confirm.mockRestore();
+});
+
+it('creates a draft with essentials and guides setup before activation', async () => {
+  currentUser.role = 'PROJECT_ADMIN';
+  const draft = { ...project, id: 11, code: 'P2', name: 'New Project', status: 'DRAFT', isActive: false, projectManagerId: null, projectManagerHoursApproverId: null, assignments: [] };
+  projectAPI.createProject.mockResolvedValue({ data: draft });
   render(<ProjectManagement />);
   fireEvent.click(await screen.findByRole('button', { name: 'New Project' }));
   fireEvent.change(screen.getByLabelText('Project Code'), { target: { value: 'P2' } });
   fireEvent.change(screen.getAllByLabelText('Project Name')[1], { target: { value: 'New Project' } });
-  fireEvent.change(screen.getByLabelText('Primary Project Manager'), { target: { value: '3' } });
-  fireEvent.change(screen.getByLabelText('Approver for the PM�s own hours'), { target: { value: '4' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Create Project' }));
-  await waitFor(() => expect(projectAPI.createProject).toHaveBeenCalledWith(expect.objectContaining({ projectManagerId: 3, projectManagerHoursApproverId: 4 })));
-  expect(screen.queryByLabelText('PM Start Date')).toBeNull();
+  expect(screen.queryByLabelText('Primary Project Manager')).toBeNull();
+  expect(screen.queryByLabelText('Status')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Create Draft' }));
+  await waitFor(() => expect(projectAPI.createProject).toHaveBeenCalledWith(expect.objectContaining({ status: 'DRAFT', projectManagerId: null, projectManagerHoursApproverId: null })));
+  expect(await screen.findByText('Prepare this draft for activation')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Activate Project' }).disabled).toBe(true);
+  fireEvent.click(screen.getByRole('button', { name: 'Add team' }));
   expect(await screen.findByText('Add a team member')).toBeTruthy();
-  expect(screen.getByLabelText('Employee').value).toBe('3');
-
 });
 
-it('allows the project manager to also be the PM hours approver', async () => {
+it('defaults the PM hours approver to the selected manager during draft setup', async () => {
   currentUser.role = 'PROJECT_ADMIN';
-  userAPI.getAllUsers.mockResolvedValue({ data: [
-    { id: 3, firstName: 'Project', lastName: 'Manager', isActive: true, hourlyRate: 70 },
-  ] });
-  projectAPI.createProject.mockResolvedValue({ data: { ...project, id: 11, projectManagerId: 3, projectManagerHoursApproverId: 3, assignments: [] } });
+  userAPI.getAllUsers.mockResolvedValue({ data: [{ id: 3, firstName: 'Project', lastName: 'Manager', isActive: true }] });
+  projectAPI.createProject.mockResolvedValue({ data: { ...project, id: 11, code: 'P2', name: 'New Project', status: 'DRAFT', projectManagerId: null, projectManagerHoursApproverId: null, assignments: [] } });
   render(<ProjectManagement />);
   fireEvent.click(await screen.findByRole('button', { name: 'New Project' }));
   fireEvent.change(screen.getByLabelText('Project Code'), { target: { value: 'P2' } });
   fireEvent.change(screen.getAllByLabelText('Project Name')[1], { target: { value: 'New Project' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Create Draft' }));
+  expect(await screen.findByLabelText('Primary Project Manager')).toBeTruthy();
   fireEvent.change(screen.getByLabelText('Primary Project Manager'), { target: { value: '3' } });
-  fireEvent.change(screen.getByLabelText('Approver for the PM�s own hours'), { target: { value: '3' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Create Project' }));
-  await waitFor(() => expect(projectAPI.createProject).toHaveBeenCalledWith(expect.objectContaining({ projectManagerId: 3, projectManagerHoursApproverId: 3 })));
-  expect(screen.queryByText('Project Manager cannot approve their own hours')).toBeNull();
+  expect(screen.getByLabelText("Approver for the PM's own hours").value).toBe('3');
 });
 
+it('suggests a code, catches duplicates, and protects unsaved draft changes', async () => {
+  currentUser.role = 'PROJECT_ADMIN';
+  render(<ProjectManagement />);
+  fireEvent.click(await screen.findByRole('button', { name: 'New Project' }));
+  fireEvent.change(screen.getAllByLabelText('Project Name')[1], { target: { value: 'Atlas' } });
+  expect(screen.getByLabelText('Project Code').value).toBe('ATLAS');
+  fireEvent.change(screen.getByLabelText('Project Code'), { target: { value: 'P1' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Create Draft' }));
+  expect(screen.getByText('This project code is already in use.')).toBeTruthy();
+  expect(projectAPI.createProject).not.toHaveBeenCalled();
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  expect(screen.getByRole('button', { name: 'Create Draft' })).toBeTruthy();
+  confirm.mockRestore();
+});
+
+it('activates a ready draft after routing and team assignment are saved', async () => {
+  currentUser.role = 'PROJECT_ADMIN';
+  const draft = { ...project, id: 11, status: 'DRAFT' };
+  projectAPI.getProjects.mockResolvedValue({ data: [draft] });
+  projectAPI.updateProject.mockResolvedValue({ data: { ...draft, status: 'ACTIVE', isActive: true } });
+  render(<ProjectManagement />);
+  fireEvent.change(await screen.findByLabelText('Filter'), { target: { value: 'DRAFT' } });
+  fireEvent.change(await screen.findByLabelText('Project Name'), { target: { value: 'Atlas' } });
+  fireEvent.click(screen.getByRole('button', { name: /Atlas/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'Activate Project' }));
+  await waitFor(() => expect(projectAPI.updateProject).toHaveBeenCalledWith(11, expect.objectContaining({ status: 'ACTIVE', isActive: true, projectManagerId: 3, projectManagerHoursApproverId: 4 })));
+  expect(await screen.findByText('Project activated. The team can now use it.')).toBeTruthy();
+});
 it('sums all resource assignments instead of the manual allocation or monthly plan', async () => {
   projectAPI.getProjects.mockResolvedValue({ data: [{ ...project, totalAllocatedHours: 999,
     assignments: [
@@ -240,7 +332,7 @@ it('excludes Admin and inactive users from ownership selections and previews a h
   fireEvent.click(screen.getByRole('button', { name: 'Project Details' }));
   const managers = screen.getByLabelText('Primary Project Manager');
   expect(Array.from(managers.options).map((option) => option.value)).toEqual(['', '3', '4']);
-  expect(Array.from(screen.getByLabelText('Approver for the PM�s own hours').options).map((option) => option.value)).toEqual(['', '3', '4']);
+  expect(Array.from(screen.getByLabelText("Approver for the PM's own hours" ).options).map((option) => option.value)).toEqual(['', '3', '4']);
   fireEvent.change(managers, { target: { value: '4' } });
   expect(screen.getByText('Approval handover')).toBeTruthy();
   expect(screen.getByText(/2 pending submissions/)).toBeTruthy();

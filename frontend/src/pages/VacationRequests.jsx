@@ -1,5 +1,5 @@
 import LeaveBalancePreview from '../components/LeaveBalancePreview';
-import ScreenTitle, { RecordSummary } from '../components/ScreenTitle';
+import { RecordSummary } from '../components/ScreenTitle';
 import { formatDate } from '../utils/dates';
 import React, { useEffect, useMemo, useState } from 'react';
 import { userAPI, vacationAPI } from '../api';
@@ -8,30 +8,26 @@ import { LoadingIndicator } from '../components/Hourglass';
 import '../styles.css';
 import { useAuth } from '../AuthContext';
 import LeaveBalancePanel from '../components/LeaveBalancePanel';
+import Icon from '../components/Icon';
+import './VacationRequests.css';
 
 const leaveTypes = [
   ['VACATION', 'Vacation'],
   ['SICK', 'Sick Leave'],
-  ['PERSONAL', 'Personal Day'],
-  ['MATERNITY', 'Maternity Leave'],
-  ['PATERNITY', 'Paternity Leave'],
-  ['PARENTAL', 'Parental Leave'],
   ['BEREAVEMENT', 'Bereavement Leave'],
-  ['ADOPTION', 'Adoption Leave'],
-  ['JURY_DUTY', 'Jury Duty'],
-  ['MILITARY', 'Military Leave'],
-  ['FAMILY_CARE', 'Family Care Leave'],
-  ['RELIGIOUS', 'Religious Leave'],
   ['UNPAID_LEAVE', 'Unpaid Leave'],
-  ['OTHER', 'Other'],
+  ['SPECIAL', 'Special Leave'],
 ];
 
-const paidBalanceKeyByType = Object.fromEntries(leaveTypes.filter(([type]) => type !== 'UNPAID_LEAVE').map(([type]) => [type, type === 'SICK' ? 'sick' : type === 'BEREAVEMENT' ? 'bereavement' : 'vacation']));
+const specialReasons = ['Personal', 'Parental', 'Maternity', 'Paternity', 'Adoption', 'Jury duty', 'Military', 'Family care', 'Religious', 'Other'];
+const paidBalanceKeyByType = { VACATION: 'vacation', SICK: 'sick', BEREAVEMENT: 'bereavement' };
+const leaveLabel = value => leaveTypes.find(([type]) => type === value)?.[1] || String(value || '').replaceAll('_', ' ').toLowerCase().replace(/^./, c => c.toUpperCase());
 
 const emptyForm = {
   startDate: '',
   endDate: '',
   vacationType: 'VACATION',
+  specialReason: '',
   notes: '',
 };
 
@@ -48,6 +44,8 @@ export default function VacationRequests() {
   const [error, setError] = useState('');
   const [editingRequest, setEditingRequest] = useState(null);
   const [formData, setFormData] = useState(emptyForm);
+  const [view, setView] = useState('requests');
+  const [recentRequestId, setRecentRequestId] = useState(null);
 
   useEffect(() => {
     loadRequests();
@@ -70,11 +68,7 @@ export default function VacationRequests() {
     }
   };
 
-  const buildUnpaidLeaveWarning = async (request) => {
-    const typeLabel = leaveTypes.find(([value]) => value === request.vacationType)?.[1] || request.vacationType.replaceAll('_', ' ');
-    if (request.vacationType === 'UNPAID_LEAVE') {
-      return `All ${Number(request.hours)} requested hours will be unpaid leave. Continue?`;
-    }
+  const checkBalanceBeforeSubmit = async (request) => {
     const balanceKey = paidBalanceKeyByType[request.vacationType];
     if (!balanceKey) return '';
 
@@ -91,7 +85,8 @@ export default function VacationRequests() {
       );
       const requestedHours = daysInYear(request) * 8;
       if (!requestedHours) continue;
-      const balance = (await userAPI.getLeaveBalance(user.id, year)).data;
+      const balance = (await userAPI.getMyLeaveBalance(year)).data;
+      if (!balance?.configured) return `Leave allowance is not set for ${year}. Ask an Admin to assign it before submitting this request.`;
       const bucket = balance?.[balanceKey];
       if (!bucket) throw new Error('Leave balance is unavailable');
       // Approved leave is already included in the server's remaining balance.
@@ -101,16 +96,17 @@ export default function VacationRequests() {
       const remainingHours = Math.max(0, Number(bucket.remainingDays) * 8 - pendingHours);
       const unpaidHours = Math.max(0, requestedHours - remainingHours);
       if (unpaidHours > 0) {
-        warnings.push(`${year}: ${requestedHours} hours requested, ${remainingHours} paid hours remaining after pending requests. ${unpaidHours} hours (${unpaidHours / 8} days) of this request will be unpaid leave.`);
+        warnings.push(`${year}: ${unpaidHours / 8} days exceed the available ${balanceKey} balance after pending requests. Choose Unpaid Leave or ask an Admin to update the allowance.`);
       }
     }
-    return warnings.length ? `${typeLabel}\n${warnings.join('\n')}\nContinue?` : '';
+    return warnings.join(' ');
   };
 
   const startNewRequest = () => {
     setEditingRequest(null);
     setFormData(emptyForm);
     setError('');
+    setView('editor');
   };
 
   const startEditing = (request) => {
@@ -119,9 +115,11 @@ export default function VacationRequests() {
       startDate: request.startDate || '',
       endDate: request.endDate || '',
       vacationType: request.vacationType || 'VACATION',
+      specialReason: request.specialReason || '',
       notes: request.notes || '',
     });
     setError('');
+    setView('editor');
   };
 
   const handleSave = async (event) => {
@@ -134,27 +132,33 @@ export default function VacationRequests() {
 
     setSaving(true);
     try {
+      let saved;
       if (editingRequest) {
-        await vacationAPI.updateRequest(
+        saved = await vacationAPI.updateRequest(
           editingRequest.id,
           formData.startDate,
           formData.endDate,
           formData.vacationType,
-          formData.notes
+          formData.notes,
+          formData.specialReason
         );
       } else {
-        await vacationAPI.createRequest(
+        saved = await vacationAPI.createRequest(
           formData.startDate,
           formData.endDate,
           formData.vacationType,
-          formData.notes
+          formData.notes,
+          formData.specialReason
         );
       }
 
-      startNewRequest();
       await loadRequests();
+      setRecentRequestId(saved?.data?.id || editingRequest?.id || null);
+      setEditingRequest(null);
+      setFormData(emptyForm);
+      setView('requests');
     } catch (err) {
-      setError(editingRequest ? 'Failed to update vacation request' : 'Failed to create vacation request');
+      setError(err.userMessage || err.response?.data?.message || (editingRequest ? 'Failed to update vacation request' : 'Failed to create vacation request'));
       console.error(err);
     } finally {
       setSaving(false);
@@ -164,13 +168,13 @@ export default function VacationRequests() {
   const handleSubmitForApproval = async (requestId) => {
     try {
       const request = requests.find((item) => item.id === requestId);
-      const warning = request ? await buildUnpaidLeaveWarning(request) : '';
-      if (warning && !window.confirm(warning)) return;
+      const warning = request ? await checkBalanceBeforeSubmit(request) : '';
+      if (warning) { setError(warning); return; }
       await vacationAPI.submitRequest(requestId);
       await loadRequests();
       setError('');
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to submit request');
+      setError(err.userMessage || err.response?.data?.message || err.message || 'Failed to submit request');
     }
   };
 
@@ -195,32 +199,29 @@ export default function VacationRequests() {
     return <div className="page-container"><div className="loading-panel"><LoadingIndicator label="Loading vacation requests..." /></div></div>;
   }
 
-  const activeRequests = requests.filter((request) => ['DRAFT', 'REJECTED'].includes(request.status));
   const approvedDays = requests
     .filter((request) => request.status === 'APPROVED' || request.status === 'LOCKED')
     .reduce((sum, request) => sum + (Number(request.hours || 0) / 8), 0);
 
   return (
     <div className="page-container vacation-page">
-      <div className="header-bar">
-        <div>
-          <ScreenTitle title="Vacation Requests" icon="calendar" eyebrow="TIME TO RECHARGE" />
-          <p className="page-subtitle">Create, edit, and resubmit time-off requests.</p>
-        </div>
-        <button className="button button-secondary" onClick={startNewRequest} type="button">
-          New Request
-        </button>
-      </div>
+      <header className="vacation-page-hero"><div><span className="vacation-kicker">TIME AWAY</span><h1>Time off</h1><p>Plan leave, track requests, and keep your balance in view.</p></div><div className="vacation-hero-mark" aria-hidden="true"><Icon name="calendar" size={30}/></div></header>
 
-      <RecordSummary items={[{ label: 'Total requests', value: requests.length, icon: 'calendar' }, { label: 'Awaiting approval', value: requests.filter(r => r.status === 'SUBMITTED').length, icon: 'clock' }, { label: 'Approved days', value: approvedDays.toFixed(1), icon: 'check' }]} />
-      {user?.id && <div className="card"><LeaveBalancePanel userId={user.id} /></div>}
+      <RecordSummary items={[{ label: 'Total requests', value: requests.length, icon: 'calendar' }, { label: 'Awaiting approval', value: requests.filter(r => r.status === 'SUBMITTED').length, icon: 'clock' }, { label: 'Approved leave days', value: approvedDays.toFixed(1), icon: 'check' }]} />
       {error && <div className="error-message" role="alert">{error}</div>}
 
-      <div className="vacation-layout">
+      <nav className="vacation-view-switch" aria-label="Time off views">
+        <button type="button" className={view === 'requests' ? 'is-active' : ''} aria-current={view === 'requests' ? 'page' : undefined} onClick={() => setView('requests')}>My requests <span>{requests.length}</span></button>
+        <button type="button" className={view === 'editor' ? 'is-active' : ''} aria-current={view === 'editor' ? 'page' : undefined} onClick={startNewRequest}>{editingRequest ? 'Edit request' : 'New request'}</button>
+        <button type="button" className={view === 'balances' ? 'is-active' : ''} aria-current={view === 'balances' ? 'page' : undefined} onClick={() => setView('balances')}>Leave balances</button>
+      </nav>
+
+      <div className="vacation-layout" hidden={view !== 'editor'}>
         <form className="card vacation-editor" onSubmit={handleSave}>
+          <div className="vacation-form-intro"><span className="vacation-kicker">{editingRequest ? 'UPDATE DRAFT' : 'NEW REQUEST'}</span><p>Select your dates and leave type, then save a draft to submit for approval.</p></div>
           <div className="panel-heading">
             <div>
-              <h2>{editingRequest ? 'Edit Vacation Request' : 'Create Vacation Request'}</h2>
+              <h2>{editingRequest ? 'Edit draft' : 'New time-off request'}</h2>
               <p>{requestedDays} working day{requestedDays === 1 ? '' : 's'} selected ({requestedDays * 8} hours)</p>
             </div>
             {editingRequest && <span className={`status-badge status-${editingRequest.status.toLowerCase()}`}>{editingRequest.status}</span>}
@@ -254,6 +255,7 @@ export default function VacationRequests() {
                 value={formData.vacationType}
                 onChange={(e) => setFormData({ ...formData, vacationType: e.target.value })}
               >
+                {editingRequest && !leaveTypes.some(([value]) => value === editingRequest.vacationType) && <option value={editingRequest.vacationType}>Legacy: {leaveLabel(editingRequest.vacationType)}</option>}
                 {leaveTypes.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
             </div>
@@ -263,6 +265,14 @@ export default function VacationRequests() {
             </div>
           </div>
 
+          {formData.vacationType === 'SPECIAL' && <div className="form-group">
+            <label htmlFor="vacation-special-reason">Special leave reason</label>
+            <select id="vacation-special-reason" required value={formData.specialReason} onChange={e => setFormData({ ...formData, specialReason: e.target.value })}>
+              <option value="">Choose a reason</option>{specialReasons.map(reason => <option key={reason} value={reason}>{reason}</option>)}
+            </select>
+            <p className="form-hint">An Admin will decide whether this uses a balance and how it is classified.</p>
+          </div>}
+
           <div className="form-group">
             <label htmlFor="vacationrequests-field-5">Notes</label>
             <textarea id="vacationrequests-field-5"
@@ -270,6 +280,7 @@ export default function VacationRequests() {
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
               placeholder="Add schedule details or context for approvers"
               rows="4"
+              required={formData.vacationType === 'SPECIAL' && formData.specialReason === 'Other'}
             />
           </div>
 
@@ -283,45 +294,43 @@ export default function VacationRequests() {
 
           <div className="action-bar compact-actions">
             <button type="submit" className="button button-primary" disabled={saving}>
-              {saving ? <LoadingIndicator label="Saving..." /> : editingRequest ? 'Save Changes' : 'Create Request'}
+              {saving ? <LoadingIndicator label="Saving..." /> : 'Save draft'}
             </button>
-            <button type="button" className="button button-secondary" onClick={startNewRequest}>
+            <button type="button" className="button button-secondary" onClick={() => { setEditingRequest(null); setFormData(emptyForm); setError(''); setView('requests'); }}>
               Cancel
             </button>
           </div>
         </form>
 
         <div className="vacation-side">
-          <div className="summary-tile">
-            <span>Requests to Finish</span>
-            <strong>{activeRequests.length}</strong>
-          </div>
-          <div className="summary-tile gross-pay-tile">
-            <span>Approved Vacation Days</span>
-            <strong>{approvedDays.toFixed(1)}</strong>
-          </div>
+          <div className="vacation-guide"><span className="vacation-kicker">HOW IT WORKS</span><h2>From draft to approval</h2><div><span>01</span><p>Choose dates and a leave type.</p></div><div><span>02</span><p>Save your request as a draft.</p></div><div><span>03</span><p>Submit the draft from My requests.</p></div><button type="button" onClick={() => setView('balances')}>Review leave balances <Icon name="arrow" size={16}/></button></div>
         </div>
       </div>
 
+      <section className="vacation-balances-view" hidden={view !== 'balances'} aria-label="Leave balances">{user?.id && <div className="card"><LeaveBalancePanel userId={user.id} ownBalance /></div>}</section>
+
+      <section className="vacation-requests-section" hidden={view !== 'requests'} aria-label="My requests">
+      <div className="vacation-list-heading"><div><span className="vacation-kicker">YOUR REQUESTS</span><h2>My requests</h2><p>Most recently created first</p></div><button type="button" className="button button-primary" onClick={startNewRequest}>Create request <Icon name="arrow" size={16}/></button></div>
       {requests.length === 0 ? (
         <div className="empty-state">
-          <p>No vacation requests yet.</p>
+          <p>No vacation requests yet. Create one to get started.</p>
         </div>
       ) : (
         <div className="request-list">
           {requests.map((request) => {
             const canEdit = request.status === 'DRAFT' || request.status === 'REJECTED';
             return (
-              <article className="request-card" key={request.id}>
+              <article className={`request-card${request.id === recentRequestId ? ' is-recent' : ''}`} key={request.id}>
                 <div>
                   <div className="request-card-topline">
-                    <h3>{request.vacationType.replace('_', ' ')}</h3>
+                    <h3>{leaveLabel(request.vacationType)}{request.specialReason ? ` · ${request.specialReason}` : ''}</h3>
                     <span className={`status-badge status-${request.status.toLowerCase()}`}>{request.status}</span>
                   </div>
                   <p className="request-dates">{formatDate(request.startDate)} to {formatDate(request.endDate)}</p>
                   <div className="request-meta">
-                    <span>{Number(request.hours || 0) / 8} vacation days</span>
-                    <span>Submitted {request.submittedAt ? formatDate(request.submittedAt) : '-'}</span>
+                    <span>{Number(request.hours || 0) / 8} working days</span>
+                    {request.accountingType && <span>{request.accountingType.replaceAll('_', ' ').toLowerCase()}</span>}
+                    {request.submittedAt && <span>Submitted {formatDate(request.submittedAt)}</span>}
                     {request.approvedAt && <span>Approved {formatDate(request.approvedAt)}</span>}
                   </div>
                   {request.notes && <p className="request-notes">{request.notes}</p>}
@@ -349,6 +358,7 @@ export default function VacationRequests() {
           })}
         </div>
       )}
+      </section>
     </div>
   );
 }

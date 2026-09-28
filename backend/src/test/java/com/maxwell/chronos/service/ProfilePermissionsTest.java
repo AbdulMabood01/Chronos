@@ -13,7 +13,7 @@ import static org.mockito.Mockito.*;
 class ProfilePermissionsTest {
     @Test void timezoneIsSavedReturnedAndValidated() {
         var users = mock(UserRepository.class);
-        var service = new UserService(users, mock(AuditService.class));
+        var service = new UserService(users, mock(AuditService.class), mock(AuthSessionService.class));
         var user = User.builder().id(1L).email("employee@example.com").role(UserRole.EMPLOYEE).build();
         when(users.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
         when(users.save(user)).thenReturn(user);
@@ -29,7 +29,7 @@ class ProfilePermissionsTest {
 
     @Test void optionalDetailsAreSavedClearedAndExcludedFromGeneralUserResponses() throws Exception {
         var users = mock(UserRepository.class);
-        var service = new UserService(users, mock(AuditService.class));
+        var service = new UserService(users, mock(AuditService.class), mock(AuthSessionService.class));
         var user = User.builder().id(1L).email("employee@example.com").role(UserRole.EMPLOYEE).build();
         when(users.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
         when(users.save(user)).thenReturn(user);
@@ -75,7 +75,7 @@ class ProfilePermissionsTest {
 
     @Test void systemAdminCannotSetSsnAndExistingValueIsNotReturnedOrErased() {
         var users = mock(UserRepository.class);
-        var service = new UserService(users, mock(AuditService.class));
+        var service = new UserService(users, mock(AuditService.class), mock(AuthSessionService.class));
         var user = User.builder().id(1L).email("admin@example.com").role(UserRole.ADMIN).ssnLast4("1234").build();
         when(users.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
         var request = new UpdateProfileRequest();
@@ -91,7 +91,7 @@ class ProfilePermissionsTest {
 
     @Test void employeeCanStillUpdateSsn() {
         var users = mock(UserRepository.class);
-        var service = new UserService(users, mock(AuditService.class));
+        var service = new UserService(users, mock(AuditService.class), mock(AuthSessionService.class));
         var user = User.builder().id(1L).email("employee@example.com").role(UserRole.EMPLOYEE).build();
         when(users.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
         when(users.save(user)).thenReturn(user);
@@ -101,7 +101,7 @@ class ProfilePermissionsTest {
     }
     @Test void onlyAdminCanSetOrClearJoiningDate() {
         var users = mock(UserRepository.class);
-        var service = new UserService(users, mock(AuditService.class));
+        var service = new UserService(users, mock(AuditService.class), mock(AuthSessionService.class));
         var employee = User.builder().id(1L).role(UserRole.EMPLOYEE).build();
         var admin = User.builder().id(2L).role(UserRole.PROJECT_ADMIN).build();
         var systemAdmin = User.builder().id(3L).role(UserRole.ADMIN).build();

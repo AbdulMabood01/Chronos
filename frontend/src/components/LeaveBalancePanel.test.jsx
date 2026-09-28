@@ -5,18 +5,18 @@ import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/re
 import LeaveBalancePanel from './LeaveBalancePanel';
 import { userAPI } from '../api';
 
-vi.mock('../api', () => ({ userAPI: { getLeaveBalance: vi.fn(), updateLeaveAllowance: vi.fn() } }));
+vi.mock('../api', () => ({ userAPI: { getLeaveBalance: vi.fn(), getMyLeaveBalance: vi.fn(), updateLeaveAllowance: vi.fn() } }));
 
 const balance = { year: 2026, configured: true, vacation: { allowanceDays: 10, extraDays: 2, usedDays: 13, remainingDays: 0, unpaidDays: 1 }, sick: { allowanceDays: 5, extraDays: 0, usedDays: 1, remainingDays: 4, unpaidDays: 0 } };
 
-beforeEach(() => { vi.resetAllMocks(); userAPI.getLeaveBalance.mockResolvedValue({ data: balance }); userAPI.updateLeaveAllowance.mockResolvedValue({ data: balance }); });
+beforeEach(() => { vi.resetAllMocks(); userAPI.getLeaveBalance.mockResolvedValue({ data: balance }); userAPI.getMyLeaveBalance.mockResolvedValue({ data: balance }); userAPI.updateLeaveAllowance.mockResolvedValue({ data: balance }); });
 afterEach(cleanup);
 
-it('shows approved usage and unpaid days without employee editing controls', async () => {
+it('shows approved and pending days without employee editing controls', async () => {
   render(<LeaveBalancePanel userId={1} />);
   expect(await screen.findByText('Vacation')).toBeTruthy();
   expect(screen.getAllByText('Approved')).toHaveLength(2);
-  expect(screen.getAllByText('Unpaid')).toHaveLength(2);
+  expect(screen.getAllByText('Pending')).toHaveLength(2);
   expect(screen.getByText('13')).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Save allowance' })).toBeNull();
 });
@@ -37,4 +37,11 @@ it('shows errors instead of a fabricated zero balance', async () => {
   render(<LeaveBalancePanel userId={1} />);
   expect(await screen.findByRole('alert')).toBeTruthy();
   expect(screen.queryByText('days remaining')).toBeNull();
+});
+
+it('reads the signed in employee balance without relying on a user ID in the request path', async () => {
+  render(<LeaveBalancePanel userId={1} ownBalance />);
+  await screen.findByText('Vacation');
+  expect(userAPI.getMyLeaveBalance).toHaveBeenCalled();
+  expect(userAPI.getLeaveBalance).not.toHaveBeenCalled();
 });

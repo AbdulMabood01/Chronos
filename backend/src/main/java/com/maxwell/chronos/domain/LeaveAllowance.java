@@ -19,4 +19,5 @@ public class LeaveAllowance {
     @Column(nullable = false) private BigDecimal sickDays = BigDecimal.ZERO;
     @Column(nullable = false) private BigDecimal extraVacationDays = BigDecimal.ZERO;
     @Column(nullable = false) private BigDecimal extraSickDays = BigDecimal.ZERO;
+    @Column(nullable = false, length = 16) private String source = "OVERRIDE";
 }

@@ -3,8 +3,10 @@ import { formatDate } from '../utils/dates';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
-import { letterRequestAPI, timesheetAPI, vacationAPI } from '../api';
+import { expenseAPI, letterRequestAPI, timesheetAPI, vacationAPI } from '../api';
 import { LoadingIndicator } from '../components/Hourglass';
+import { downloadReceipt } from './Expenses';
+import './Expenses.css';
 import '../styles.css';
 
 
@@ -17,8 +19,13 @@ function formatLetterType(value) {
 }
 
 function apiErrorMessage(error, fallback) {
-  return error?.response?.data?.message || error?.message || fallback;
+  return error?.userMessage || error?.response?.data?.message || error?.message || fallback;
 }
+
+const money = value => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
+const expenseLabel = value => String(value || '').replaceAll('_', ' ').toLowerCase().replace(/^./, c => c.toUpperCase());
+const needsLeaveClassification = type => !['VACATION', 'SICK', 'BEREAVEMENT', 'UNPAID_LEAVE'].includes(type);
+const accountingOptions = [['PAID_NO_QUOTA', 'Paid, no annual balance'], ['UNPAID', 'Unpaid, no annual balance'], ['VACATION', 'Use vacation balance'], ['SICK', 'Use sick balance'], ['BEREAVEMENT', 'Use bereavement balance']];
 
 export default function AdminDashboard() {
   const { user } = useAuth();
@@ -26,10 +33,16 @@ export default function AdminDashboard() {
   const [pendingTimesheets, setPendingTimesheets] = useState([]);
   const [pendingVacations, setPendingVacations] = useState([]);
   const [pendingLetters, setPendingLetters] = useState([]);
+  const [pendingExpenses, setPendingExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [rejectingTask, setRejectingTask] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [reviewingExpense, setReviewingExpense] = useState(null);
+  const [expenseComment, setExpenseComment] = useState('');
+  const [expenseBusy, setExpenseBusy] = useState(false);
+  const [reviewingLeave, setReviewingLeave] = useState(null);
+  const [specialAccounting, setSpecialAccounting] = useState('');
   const isReviewer = user?.canReviewProjects || ['PROJECT_ADMIN', 'ADMIN'].includes(user?.role);
   const canReviewLetters = user?.role === 'ADMIN';
 
@@ -43,16 +56,15 @@ export default function AdminDashboard() {
       const requests = [
         user?.role !== 'ADMIN' ? timesheetAPI.getPendingProjectSubmissions() : Promise.resolve({ data: [] }),
         user?.role === 'ADMIN' ? vacationAPI.getPendingRequests() : Promise.resolve({ data: [] }),
+        canReviewLetters ? letterRequestAPI.getPendingRequests() : Promise.resolve({ data: [] }),
+        expenseAPI.pending(),
       ];
-      if (canReviewLetters) {
-        requests.push(letterRequestAPI.getPendingRequests());
-      }
-      const [timesheetRes, vacationRes, letterRes] = await Promise.allSettled(requests);
+      const [timesheetRes, vacationRes, letterRes, expenseRes] = await Promise.allSettled(requests);
       if (timesheetRes.status === 'fulfilled') setPendingTimesheets(timesheetRes.value.data || []);
       if (vacationRes.status === 'fulfilled') setPendingVacations(vacationRes.value.data || []);
-      if (canReviewLetters && letterRes?.status === 'fulfilled') setPendingLetters(letterRes.value.data || []);
-      if (!canReviewLetters) setPendingLetters([]);
-      const failed = [[timesheetRes, 'timesheets'], [vacationRes, 'vacation requests'], [letterRes, 'letters']]
+      if (letterRes.status === 'fulfilled') setPendingLetters(letterRes.value.data || []);
+      if (expenseRes.status === 'fulfilled') setPendingExpenses(expenseRes.value.data || []);
+      const failed = [[timesheetRes, 'timesheets'], [vacationRes, 'vacation requests'], [letterRes, 'letters'], [expenseRes, 'expenses']]
         .filter(([result]) => result?.status === 'rejected').map(([, label]) => label);
       setError(failed.length ? 'Could not refresh ' + failed.join(', ') + '. Previously loaded items may be out of date. Please retry.' : '');
     } catch (err) {
@@ -90,6 +102,9 @@ export default function AdminDashboard() {
       employee: task.userName,
       period: `${formatDate(task.startDate)} to ${formatDate(task.endDate)}`,
       detail: `${Number(task.hours || 0) / 8} days, ${task.vacationType}`,
+      vacationType: task.vacationType,
+      specialReason: task.specialReason,
+      notes: task.notes,
       submittedAt: task.submittedAt,
       status: task.status,
       kind: 'vacation',
@@ -105,18 +120,49 @@ export default function AdminDashboard() {
       status: task.status,
       kind: 'letter',
     })),
-  ].sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0)), [pendingTimesheets, pendingVacations, pendingLetters, user?.id]);
+    ...pendingExpenses.map((task) => ({
+      id: `expense-${task.id}`,
+      entityId: task.id,
+      type: 'Expense Approval',
+      employee: task.employee_name,
+      designation: task.project_code,
+      period: task.expense_date ? formatDate(task.expense_date) : 'Expense date unavailable',
+      detail: `${expenseLabel(task.category)} · ${money(task.amount)}`,
+      submittedAt: task.submitted_at,
+      status: task.status || 'PENDING_APPROVAL',
+      kind: 'expense',
+      expense: task,
+    })),
+  ].sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0)), [pendingTimesheets, pendingVacations, pendingLetters, pendingExpenses, user?.id]);
 
-  const approveTask = async (task) => {
+  const decideExpense = async status => {
+    if (!reviewingExpense || expenseBusy) return;
+    setExpenseBusy(true);
+    setError('');
+    try {
+      await expenseAPI.decide(reviewingExpense.id, status, expenseComment.trim());
+      setReviewingExpense(null);
+      setExpenseComment('');
+      await loadPendingItems();
+    } catch (err) {
+      setError(apiErrorMessage(err, 'Failed to review expense'));
+    } finally {
+      setExpenseBusy(false);
+    }
+  };
+
+  const approveTask = async (task, accountingType = null) => {
     try {
       if (task.kind === 'timesheet') {
         await timesheetAPI.approveProjectSubmission(task.entityId);
       } else if (task.kind === 'vacation') {
-        await vacationAPI.approveVacation(task.entityId);
+        await vacationAPI.approveVacation(task.entityId, accountingType);
       } else {
         await letterRequestAPI.approveRequest(task.entityId);
       }
       await loadPendingItems();
+      setReviewingLeave(null);
+      setSpecialAccounting('');
     } catch (err) {
       setError(apiErrorMessage(err, `Failed to approve ${task.type.toLowerCase()}`));
     }
@@ -166,7 +212,7 @@ export default function AdminDashboard() {
     <div className="page-container admin-page">
       <div className="admin-hero">
         <div>
-          <ScreenTitle title="Admin Dashboard" icon="check" eyebrow="REVIEW & APPROVE" />
+          <ScreenTitle title="Approvals" icon="check" eyebrow="REVIEW & APPROVE" />
           <p className="page-subtitle">Approvals, changes, and operational work that needs attention.</p>
         </div>
         <div className="admin-stats">
@@ -181,6 +227,10 @@ export default function AdminDashboard() {
           <div>
             <span>Vacation</span>
             <strong>{pendingVacations.length}</strong>
+          </div>
+          <div>
+            <span>Expenses</span>
+            <strong>{pendingExpenses.length}</strong>
           </div>
         </div>
       </div>
@@ -226,12 +276,16 @@ export default function AdminDashboard() {
                     <button className="button button-small button-secondary" onClick={() => navigate(`/admin/letter-request/${task.entityId}`)} type="button">
                       Review
                     </button>
+                  ) : task.kind === 'expense' ? (
+                    <button className="button button-small button-secondary" onClick={() => { setReviewingExpense(task.expense); setExpenseComment(''); }} type="button">
+                      Review
+                    </button>
                   ) : null}
-                  {task.kind !== 'letter' && (
+                  {task.kind !== 'letter' && task.kind !== 'expense' && (
                     <>
-                      <button className="button button-small button-success" onClick={() => approveTask(task)}>
-                        Approve
-                      </button>
+                      {task.kind === 'vacation' && needsLeaveClassification(task.vacationType)
+                        ? <button className="button button-small button-secondary" onClick={() => { setReviewingLeave(task); setSpecialAccounting(''); }}>Review</button>
+                        : <button className="button button-small button-success" onClick={() => approveTask(task)}>Approve</button>}
                       {!task.isOwn && <button className="button button-small button-danger" onClick={() => rejectTask(task)}>
                         Reject
                       </button>}
@@ -243,6 +297,33 @@ export default function AdminDashboard() {
           </div>
         )}
       </section>
+
+      {reviewingExpense && <div className="modal-backdrop" role="presentation">
+        <div className="modal-card expense-review-modal" role="dialog" aria-modal="true" aria-labelledby="expense-review-title">
+          <div className="modal-header"><h2 id="expense-review-title">Review expense</h2><button type="button" className="modal-close" aria-label="Close" onClick={() => setReviewingExpense(null)}>×</button></div>
+          <p><strong>{reviewingExpense.employee_name}</strong> · {reviewingExpense.project_code} · {expenseLabel(reviewingExpense.category)} · {money(reviewingExpense.amount)}</p>
+          <p>{reviewingExpense.description}</p>
+          {error && <p role="alert" className="error-message">{error}</p>}
+          {reviewingExpense.receipt_name && <button type="button" className="button button-secondary button-small" onClick={() => downloadReceipt(reviewingExpense.id, reviewingExpense.receipt_name).catch(err => setError(apiErrorMessage(err, 'Unable to download receipt')))}>Download receipt</button>}
+          <label className="expense-review-comment">Reviewer comments<textarea value={expenseComment} maxLength="2000" rows="3" onChange={event => setExpenseComment(event.target.value)} placeholder="Required when requesting changes or rejecting" /></label>
+          <div className="expense-actions"><button type="button" disabled={expenseBusy} className="button button-primary" onClick={() => decideExpense('APPROVED')}>Approve</button><button type="button" disabled={expenseBusy || !expenseComment.trim()} className="button button-secondary" onClick={() => decideExpense('CHANGES_REQUESTED')}>Request changes</button><button type="button" disabled={expenseBusy || !expenseComment.trim()} className="button button-secondary" onClick={() => decideExpense('REJECTED')}>Reject</button></div>
+        </div>
+      </div>}
+
+      {reviewingLeave && <div className="modal-backdrop" role="presentation">
+        <div className="modal-card leave-review-modal" role="dialog" aria-modal="true" aria-labelledby="leave-review-title">
+          <div className="modal-header"><h2 id="leave-review-title">Classify special leave</h2><button type="button" className="modal-close" aria-label="Close" onClick={() => setReviewingLeave(null)}>×</button></div>
+          <p><strong>{reviewingLeave.employee}</strong> · {reviewingLeave.period}</p>
+          <p>{reviewingLeave.specialReason || expenseLabel(reviewingLeave.vacationType)}</p>
+          {reviewingLeave.notes && <p>{reviewingLeave.notes}</p>}
+          {error && <p role="alert" className="error-message">{error}</p>}
+          <label>How should this leave be counted?<select value={specialAccounting} onChange={event => setSpecialAccounting(event.target.value)}>
+            <option value="">Choose a classification</option>{accountingOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select></label>
+          <p className="leave-review-note">Balance choices are checked again before approval. The chosen classification is saved with this request.</p>
+          <div className="action-bar compact-actions"><button type="button" className="button button-primary" disabled={!specialAccounting} onClick={() => approveTask(reviewingLeave, specialAccounting)}>Approve leave</button><button type="button" className="button button-secondary" onClick={() => setReviewingLeave(null)}>Cancel</button></div>
+        </div>
+      </div>}
 
       {rejectingTask && (
         <div className="modal-backdrop" role="presentation">

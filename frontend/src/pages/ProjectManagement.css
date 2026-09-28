@@ -47,16 +47,19 @@
 .projects-workspace-page .project-mini-metrics strong { font-size: 27px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .projects-workspace-page .project-mini-metrics small { font-size: 11px; font-weight: 500; color: var(--text-secondary); }
 .projects-workspace-page .pc-overview-metrics > div > svg { color: var(--primary-color); margin-bottom: 16px; }
-.projects-workspace-page .project-overview-hero { margin-bottom: 0; display: block; }
-.projects-workspace-page .project-donut-card { background: var(--surface-color); color: var(--text-primary); border: 1px solid var(--border-color); box-shadow: none; border-radius: 10px; padding: 24px; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 28px; min-height: 0; }
+.projects-workspace-page .project-overview-hero { margin-bottom: 0; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 1rem; }
+.projects-workspace-page .project-chart-title { grid-column: 1/-1; margin: 0; font-size: 1rem; }
+.projects-workspace-page .expense-budget-warning { grid-column: 1/-1; margin: 0; color: var(--warning-color,#b45309); }
+@media (max-width: 1000px) { .projects-workspace-page .project-overview-hero { grid-template-columns: 1fr; } }
+.projects-workspace-page .project-donut-card { background: var(--surface-color); color: var(--text-primary); border: 1px solid var(--border-color); box-shadow: none; border-radius: 10px; padding: 24px; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 20px; min-width: 0; min-height: 0; }
 .projects-workspace-page .project-donut-card::after { display: none; }
-.projects-workspace-page .project-donut-left { grid-template-columns: minmax(0, 1fr); justify-self: stretch; gap: 20px; }
-.projects-workspace-page .project-donut-card .project-status-donut { width: 200px; justify-self: center; border: 0; box-shadow: none; background: radial-gradient(circle at center, var(--surface-color) 0 56%, transparent 57%), conic-gradient(var(--pc-approved) 0 var(--approved-deg), var(--pc-submitted) var(--approved-deg) var(--submitted-deg), var(--pc-rejected) var(--submitted-deg) var(--rejected-deg), var(--pc-draft) var(--rejected-deg) var(--other-deg), var(--border-color) var(--other-deg) 360deg); }
-.projects-workspace-page .project-status-donut > span { color: var(--text-primary); font-size: 32px; font-weight: 650; }
-.projects-workspace-page .project-status-donut > small { color: var(--text-secondary); }
-.projects-workspace-page .project-chart-legend { width: 100%; max-width: 340px; justify-self: center; gap: 9px; }
-.projects-workspace-page .project-chart-legend span { color: var(--text-secondary); font-size: 12px; }
-.projects-workspace-page .project-chart-legend strong { color: var(--text-primary); }
+.projects-workspace-page .project-donut-left { grid-template-columns: minmax(0, 1fr); justify-self: stretch; justify-items: stretch; gap: 20px; min-width: 0; }
+.projects-workspace-page .project-donut-card .project-status-donut { width: min(200px, 100%); justify-self: center; border: 0; box-shadow: none; background: radial-gradient(circle at center, var(--surface-color) 0 56%, transparent 57%), conic-gradient(var(--pc-approved) 0 var(--approved-deg), var(--pc-submitted) var(--approved-deg) var(--submitted-deg), var(--pc-rejected) var(--submitted-deg) var(--rejected-deg), var(--pc-draft) var(--rejected-deg) var(--other-deg), var(--border-color) var(--other-deg) 360deg); }
+.projects-workspace-page .project-status-donut > span { color: var(--text-primary); font-size: clamp(21px, 2.3vw, 32px); font-weight: 650; text-align: center; max-width: 75%; }
+.projects-workspace-page .project-status-donut > small { color: var(--text-secondary); max-width: 76%; text-align: center; line-height: 1.2; }
+.projects-workspace-page .project-chart-legend { width: 100%; max-width: 100%; justify-self: stretch; gap: 9px; min-width: 0; }
+.projects-workspace-page .project-chart-legend span { color: var(--text-secondary); font-size: 12px; grid-template-columns: 11px minmax(0, 1fr) minmax(0, auto); min-width: 0; line-height: 1.35; }
+.projects-workspace-page .project-chart-legend strong { color: var(--text-primary); min-width: 0; max-width: 150px; overflow-wrap: anywhere; text-align: right; font-variant-numeric: tabular-nums; }
 .projects-workspace-page .legend-approved { background: var(--pc-approved); }
 .projects-workspace-page .legend-submitted { background: var(--pc-submitted); }
 .projects-workspace-page .legend-rejected { background: var(--pc-rejected); }
@@ -74,6 +77,15 @@
 .projects-workspace-page .pc-plan-progress p, .projects-workspace-page .pc-plan-progress > div > span { color: var(--text-secondary); }
 .projects-workspace-page .pc-progress-track { height: 7px; background: var(--border-color); border-radius: 8px; overflow: hidden; margin: 14px 0 10px; }
 .projects-workspace-page .pc-progress-track > span { display: block; height: 100%; background: var(--primary-color); border-radius: inherit; }
+.projects-workspace-page .pc-expense-progress-track { display: flex; }
+.projects-workspace-page .pc-expense-progress-track > span { flex: 0 0 auto; border-radius: 0; }
+.projects-workspace-page .pc-expense-progress-track > .pc-expense-approved,
+.projects-workspace-page .pc-budget-breakdown .pc-expense-approved { background: var(--pc-approved); }
+.projects-workspace-page .pc-expense-progress-track > .pc-expense-pending,
+.projects-workspace-page .pc-budget-breakdown .pc-expense-pending { background: var(--pc-submitted); }
+.projects-workspace-page .pc-budget-breakdown { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 0 0 10px; font-variant-numeric: tabular-nums; }
+.projects-workspace-page .pc-budget-breakdown > span { display: inline-flex; align-items: center; gap: 6px; }
+.projects-workspace-page .pc-budget-breakdown i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: 0 0 8px; }
 .projects-workspace-page .pc-team-summary { display: flex; flex-wrap: wrap; gap: 16px 28px; background: var(--surface-muted); border: 1px solid var(--border-color); padding: 18px; border-radius: 9px; margin-bottom: 24px; }
 .projects-workspace-page .pc-team-summary > span { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-secondary); }
 .projects-workspace-page .pc-team-summary strong { color: var(--text-primary); }
@@ -95,6 +107,17 @@
 .projects-workspace-page .table-subtext { margin-top: 5px; font-size: 11px; }
 .projects-workspace-page .pc-form-section-title { display: flex; align-items: flex-start; gap: 12px; border-top: 1px solid var(--border-color); padding-top: 24px; margin: 28px 0 18px; }
 .projects-workspace-page .pc-form-section-title > svg { color: var(--primary-color); flex-shrink: 0; }
+.projects-workspace-page .pc-project-success { padding: 12px 16px; margin-bottom: 18px; border: 1px solid var(--pc-approved); border-radius: 8px; background: var(--surface-muted); color: var(--text-primary); font-size: 13px; }
+.projects-workspace-page .pc-setup-panel { display: grid; gap: 16px; margin: 0 0 24px; padding: 20px; border: 1px solid var(--border-color); border-radius: 9px; background: var(--surface-muted); }
+.projects-workspace-page .pc-setup-panel h3 { margin: 5px 0; color: var(--text-primary); font-size: 17px; }
+.projects-workspace-page .pc-setup-panel p { margin: 0; color: var(--text-secondary); font-size: 12px; }
+.projects-workspace-page .pc-setup-list { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; }
+.projects-workspace-page .pc-setup-list li { color: var(--text-secondary); font-size: 13px; }
+.projects-workspace-page .pc-setup-list li::before { content: '○'; margin-right: 9px; color: var(--primary-color); }
+.projects-workspace-page .pc-setup-list li.complete::before { content: '✓'; color: var(--pc-approved); }
+.projects-workspace-page .pc-setup-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.projects-workspace-page .pc-field-error { display: block; margin-top: 5px; color: var(--pc-rejected); font-size: 12px; }
+.projects-workspace-page .pc-field-hint { display: block; margin-top: 5px; color: var(--text-secondary); font-size: 12px; }
 .projects-workspace-page .form-row { gap: 28px; margin-bottom: 24px; }
 .projects-workspace-page .pc-routing-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .projects-workspace-page .form-group label { font-size: 12px; margin-bottom: 8px; }
@@ -116,7 +139,6 @@ body.theme-dark .projects-workspace-page .project-section-heading p { background
 body.theme-dark .projects-workspace-page input,
 body.theme-dark .projects-workspace-page select,
 body.theme-dark .projects-workspace-page textarea { background: var(--surface-color); color: var(--text-primary); border-color: var(--border-color); color-scheme: dark; }
-@media (min-width: 1500px) { .projects-workspace-page .project-donut-left { grid-template-columns: 200px minmax(0, 1fr); } }
 @media (max-width: 1150px) {
   .projects-workspace-page .assign-employee-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .projects-workspace-page .form-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -158,14 +180,56 @@ body.theme-dark .projects-workspace-page textarea { background: var(--surface-co
 .projects-workspace-page .pc-offboarding-dialog [role="alert"] { padding: 16px; background: var(--surface-muted); border-left: 3px solid var(--pc-submitted); }
 .projects-workspace-page .pc-offboarding-dialog .compact-actions { display: flex; flex-wrap: wrap; gap: 12px; }
 .projects-workspace-page .assign-employee-panel > .button { align-self: end; min-height: 46px; }
-@media (max-width: 1000px) {
-  .projects-workspace-page .project-donut-card { grid-template-columns: minmax(0, 1fr); }
-}
 @media (max-width: 700px) {
   .projects-workspace-page .pc-offboarding-dialog { padding: 24px; }
   .projects-workspace-page .pc-offboarding-dialog .button { width: 100%; }
 }
 
-.projects-workspace-page .pc-essentials-row > .form-group { --field-accent: #518eae; padding: 20px; border: 1px solid var(--border-color); border-top: 4px solid var(--field-accent); border-radius: 10px; background: color-mix(in srgb, var(--field-accent) 9%, var(--surface-color)); }
-.projects-workspace-page .pc-essentials-row > .form-group:nth-child(2) { --field-accent: #278569; }
-.projects-workspace-page .pc-essentials-row > .form-group:nth-child(3) { --field-accent: #8b6bb5; }
+.projects-workspace-page .pc-details-heading, .projects-workspace-page .pc-expense-budget-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 22px; }
+.projects-workspace-page .pc-details-heading h3, .projects-workspace-page .pc-expense-budget-heading h3 { margin: 5px 0 6px; font-size: clamp(20px, 2vw, 25px); color: var(--text-primary); }
+.projects-workspace-page .pc-details-heading p, .projects-workspace-page .pc-expense-budget-heading p { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+.projects-workspace-page .pc-details-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.projects-workspace-page .pc-details-grid > :only-child, .projects-workspace-page .pc-lifecycle-card { grid-column: 1 / -1; }
+.projects-workspace-page .pc-detail-card { min-width: 0; padding: 22px; border: 1px solid var(--border-color); border-radius: 11px; background: var(--surface-color); }
+.projects-workspace-page .pc-detail-card-heading { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 22px; }
+.projects-workspace-page .pc-detail-icon { display: grid; place-items: center; width: 36px; height: 36px; flex: 0 0 36px; border-radius: 9px; color: var(--primary-color); background: var(--surface-tint); }
+.projects-workspace-page .pc-detail-card-heading h4 { margin: 0 0 4px; font-size: 15px; color: var(--text-primary); }
+.projects-workspace-page .pc-detail-card-heading p { margin: 0; color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
+.projects-workspace-page .pc-detail-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.projects-workspace-page .pc-routing-card .pc-detail-fields { grid-template-columns: minmax(0, 1fr); }
+.projects-workspace-page .pc-detail-fields .form-group { min-width: 0; margin: 0; }
+.projects-workspace-page .pc-detail-fields input, .projects-workspace-page .pc-detail-fields select, .projects-workspace-page .pc-detail-fields textarea { width: 100%; box-sizing: border-box; }
+.projects-workspace-page .pc-description-field { grid-column: 1 / -1; }
+.projects-workspace-page .pc-description-field textarea { min-height: 105px; }
+.projects-workspace-page .pc-lifecycle-content { display: grid; grid-template-columns: minmax(170px, 240px) minmax(0, 1fr); align-items: start; gap: 24px; }
+.projects-workspace-page .pc-lifecycle-content .form-group { margin: 0; }
+.projects-workspace-page .pc-lifecycle-content select { width: 100%; }
+.projects-workspace-page .pc-detail-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 14px; margin: 0; }
+.projects-workspace-page .pc-detail-facts > div { min-width: 0; padding-left: 14px; border-left: 1px solid var(--border-color); }
+.projects-workspace-page .pc-detail-facts dt { color: var(--text-secondary); font-size: 11px; margin-bottom: 7px; }
+.projects-workspace-page .pc-detail-facts dd { margin: 0; overflow-wrap: anywhere; color: var(--text-primary); font-size: 13px; font-weight: 650; }
+.projects-workspace-page .pc-handover-note { margin-top: 20px; padding: 14px 16px; border-left: 3px solid var(--pc-submitted); border-radius: 6px; background: var(--surface-muted); font-size: 12px; }
+.projects-workspace-page .pc-handover-note p { margin: 5px 0 0; line-height: 1.5; color: var(--text-secondary); }
+.projects-workspace-page .pc-details-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--border-color); }
+.projects-workspace-page .pc-details-actions p { margin: 0; color: var(--text-secondary); font-size: 12px; }
+.projects-workspace-page .pc-details-actions > div { display: flex; flex-wrap: wrap; gap: 10px; }
+.projects-workspace-page .pc-expenses-workspace { display: grid; gap: 24px; }
+.projects-workspace-page .pc-expense-budget-panel { padding: 22px; border: 1px solid var(--border-color); border-radius: 11px; background: var(--surface-muted); }
+.projects-workspace-page .pc-expense-budget-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.projects-workspace-page .pc-expense-budget-metrics > div { min-width: 0; padding: 16px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--surface-color); }
+.projects-workspace-page .pc-expense-budget-metrics span { display: block; margin-bottom: 8px; color: var(--text-secondary); font-size: 11px; }
+.projects-workspace-page .pc-expense-budget-metrics strong { color: var(--text-primary); font-size: clamp(15px, 1.5vw, 21px); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.projects-workspace-page .pc-budget-editor { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border-color); }
+.projects-workspace-page .pc-budget-editor .form-group { flex: 0 1 280px; min-width: min(100%, 220px); margin: 0; }
+.projects-workspace-page .pc-budget-editor input { width: 100%; box-sizing: border-box; }
+.projects-workspace-page .pc-budget-editor .button { min-height: 44px; }
+@media (max-width: 850px) {
+  .projects-workspace-page .pc-details-grid { grid-template-columns: minmax(0, 1fr); }
+  .projects-workspace-page .pc-expense-budget-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  .projects-workspace-page .pc-detail-card, .projects-workspace-page .pc-expense-budget-panel { padding: 16px; }
+  .projects-workspace-page .pc-detail-fields, .projects-workspace-page .pc-lifecycle-content { grid-template-columns: minmax(0, 1fr); }
+  .projects-workspace-page .pc-details-heading, .projects-workspace-page .pc-expense-budget-heading { flex-direction: column; }
+  .projects-workspace-page .pc-details-actions > div, .projects-workspace-page .pc-details-actions .button, .projects-workspace-page .pc-budget-editor .button { width: 100%; }
+}

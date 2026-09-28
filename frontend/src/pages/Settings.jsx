@@ -4,6 +4,7 @@ import { useAuth } from '../AuthContext';
 import { settingsAPI } from '../api';
 import { LoadingIndicator } from '../components/Hourglass';
 import '../styles.css';
+import './LeavePolicy.css';
 
 const knownSettings = {
   company_name: {
@@ -16,7 +17,7 @@ const knownSettings = {
   bereavement_days_per_year: { title: 'Bereavement Days', description: 'Default annual bereavement allowance.', type: 'number', fallback: '3', suffix: 'days' },
   vacation_days_per_year: {
     title: 'Paid Vacation Days',
-    description: 'Default annual allowance for vacation and other paid leave.',
+    description: 'Default annual vacation allowance.',
     type: 'number',
     fallback: '15',
     suffix: 'days',
@@ -44,6 +45,7 @@ export default function Settings() {
   const [saved, setSaved] = useState(false);
   const [leaveYear, setLeaveYear] = useState(new Date().getFullYear());
   const [bulkMessage, setBulkMessage] = useState('');
+  const [policyPreview, setPolicyPreview] = useState(null);
   const canManageSettings = user?.role === 'ADMIN';
   const settingMap = settings.reduce((acc, item) => ({ ...acc, [item.key]: item }), {});
   const enabledSetting = settingMap['timesheet.reminders.enabled']?.value ?? knownSettings['timesheet.reminders.enabled'].fallback;
@@ -73,6 +75,7 @@ export default function Settings() {
     setSaving(true); setSaved(false);
     try {
       await settingsAPI.updateSetting(key, nextValue);
+      setPolicyPreview(null);
       setEditingKey(null); setSaved(true);
       await loadSettings();
     } catch (err) {
@@ -80,13 +83,21 @@ export default function Settings() {
     } finally { setSaving(false); }
   };
 
+  const previewDefaults = async () => {
+    setSaving(true); setError(''); setBulkMessage('');
+    try { setPolicyPreview((await settingsAPI.previewLeaveDefaults(leaveYear)).data); }
+    catch (err) { setError(err.userMessage || err.response?.data?.message || 'Unable to preview leave policy.'); }
+    finally { setSaving(false); }
+  };
+
   const applyDefaults = async () => {
-    if (!window.confirm(`Apply saved leave defaults to all employees and admins for ${leaveYear}? This overwrites annual allowances and resets extra days to zero. Approved leave remains deducted. Other years are unchanged.`)) return;
+    if (!policyPreview || policyPreview.year !== leaveYear) return;
     setSaving(true); setError(''); setBulkMessage('');
     try {
-      const response = await settingsAPI.applyLeaveDefaults(leaveYear);
-      setBulkMessage(`Defaults applied to ${response.data.updated} employees for ${leaveYear}.`);
-    } catch (err) { setError(err.response?.data?.message || 'Unable to apply leave defaults.'); }
+      const response = await settingsAPI.applyLeaveDefaults(leaveYear, policyPreview);
+      setBulkMessage(`Annual policy applied to ${response.data.updated} employees for ${leaveYear}. Personal overrides and extra grants were kept.`);
+      setPolicyPreview(null);
+    } catch (err) { setPolicyPreview(null); setError(err.userMessage || err.response?.data?.message || 'Unable to apply leave policy. Preview it again.'); }
     finally { setSaving(false); }
   };
 
@@ -196,11 +207,17 @@ export default function Settings() {
       ]} />
 
       <section className="settings-section" aria-label="Leave policy">
-        <h2>Leave Defaults / Leave Policy</h2>
+        <h2>Annual leave policy</h2>
         <div className="settings-card-grid">{leaveKeys.map(renderSettingCard)}</div>
-        <p>Apply saved allowances to all employees and admins, including inactive employees. Approved leave remains deducted from these annual allowances.</p>
-        <label>Leave year <input type="number" min="1900" max="9998" value={leaveYear} disabled={saving} onChange={e => setLeaveYear(Number(e.target.value))} /></label>
-        <button type="button" className="button button-primary" disabled={saving || editingKey !== null || !Number.isInteger(leaveYear) || leaveYear < 1900 || leaveYear > 9998} onClick={applyDefaults}>Apply Defaults to All Employees</button>
+        <p>Set the annual policy for a calendar year. Existing personal allowances and extra grants remain in place. New eligible employees receive that year’s policy when their balance is first opened.</p>
+        <div className="leave-policy-controls"><label>Leave year <input type="number" min="1900" max="9998" value={leaveYear} disabled={saving} onChange={e => { setLeaveYear(Number(e.target.value)); setPolicyPreview(null); }} /></label>
+          <button type="button" className="button button-secondary" disabled={saving || editingKey !== null || !Number.isInteger(leaveYear) || leaveYear < 1900 || leaveYear > 9998} onClick={previewDefaults}>Preview policy</button></div>
+        {policyPreview && <div className="leave-policy-preview" role="region" aria-label="Annual policy preview">
+          <h3>{policyPreview.year} policy</h3>
+          <p>{policyPreview.vacationDays} vacation · {policyPreview.sickDays} sick · {policyPreview.bereavementDays} bereavement days</p>
+          <dl><div><dt>New allowances</dt><dd>{policyPreview.newAllowances}</dd></div><div><dt>Policy allowances updated</dt><dd>{policyPreview.policyAllowances}</dd></div><div><dt>Personal overrides preserved</dt><dd>{policyPreview.overrides}</dd></div></dl>
+          <button type="button" className="button button-primary" disabled={saving} onClick={applyDefaults}>Apply {policyPreview.year} policy</button>
+        </div>}
         {bulkMessage && <p role="status">{bulkMessage}</p>}
       </section>
 

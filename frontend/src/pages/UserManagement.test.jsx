@@ -1,13 +1,32 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { beforeEach, afterEach, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import UserManagement from './UserManagement';
 import { userAPI } from '../api';
 vi.mock('../AuthContext', () => ({ useAuth: () => ({ user: { id: 1, role: 'ADMIN' } }) }));
-vi.mock('../api', () => ({ userAPI: { getAllUsersAsAdmin: vi.fn(), deactivateUser: vi.fn(), reactivateUser: vi.fn(), updateJoiningDate: vi.fn(), getLeaveBalance: vi.fn(), updateLeaveAllowance: vi.fn() } }));
+vi.mock('../api', () => ({ userAPI: { getAllUsersAsAdmin: vi.fn(), deactivateUser: vi.fn(), reactivateUser: vi.fn(), updateJoiningDate: vi.fn(), getLeaveBalance: vi.fn(), updateLeaveAllowance: vi.fn(), lockAccount: vi.fn(), unlockAccount: vi.fn(), signOutAll: vi.fn() } }));
 beforeEach(() => vi.resetAllMocks());
 afterEach(cleanup);
+it('offers account security actions and invokes server revocation', async () => {
+  const employee = { id: 2, firstName: 'Alice', lastName: 'Smith', role: 'EMPLOYEE', isActive: true };
+  userAPI.getAllUsersAsAdmin.mockResolvedValue({ data: [employee] });
+  userAPI.lockAccount.mockResolvedValue({ data: { ...employee, adminLocked: true } });
+  userAPI.signOutAll.mockResolvedValue({ data: {} });
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
+  render(<UserManagement />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Manage Alice Smith' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Lock Account' }));
+  fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'Security review' } });
+  fireEvent.click(screen.getByRole('dialog', { name: 'Lock Account' }).querySelector('button.button-danger'));
+  await waitFor(() => expect(userAPI.lockAccount).toHaveBeenCalledWith(2, 'Security review'));
+  await screen.findByText('Lock Account completed.');
+  fireEvent.click(screen.getByRole('button', { name: 'Manage Alice Smith' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Sign Out All Sessions' }));
+  await waitFor(() => expect(userAPI.signOutAll).toHaveBeenCalledWith(2));
+  await screen.findByText('Sign Out All Sessions completed.');
+  vi.restoreAllMocks();
+});
 it('opens a full profile workspace with employment and leave management', async () => {
   userAPI.getAllUsersAsAdmin.mockResolvedValue({ data: [{ id: 2, firstName: 'Alice', lastName: 'Smith', role: 'EMPLOYEE', isActive: true, dateOfBirth: '1990-01-02', ssnLast4: '0123', addressLine1: '12 Main Street', emergencyContactName: 'Jane Smith', phoneNumber: '555-0100', bloodGroup: 'O+' }] });
   render(<UserManagement />);
@@ -46,8 +65,10 @@ it('does not show the deactivate control for Admin users', async () => {
   const systemAdminRow = (await screen.findByText('Sam Admin')).closest('tr');
   const employeeRow = screen.getByText('Alice Smith').closest('tr');
 
-  expect(systemAdminRow.textContent).not.toContain('Deactivate');
-  expect(employeeRow.textContent).toContain('Deactivate');
+  expect(systemAdminRow.textContent).not.toContain('Manage');
+  expect(employeeRow.textContent).toContain('Manage');
+  fireEvent.click(screen.getByRole('button', { name: 'Manage Alice Smith' }));
+  expect(screen.getByRole('dialog', { name: 'Manage Alice Smith' }).textContent).toContain('Deactivate');
 });
 
 it('saves employment details and manages leave inside the profile', async () => {

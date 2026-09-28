@@ -1,6 +1,10 @@
 package com.maxwell.chronos.enums;
 
 public enum AuditAction {
+    ACCOUNT_LOCKED,
+    ACCOUNT_UNLOCKED,
+    SESSIONS_REVOKED,
+    LOGIN_TEMPORARILY_LOCKED,
     USER_CREATED,
     USER_PROFILE_UPDATED,
     LEAVE_ALLOWANCE_UPDATED,

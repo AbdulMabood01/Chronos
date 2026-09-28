@@ -71,7 +71,7 @@ export default function Notifications() {
 
   return (
     <div className="page-container">
-      <div className="header-bar">
+      <div className="header-bar accent-page-header">
         <ScreenTitle title="Notifications" icon="bell" eyebrow="YOUR INBOX" />
         {unreadCount > 0 && (
           <button className="button button-secondary" onClick={handleMarkAllAsRead}>

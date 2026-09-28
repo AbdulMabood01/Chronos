@@ -57,15 +57,14 @@ it('sorts every timesheet column in both directions and filters projects without
 });
 it('splits leave by year, excludes weekends and accounts for pending days', () => {
   const result = calculateLeavePreview({ startDate: '2026-12-31', endDate: '2027-01-04', vacationType: 'VACATION' }, [
-    { id: 1, startDate: '2026-12-30', endDate: '2026-12-30', status: 'SUBMITTED', vacationType: 'PERSONAL' },
+    { id: 1, startDate: '2026-12-30', endDate: '2026-12-30', status: 'SUBMITTED', vacationType: 'VACATION' },
     { id: 2, startDate: '2026-12-31', endDate: '2027-01-04', status: 'DRAFT', vacationType: 'VACATION' },
-  ], [{ year: 2026, balance: { vacation: { remainingDays: 2 } } }, { year: 2027, balance: { vacation: { remainingDays: 1 } } }], 2);
-  expect(result[0]).toMatchObject({ requested: 1, pending: 1, remaining: 0, unpaid: 0 });
-  expect(result[1]).toMatchObject({ requested: 2, pending: 0, remaining: 0, unpaid: 1 });
+  ], [{ year: 2026, balance: { configured: true, vacation: { remainingDays: 2 } } }, { year: 2027, balance: { configured: true, vacation: { remainingDays: 1 } } }], 2);
+  expect(result[0]).toMatchObject({ requested: 1, pending: 1, remaining: 0, excess: 0 });
+  expect(result[1]).toMatchObject({ requested: 2, pending: 0, remaining: 0, excess: 1 });
 });
 it('shows an unpaid preview without fetching a paid balance', async () => {
   render(<LeaveBalancePreview userId={1} requests={[]} form={{ startDate: '2026-09-14', endDate: '2026-09-15', vacationType: 'UNPAID_LEAVE' }} />);
-  const label = await screen.findByText('Unpaid days in request');
-  expect(label.nextElementSibling.textContent).toBe('2');
-  expect(userAPI.getLeaveBalance).not.toHaveBeenCalled();
+  expect(await screen.findByText('This request does not use an annual balance.')).toBeTruthy();
+  expect(userAPI.getMyLeaveBalance).not.toHaveBeenCalled();
 });
