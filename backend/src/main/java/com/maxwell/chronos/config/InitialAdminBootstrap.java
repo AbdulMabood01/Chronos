@@ -22,6 +22,8 @@ public class InitialAdminBootstrap {
             // Serialize concurrent bootstrap processes across application instances.
             jdbc.execute("SELECT pg_advisory_xact_lock(823471901)");
             if(users.existsByRole(UserRole.ADMIN)) {
+                jdbc.update("INSERT INTO role_assignments(user_id,role_key) " +
+                        "SELECT id,'PLATFORM_ADMIN' FROM users WHERE role::text='ADMIN' ON CONFLICT DO NOTHING");
                 log.info("Admin already exists; skipping bootstrap");
                 return;
             }
@@ -38,6 +40,7 @@ public class InitialAdminBootstrap {
 
             var user=onboarding.create("System", "Admin", normalizedEmail);
             user.setRole(UserRole.ADMIN); users.saveAndFlush(user);
+            jdbc.update("INSERT INTO role_assignments(user_id,role_key) VALUES (?,'PLATFORM_ADMIN')", user.getId());
             onboarding.invite(user.getId());
             log.info("Created the initial Admin and sent an account setup invitation to {}", normalizedEmail);
         });

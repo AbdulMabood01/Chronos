@@ -23,7 +23,13 @@ public class Project {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true, length = 50)
+    @Column(name = "company_id", nullable = false)
+    private Long companyId;
+
+    @Column(name = "owner_user_id")
+    private Long ownerUserId;
+
+    @Column(nullable = false, length = 50)
     private String code;
 
     @Column(nullable = false, length = 150)

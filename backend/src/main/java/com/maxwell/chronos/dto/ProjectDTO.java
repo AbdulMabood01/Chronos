@@ -16,6 +16,9 @@ import java.util.List;
 @Builder
 public class ProjectDTO {
     private Long id;
+    private Long companyId;
+    private Long ownerUserId;
+    private Boolean canManage;
     private String code;
     private String name;
     private String description;

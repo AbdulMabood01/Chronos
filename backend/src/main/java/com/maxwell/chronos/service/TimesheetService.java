@@ -54,6 +54,7 @@ public class TimesheetService {
     private final AuditService auditService;
     private final NotificationService notificationService;
     private final ProjectService projectService;
+    private final CompanyAccessService access;
 
     public List<com.maxwell.chronos.dto.AuditLogDTO> getApprovalHistory(Long timesheetId, Long projectId, User requester) {
         Timesheet sheet = timesheetRepository.findById(timesheetId)
@@ -93,7 +94,7 @@ public class TimesheetService {
             var project = assignment.getProject();
             if (!visibleProjects.contains(project.getId()) || !Boolean.TRUE.equals(project.getIsActive())
                     || project.getStatus() != com.maxwell.chronos.enums.ProjectStatus.ACTIVE) continue;
-            if (employee.isAdmin() || !Boolean.TRUE.equals(employee.getIsActive())
+            if (!access.maySubmit(project.getId(), employee.getId()) || !Boolean.TRUE.equals(employee.getIsActive())
                     || (assignment.getStartDate() != null && assignment.getStartDate().isAfter(period.atEndOfMonth()))
                     || (assignment.getEndDate() != null && assignment.getEndDate().isBefore(period.atDay(1)))
                     || (!Boolean.TRUE.equals(assignment.getIsActive()) && assignment.getEndDate() == null)) continue;
@@ -209,7 +210,7 @@ public class TimesheetService {
     public TimesheetProjectSubmissionDTO openAfterApprovedRequest(Long timesheetId, Long projectId, String reason, Long projectAdminId) {
         User projectAdmin = userRepository.findById(projectAdminId)
                 .orElseThrow(() -> new IllegalArgumentException("Project Admin not found"));
-        if (!projectAdmin.isProjectAdmin())
+        if (!access.mayManageProject(projectId, projectAdminId))
             throw new org.springframework.security.access.AccessDeniedException("Only Project Admin can approve opening requests");
         if (reason == null || reason.isBlank() || reason.trim().length() > 500)
             throw new IllegalArgumentException("A reason of up to 500 characters is required");
@@ -420,26 +421,26 @@ public class TimesheetService {
     }
 
     public List<TimesheetDTO> getPendingTimesheets(User reviewer) {
-        if (reviewer == null || (!reviewer.isAdmin() && !reviewer.isProjectAdmin() && !projectService.canReviewProjects(reviewer.getId()))) {
+        if (reviewer == null || !projectService.canReviewProjects(reviewer.getId())) {
             throw new IllegalArgumentException("Reviewer permission required");
         }
         List<Timesheet> submitted = timesheetRepository.findByStatus(TimesheetStatus.SUBMITTED);
         List<Timesheet> changeRequests = timesheetRepository.findByStatus(TimesheetStatus.CHANGE_REQUESTED);
         return java.util.stream.Stream.concat(submitted.stream(), changeRequests.stream())
-                .filter(timesheet -> reviewer.isAdmin() || reviewer.isProjectAdmin() || canReviewTimesheet(timesheet, reviewer.getId()))
+                .filter(timesheet -> canReviewTimesheet(timesheet, reviewer.getId()))
                 .map(this::toDTO)
                 .collect(Collectors.toList());
     }
 
     public List<TimesheetProjectSubmissionDTO> getPendingProjectSubmissions(User reviewer) {
-        if (reviewer == null || (!reviewer.isProjectAdmin() && !reviewer.isAdmin() && !projectService.canReviewProjects(reviewer.getId()))) {
+        if (reviewer == null || !projectService.canReviewProjects(reviewer.getId())) {
             throw new IllegalArgumentException("Reviewer permission required");
         }
         List<TimesheetProjectSubmission> submitted = projectSubmissionRepository.findByStatus(TimesheetStatus.SUBMITTED);
         List<TimesheetProjectSubmission> changeRequests = projectSubmissionRepository.findByStatus(TimesheetStatus.CHANGE_REQUESTED);
         return java.util.stream.Stream.concat(submitted.stream(), changeRequests.stream())
                 .filter(submission -> canReviewProjectSubmission(submission, reviewer))
-                .map(this::toProjectSubmissionDTO)
+                .map(submission -> reviewDTO(submission, reviewer))
                 .collect(Collectors.toList());
     }
 
@@ -453,9 +454,9 @@ public class TimesheetService {
             throw new IllegalArgumentException("User cannot view this project timesheet");
         }
 
-        return toProjectSubmissionDTO(projectSubmissionRepository.findByTimesheetIdAndProjectId(timesheetId, projectId)
+        return reviewDTO(projectSubmissionRepository.findByTimesheetIdAndProjectId(timesheetId, projectId)
                 .orElseGet(() -> TimesheetProjectSubmission.builder().timesheet(timesheet).project(project)
-                        .status(TimesheetStatus.DRAFT).totalHours(BigDecimal.ZERO).build()));
+                        .status(TimesheetStatus.DRAFT).totalHours(BigDecimal.ZERO).build()), requestingUser);
     }
 
     public TimesheetProjectSubmissionDTO submitProjectTimesheet(Long timesheetId, Long projectId, Long userId) {
@@ -505,6 +506,10 @@ public class TimesheetService {
     }
 
     public TimesheetProjectSubmissionDTO approveProjectSubmission(Long submissionId, Long approvingUserId) {
+        return approveProjectSubmission(submissionId, approvingUserId, null);
+    }
+
+    public TimesheetProjectSubmissionDTO approveProjectSubmission(Long submissionId, Long approvingUserId, String fallbackReason) {
         User approvingUser = userRepository.findById(approvingUserId)
                 .orElseThrow(() -> new IllegalArgumentException("Approving user not found"));
         Long parentId = projectSubmissionRepository.findTimesheetId(submissionId)
@@ -513,7 +518,7 @@ public class TimesheetService {
         TimesheetProjectSubmission submission = projectSubmissionRepository.findById(submissionId)
                 .orElseThrow(() -> new IllegalArgumentException("Project timesheet not found"));
 
-        requireProjectSubmissionReviewer(submission, approvingUser);
+        requireProjectSubmissionReviewer(submission, approvingUser, fallbackReason);
         if (!TimesheetStatus.SUBMITTED.equals(submission.getStatus())
                 && !TimesheetStatus.CHANGE_REQUESTED.equals(submission.getStatus())) {
             throw new IllegalArgumentException("Only submitted project timesheets can be approved");
@@ -531,8 +536,12 @@ public class TimesheetService {
         TimesheetProjectSubmission saved = projectSubmissionRepository.save(submission);
         updateMonthlyStatus(saved.getTimesheet());
 
-        auditService.logAction(approvingUserId, "TIMESHEET_APPROVED", "TimesheetProjectSubmission", saved.getId(),
-                "Employee: " + saved.getTimesheet().getUser().getFullName() + ", Project: " + saved.getProject().getCode());
+        String approvalAudit = "Employee: " + saved.getTimesheet().getUser().getFullName() + ", Project: "
+                + saved.getProject().getCode() + (fallbackReason == null ? "" : "; Project Admin fallback: " + fallbackReason.trim());
+        if (isProjectAdminFallback(saved, approvingUserId))
+            auditService.logRequiredAction(approvingUserId, com.maxwell.chronos.enums.AuditAction.TIMESHEET_APPROVED,
+                    "TimesheetProjectSubmission", saved.getId(), approvalAudit);
+        else auditService.logAction(approvingUserId, "TIMESHEET_APPROVED", "TimesheetProjectSubmission", saved.getId(), approvalAudit);
         notificationService.createNotification(saved.getTimesheet().getUser().getId(),
                 "TIMESHEET_APPROVED",
                 "Project Timesheet Approved",
@@ -544,6 +553,10 @@ public class TimesheetService {
     }
 
     public TimesheetProjectSubmissionDTO rejectProjectSubmission(Long submissionId, String rejectionReason, Long rejectingUserId) {
+        return rejectProjectSubmission(submissionId, rejectionReason, rejectingUserId, null);
+    }
+
+    public TimesheetProjectSubmissionDTO rejectProjectSubmission(Long submissionId, String rejectionReason, Long rejectingUserId, String fallbackReason) {
         User rejectingUser = userRepository.findById(rejectingUserId)
                 .orElseThrow(() -> new IllegalArgumentException("Rejecting user not found"));
         Long parentId = projectSubmissionRepository.findTimesheetId(submissionId)
@@ -552,7 +565,7 @@ public class TimesheetService {
         TimesheetProjectSubmission submission = projectSubmissionRepository.findById(submissionId)
                 .orElseThrow(() -> new IllegalArgumentException("Project timesheet not found"));
 
-        requireProjectSubmissionReviewer(submission, rejectingUser);
+        requireProjectSubmissionReviewer(submission, rejectingUser, fallbackReason);
         if (submission.getTimesheet().getUser().getId().equals(rejectingUserId)) {
             throw new IllegalArgumentException("Users cannot reject their own timesheets");
         }
@@ -576,8 +589,12 @@ public class TimesheetService {
         TimesheetProjectSubmission saved = projectSubmissionRepository.save(submission);
         updateMonthlyStatus(saved.getTimesheet());
 
-        auditService.logAction(rejectingUserId, "TIMESHEET_REJECTED", "TimesheetProjectSubmission", saved.getId(),
-                "Reason: " + rejectionReason);
+        String rejectionAudit = "Reason: " + rejectionReason
+                + (fallbackReason == null ? "" : "; Project Admin fallback: " + fallbackReason.trim());
+        if (isProjectAdminFallback(saved, rejectingUserId))
+            auditService.logRequiredAction(rejectingUserId, com.maxwell.chronos.enums.AuditAction.TIMESHEET_REJECTED,
+                    "TimesheetProjectSubmission", saved.getId(), rejectionAudit);
+        else auditService.logAction(rejectingUserId, "TIMESHEET_REJECTED", "TimesheetProjectSubmission", saved.getId(), rejectionAudit);
         notificationService.createNotification(saved.getTimesheet().getUser().getId(),
                 "TIMESHEET_REJECTED",
                 "Project Timesheet Rejected",
@@ -640,16 +657,6 @@ public class TimesheetService {
                 "TimesheetProjectSubmission");
     }
 
-    private void requireTimesheetReviewer(Timesheet timesheet, User reviewer) {
-        if (reviewer.isAdmin() || reviewer.isProjectAdmin()) {
-            return;
-        }
-        if (canReviewTimesheet(timesheet, reviewer.getId())) {
-            return;
-        }
-        throw new IllegalArgumentException("Reviewer cannot approve timesheets for these projects");
-    }
-
     private boolean canReviewTimesheet(Timesheet timesheet, Long reviewerId) {
         User reviewer = userRepository.findById(reviewerId).orElse(null);
         if (reviewer == null) {
@@ -659,36 +666,19 @@ public class TimesheetService {
         return !projectIds.isEmpty() && projectIds.stream().allMatch(projectId -> canReviewProjectForTimesheet(projectId, timesheet, reviewer));
     }
 
-    private void requireProjectSubmissionReviewer(TimesheetProjectSubmission submission, User reviewer) {
-        if (canReviewProjectSubmission(submission, reviewer)) {
-            return;
-        }
-        throw new IllegalArgumentException("Reviewer cannot approve timesheets for this project");
+    private void requireProjectSubmissionReviewer(TimesheetProjectSubmission submission, User reviewer, String fallbackReason) {
+        access.requireMayReview(submission.getProject().getId(), reviewer.getId(),
+                submission.getTimesheet().getUser().getId(), false, fallbackReason);
     }
 
     private boolean canReviewProjectSubmission(TimesheetProjectSubmission submission, User reviewer) {
-        User submitter = submission.getTimesheet().getUser();
-        Long projectId = submission.getProject().getId();
-        if (reviewer.isAdmin()) {
-            return false;
-        }
-        if (submitter.getId().equals(reviewer.getId()) && submission.getProject().getProjectManager() != null
-                && submission.getProject().getProjectManager().getId().equals(reviewer.getId())) {
-            return true;
-        }
-        if (submission.getAssignedApprover() != null) {
-            return submission.getAssignedApprover().getId().equals(reviewer.getId());
-        }
-        boolean submitterManagesProject = submission.getProject().getProjectManager() != null
-                && submission.getProject().getProjectManager().getId().equals(submitter.getId());
-        if (submitterManagesProject) {
-            return projectService.canApproveProjectManagerHours(projectId, reviewer.getId());
-        }
-        return projectService.managesProject(projectId, reviewer.getId());
+        return access.mayReview(submission.getProject().getId(), reviewer.getId(),
+                submission.getTimesheet().getUser().getId(), false, "Pending queue preview");
     }
 
     private boolean canViewProjectSubmission(Timesheet timesheet, Project project, User user) {
-        if (timesheet.getUser().getId().equals(user.getId()) || user.isAdmin() || user.isProjectAdmin()) return true;
+        if (timesheet.getUser().getId().equals(user.getId()) || access.hasPlatformRole(user.getId(), "PLATFORM_ADMIN")
+                || access.mayManageProject(project.getId(), user.getId())) return true;
         boolean belongsToProject = projectAssignmentRepository.findByProjectIdAndUserId(project.getId(), timesheet.getUser().getId()).isPresent()
                 || timesheet.getTimeEntries().stream().anyMatch(entry -> entry.getProject() != null && project.getId().equals(entry.getProject().getId()));
         return belongsToProject && ((projectService.canReviewProjects(user.getId()) && projectService.visibleProjectIds(user).contains(project.getId()))
@@ -703,12 +693,7 @@ public class TimesheetService {
         if (project == null) {
             return false;
         }
-        boolean submitterManagesProject = project.getProjectManager() != null
-                && project.getProjectManager().getId().equals(timesheet.getUser().getId());
-        if (submitterManagesProject) {
-            return projectService.canApproveProjectManagerHours(projectId, reviewer.getId());
-        }
-        return projectService.managesProject(projectId, reviewer.getId());
+        return access.mayReview(projectId, reviewer.getId(), timesheet.getUser().getId(), false, "Pending queue preview");
     }
 
     private void requireCanSubmit(User user) {
@@ -809,6 +794,7 @@ public class TimesheetService {
         if (projectId == null) {
             throw new IllegalArgumentException("Project code is required");
         }
+        access.requireMaySubmit(projectId, userId, "timesheets");
         boolean correction = projectSubmissionRepository.findByTimesheetIdAndProjectId(timesheet.getId(), projectId)
                 .map(submission -> correctionOpen(timesheet, submission)).orElse(false);
         boolean historicalGrace = YearMonth.of(timesheet.getYear(), timesheet.getMonth()).isBefore(YearMonth.now())
@@ -990,6 +976,25 @@ public class TimesheetService {
                 .map(s -> s.getTotalHours() == null ? BigDecimal.ZERO : s.getTotalHours())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return (logged == null ? BigDecimal.ZERO : logged).add(approved);
+    }
+
+    private TimesheetProjectSubmissionDTO reviewDTO(TimesheetProjectSubmission submission, User reviewer) {
+        TimesheetProjectSubmissionDTO dto = toProjectSubmissionDTO(submission);
+        boolean allowed = reviewer != null && canReviewProjectSubmission(submission, reviewer);
+        dto.setReviewAllowed(allowed);
+        dto.setFallbackRequired(allowed && access.hasProjectRole(submission.getProject().getId(), reviewer.getId(), "PROJECT_ADMIN")
+                && !access.hasProjectRole(submission.getProject().getId(), reviewer.getId(), "PROJECT_MANAGER")
+                && !access.hasModeratorGrant(submission.getProject().getId(), reviewer.getId(), false)
+                && !access.hasProjectRole(submission.getProject().getId(), submission.getTimesheet().getUser().getId(), "PROJECT_MANAGER"));
+        return dto;
+    }
+
+    private boolean isProjectAdminFallback(TimesheetProjectSubmission submission, long reviewerId) {
+        long projectId = submission.getProject().getId();
+        return access.hasProjectRole(projectId, reviewerId, "PROJECT_ADMIN")
+                && !access.hasProjectRole(projectId, reviewerId, "PROJECT_MANAGER")
+                && !access.hasModeratorGrant(projectId, reviewerId, false)
+                && !access.hasProjectRole(projectId, submission.getTimesheet().getUser().getId(), "PROJECT_MANAGER");
     }
 
     private TimesheetProjectSubmissionDTO toProjectSubmissionDTO(TimesheetProjectSubmission submission) {

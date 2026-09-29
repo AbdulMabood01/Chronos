@@ -13,17 +13,19 @@ export default function WorkspaceLayout({ children, darkBackground, onToggleBack
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButton = useRef(null);
   const reviewer = user?.canReviewProjects || ['PROJECT_ADMIN', 'ADMIN'].includes(user?.role);
-  const projectManager = user?.canManageProjects || ['PROJECT_ADMIN', 'ADMIN'].includes(user?.role);
+  const projectManager = user?.canManageProjects || user?.canReviewProjects || ['PROJECT_ADMIN', 'ADMIN'].includes(user?.role);
   const operations = ['PROJECT_ADMIN', 'ADMIN'].includes(user?.role);
   const systemAdmin = user?.role === 'ADMIN';
   const primary = [
     ['/dashboard', 'Overview', 'grid'],
     ['/announcements', 'Announcements', 'bell'],
-    ...(!systemAdmin ? [['/timesheets', 'Timesheets', 'clock'], ['/expenses', 'Expenses', 'file'], ['/vacation', 'Time off', 'calendar']] : []),
+    ...(!systemAdmin && user?.canSubmitWork ? [['/timesheets', 'Timesheets', 'clock'], ['/expenses', 'Expenses', 'file']] : []),
+    ...(!systemAdmin ? [['/vacation', 'Time off', 'calendar']] : []),
     ['/requests', 'Letters & requests', 'file'],
     ...(!systemAdmin ? [['/workplace-reports', 'Reports', 'file']] : []),
     ...(reviewer && !projectManager ? [['/admin', 'Approvals', 'check']] : []),
     ['/notifications', 'Inbox', 'bell'],
+    ['/companies', 'Companies', 'users'],
   ];
   const management = [
     ...(projectManager ? [['/admin', 'Approvals', 'check']] : []),
@@ -66,7 +68,7 @@ export default function WorkspaceLayout({ children, darkBackground, onToggleBack
       <div className="sidebar-bottom">
         <Link to="/profile" className="workspace-account">
           <span className="workspace-avatar">{user?.profileImageUrl ? <img src={user.profileImageUrl} alt=""/> : `${user?.firstName?.[0] || 'U'}${user?.lastName?.[0] || ''}`}</span>
-          <span><strong>{user?.firstName} {user?.lastName}</strong><small>{(user?.role || 'EMPLOYEE').toLowerCase().replaceAll('_', ' ')}</small></span>
+          <span><strong>{user?.firstName} {user?.lastName}</strong><small>{(user?.roles?.[0] || user?.role || 'USER').toLowerCase().replaceAll('_', ' ')}</small></span>
           <Icon name="arrow" size={16}/>
         </Link>
         <button className="sidebar-signout" onClick={logout}><Icon name="logout" size={17}/>Sign out</button>

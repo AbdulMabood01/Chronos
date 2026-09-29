@@ -14,6 +14,7 @@ import java.time.LocalDate;
 @AllArgsConstructor
 @Builder
 public class SaveProjectRequest {
+    private Long companyId;
     private String code;
     private String name;
     private String description;

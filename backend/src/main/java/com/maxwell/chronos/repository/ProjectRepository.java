@@ -15,6 +15,7 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
     boolean existsByProjectManagerIdOrProjectManagerHoursApproverId(Long managerId, Long approverId);
     boolean existsByProjectManagerId(Long managerId);
     Optional<Project> findByCodeIgnoreCase(String code);
+    Optional<Project> findByCompanyIdAndCodeIgnoreCase(Long companyId, String code);
     List<Project> findByIsActiveTrueOrderByCodeAsc();
     List<Project> findByProjectManagerIdAndIsActiveTrue(Long managerId);
     List<Project> findByProjectManagerIdAndStatus(Long managerId, ProjectStatus status);

@@ -119,6 +119,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
   const [editMode, setEditMode] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  const [fallbackReason, setFallbackReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [assignedProjects, setAssignedProjects] = useState([]);
   const [assignmentsLoaded, setAssignmentsLoaded] = useState(false);
@@ -390,10 +391,10 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
     && projectSubmission
     && (autoEditableStatuses.includes(projectSubmission.status) || (editMode && editButtonStatuses.includes(projectSubmission.status)));
   const canStartEdit = false;
-  const canApprove = (user?.role !== 'ADMIN' && (projectSubmission?.routedApproverId === user?.id
-    || (isOwner && projectSubmission?.projectManagerId === user?.id)))
+  const canApprove = !isOwner && user?.role !== 'ADMIN' && projectSubmission?.reviewAllowed
     && ['SUBMITTED', 'CHANGE_REQUESTED'].includes(projectSubmission?.status);
-  const canReject = canApprove && !isOwner;
+  const canReject = canApprove;
+  const needsFallback = Boolean(projectSubmission?.fallbackRequired);
   const openingDeadline = timesheet ? new Date(timesheet.year, timesheet.month, 0) : null;
   if (openingDeadline) openingDeadline.setDate(openingDeadline.getDate() + 30);
   const openingRequestPending = openingRequests.some(request => request.status === 'PENDING');
@@ -701,7 +702,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
 
   const handleApprove = async () => {
     try {
-      await timesheetAPI.approveProjectSubmission(projectSubmission.id);
+      await timesheetAPI.approveProjectSubmission(projectSubmission.id, needsFallback ? fallbackReason.trim() : null);
       await loadTimesheetById(timesheet.id);
       await loadProjectSubmission();
     } catch (err) {
@@ -722,7 +723,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
     }
 
     try {
-      await timesheetAPI.rejectProjectSubmission(projectSubmission.id, reason);
+      await timesheetAPI.rejectProjectSubmission(projectSubmission.id, reason, needsFallback ? fallbackReason.trim() : null);
       setRejectDialogOpen(false);
       setRejectReason('');
       await loadTimesheetById(timesheet.id);
@@ -1059,15 +1060,21 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
 
         {canApprove && (
           <>
+            {needsFallback && <label>Reason for Project Admin fallback
+              <textarea value={fallbackReason} maxLength={500} onChange={event => setFallbackReason(event.target.value)}
+                placeholder="Why is the Project Manager unavailable?" />
+            </label>}
             <button
               className="button button-success"
               onClick={handleApprove}
+              disabled={needsFallback && !fallbackReason.trim()}
             >
               Approve
             </button>
             {canReject && <button
               className="button button-danger"
               onClick={handleReject}
+              disabled={needsFallback && !fallbackReason.trim()}
             >
               Reject
             </button>}

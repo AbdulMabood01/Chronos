@@ -114,6 +114,22 @@ export const authAPI = {
     timeout: 5000, headers: { Authorization: `Bearer ${token}` } }),
 };
 
+export const companyAPI = {
+  mine: () => apiClient.get('/companies'),
+  create: (name, slug) => apiClient.post('/companies', { name, slug }),
+  members: id => apiClient.get(`/companies/${id}/members`),
+  invite: (id, data) => apiClient.post(`/companies/${id}/invitations`, data),
+  invitations: id => apiClient.get(`/companies/${id}/invitations`),
+  revokeInvitation: (id, invitationId) => apiClient.delete(`/companies/${id}/invitations/${invitationId}`),
+  accept: token => apiClient.post('/companies/invitations/accept', { token }),
+  grantModerator: (id, data) => apiClient.post(`/companies/${id}/moderator-grants`, data),
+  moderatorGrants: id => apiClient.get(`/companies/${id}/moderator-grants`),
+  revokeModerator: (id, grantId) => apiClient.delete(`/companies/${id}/moderator-grants/${grantId}`),
+  removeRole: (id, role, userId, projectId) => apiClient.delete(`/companies/${id}/roles/${role}/users/${userId}`, { params: { projectId } }),
+  transferOwner: (id, projectId, userId) => apiClient.post(`/companies/${id}/projects/${projectId}/owner`, { userId }),
+  projectRoles: (id, projectId) => apiClient.get(`/companies/${id}/projects/${projectId}/roles`),
+};
+
 export const expenseAPI = {
   mine: () => apiClient.get('/expenses/mine'),
   pending: () => apiClient.get('/expenses/pending'),
@@ -127,7 +143,7 @@ export const expenseAPI = {
     return id ? apiClient.put(`/expenses/${id}`, data, { headers: { 'Content-Type': 'multipart/form-data' } })
       : apiClient.post('/expenses', data, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
-  decide: (id, status, comment) => apiClient.post(`/expenses/${id}/decision`, { status, comment }),
+  decide: (id, status, comment, fallbackReason) => apiClient.post(`/expenses/${id}/decision`, { status, comment, fallbackReason }),
   receipt: id => apiClient.get(`/expenses/${id}/receipt`, { responseType: 'blob' }),
 };
 
@@ -174,8 +190,8 @@ export const timesheetAPI = {
   decideOpeningRequest: (requestId, approve, comment) => apiClient.post(`/timesheet-corrections/${requestId}/${approve ? 'approve' : 'decline'}`, { comment }),
   approveTimesheet: (timesheetId) => apiClient.post(`/approvals/timesheet/${timesheetId}/approve`),
   rejectTimesheet: (timesheetId, reason) => apiClient.post(`/approvals/timesheet/${timesheetId}/reject`, { reason }),
-  approveProjectSubmission: (submissionId) => apiClient.post(`/approvals/timesheet-project/${submissionId}/approve`),
-  rejectProjectSubmission: (submissionId, reason) => apiClient.post(`/approvals/timesheet-project/${submissionId}/reject`, { reason }),
+  approveProjectSubmission: (submissionId, fallbackReason) => apiClient.post(`/approvals/timesheet-project/${submissionId}/approve`, { fallbackReason }),
+  rejectProjectSubmission: (submissionId, reason, fallbackReason) => apiClient.post(`/approvals/timesheet-project/${submissionId}/reject`, { reason, fallbackReason }),
   getPendingTimesheets: () => apiClient.get('/timesheets/pending'),
   getPendingProjectSubmissions: () => apiClient.get('/timesheets/project-submissions/pending'),
   getMyTimesheets: () => apiClient.get('/timesheets/my'),

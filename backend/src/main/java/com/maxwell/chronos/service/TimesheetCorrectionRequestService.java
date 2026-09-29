@@ -31,9 +31,11 @@ public class TimesheetCorrectionRequestService {
     private final TimesheetService timesheetService;
     private final NotificationService notifications;
     private final AuditService audit;
+    private final CompanyAccessService access;
 
     public TimesheetCorrectionRequestDTO request(Long timesheetId, Long projectId, String comment, User employee) {
-        if (employee == null || employee.isAdmin()) throw new AccessDeniedException("Employee access required");
+        if (employee == null) throw new AccessDeniedException("Employee access required");
+        access.requireMaySubmit(projectId, employee.getId(), "timesheet corrections");
         String reason = requiredComment(comment, "Explain why this timesheet needs to be opened");
         Timesheet sheet = timesheets.findForUpdate(timesheetId)
                 .orElseThrow(() -> new IllegalArgumentException("Timesheet not found"));
@@ -88,7 +90,8 @@ public class TimesheetCorrectionRequestService {
     public List<TimesheetCorrectionRequestDTO> history(Long timesheetId, Long projectId, User requester) {
         Timesheet sheet = timesheets.findById(timesheetId)
                 .orElseThrow(() -> new IllegalArgumentException("Timesheet not found"));
-        if (requester == null || (!requester.isProjectAdmin() && !sheet.getUser().getId().equals(requester.getId())))
+        if (requester == null || (!access.mayManageProject(projectId, requester.getId())
+                && !sheet.getUser().getId().equals(requester.getId())))
             throw new AccessDeniedException("Cannot view these opening requests");
         return requests.findByTimesheetIdAndProjectIdOrderByCreatedAtDesc(timesheetId, projectId)
                 .stream().map(this::toDTO).toList();
@@ -96,15 +99,18 @@ public class TimesheetCorrectionRequestService {
 
     @Transactional(readOnly = true)
     public List<TimesheetCorrectionRequestDTO> pending(User projectAdmin) {
-        requireProjectAdmin(projectAdmin);
+        if (projectAdmin == null) throw new AccessDeniedException("Project Admin access required");
         return requests.findByStatusOrderByCreatedAtAsc(TimesheetCorrectionStatus.PENDING)
-                .stream().map(this::toDTO).toList();
+                .stream().filter(request -> access.mayManageProject(request.getProject().getId(), projectAdmin.getId()))
+                .map(this::toDTO).toList();
     }
 
     public TimesheetCorrectionRequestDTO decide(Long requestId, boolean approve, String comment, User projectAdmin) {
-        requireProjectAdmin(projectAdmin);
+        if (projectAdmin == null) throw new AccessDeniedException("Project Admin access required");
         TimesheetCorrectionRequest found = requests.findById(requestId)
                 .orElseThrow(() -> new IllegalArgumentException("Opening request not found"));
+        if (!access.mayManageProject(found.getProject().getId(), projectAdmin.getId()))
+            throw new AccessDeniedException("Project Admin access required for this project");
         timesheets.findForUpdate(found.getTimesheet().getId())
                 .orElseThrow(() -> new IllegalArgumentException("Timesheet not found"));
         TimesheetCorrectionRequest request = requests.findForUpdate(requestId)
@@ -130,10 +136,6 @@ public class TimesheetCorrectionRequestService {
                 "Your timesheet opening request was declined. Reason: " + note,
                 requestId, "TimesheetCorrectionRequest");
         return toDTO(request);
-    }
-
-    private void requireProjectAdmin(User user) {
-        if (user == null || !user.isProjectAdmin()) throw new AccessDeniedException("Project Admin access required");
     }
 
     private String requiredComment(String value, String message) {

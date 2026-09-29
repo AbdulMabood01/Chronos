@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
 @NoArgsConstructor
@@ -49,7 +50,10 @@ public class AuthResponse {
     private String profileImageUrl;
     private Boolean profileCompleted;
     private String role;
+    private List<String> roles;
     private boolean canReviewProjects;
     private boolean canManageProjects;
+    private boolean canCreateProjects;
+    private boolean canSubmitWork;
     private Boolean isActive;
 }

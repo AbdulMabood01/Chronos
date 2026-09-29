@@ -37,11 +37,14 @@ public class ExpenseService {
     private final ProjectAssignmentRepository assignments;
     private final UserRepository users;
     private final NotificationService notifications;
+    private final CompanyAccessService access;
     @Value("${chronos.expense.receipt-directory:./private/expense-receipts}")
     private String receiptDirectory;
 
     public record Input(Long projectId, String category, BigDecimal amount, LocalDate expenseDate, String description) {}
-    public record Decision(String status, String comment) {}
+    public record Decision(String status, String comment, String fallbackReason) {
+        public Decision(String status, String comment) { this(status, comment, null); }
+    }
     public record Receipt(String name, byte[] bytes) {}
 
     private User user(String email) {
@@ -51,8 +54,9 @@ public class ExpenseService {
         return projects.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Project not found"));
     }
     private boolean reviewer(User user, Project project) {
-        return user.isProjectAdmin() || user.isAdmin() ||
-                project.getProjectManager() != null && Objects.equals(project.getProjectManager().getId(), user.getId());
+        return access.hasProjectRole(project.getId(), user.getId(), "PROJECT_MANAGER")
+                || access.hasProjectRole(project.getId(), user.getId(), "PROJECT_ADMIN")
+                || access.hasModeratorGrant(project.getId(), user.getId(), true);
     }
     private void requireReviewer(User user, Project project) {
         if (!reviewer(user, project)) throw new AccessDeniedException("Project expense review permission required");
@@ -87,9 +91,17 @@ public class ExpenseService {
     }
     public List<Map<String,Object>> pending(String email) {
         User actor = user(email);
-        if (actor.isAdmin() || actor.isProjectAdmin())
-            return db.queryForList("SELECT e.*,p.code AS project_code,concat_ws(' ',u.first_name,u.last_name) AS employee_name FROM project_expenses e JOIN projects p ON p.id=e.project_id JOIN users u ON u.id=e.employee_id WHERE e.status='PENDING_APPROVAL' ORDER BY e.submitted_at");
-        return db.queryForList("SELECT e.*,p.code AS project_code,concat_ws(' ',u.first_name,u.last_name) AS employee_name FROM project_expenses e JOIN projects p ON p.id=e.project_id JOIN users u ON u.id=e.employee_id WHERE e.status='PENDING_APPROVAL' AND p.project_manager_id=? ORDER BY e.submitted_at", actor.getId());
+        return db.queryForList("SELECT e.*,p.code AS project_code,concat_ws(' ',u.first_name,u.last_name) AS employee_name FROM project_expenses e JOIN projects p ON p.id=e.project_id JOIN users u ON u.id=e.employee_id WHERE e.status='PENDING_APPROVAL' ORDER BY e.submitted_at")
+                .stream().filter(e -> !Objects.equals(((Number)e.get("employee_id")).longValue(), actor.getId()))
+                .filter(e -> reviewer(actor, project(((Number)e.get("project_id")).longValue())))
+                .peek(e -> e.put("fallback_required", access.hasProjectRole(((Number)e.get("project_id")).longValue(), actor.getId(), "PROJECT_ADMIN")
+                        && !access.hasProjectRole(((Number)e.get("project_id")).longValue(), actor.getId(), "PROJECT_MANAGER")
+                        && !access.hasModeratorGrant(((Number)e.get("project_id")).longValue(), actor.getId(), true)
+                        && !access.hasProjectRole(((Number)e.get("project_id")).longValue(), ((Number)e.get("employee_id")).longValue(), "PROJECT_MANAGER")))
+                .peek(e -> e.put("moderator_only", access.hasModeratorGrant(((Number)e.get("project_id")).longValue(), actor.getId(), true)
+                        && !access.hasProjectRole(((Number)e.get("project_id")).longValue(), actor.getId(), "PROJECT_MANAGER")
+                        && !access.hasProjectRole(((Number)e.get("project_id")).longValue(), actor.getId(), "PROJECT_ADMIN")))
+                .toList();
     }
     public Map<String,Object> totals(String email, Long projectId) {
         requireReviewer(user(email), project(projectId));
@@ -106,6 +118,7 @@ public class ExpenseService {
         User actor = user(email);
         validate(input);
         Project project = project(input.projectId());
+        access.requireMaySubmit(project.getId(), actor.getId(), "expenses");
         if (!Boolean.TRUE.equals(project.getIsActive()) || !assignments.existsByProjectIdAndUserIdAndIsActiveTrue(project.getId(), actor.getId()))
             throw new AccessDeniedException("An active project assignment is required");
         if (file == null) throw new IllegalArgumentException("A receipt or document is required");
@@ -115,8 +128,10 @@ public class ExpenseService {
             Long id = db.queryForObject("INSERT INTO project_expenses(project_id,employee_id,category,amount,expense_date,description,receipt_key,receipt_name,receipt_type,receipt_size,status) VALUES (?,?,?,?,?,?,?,?,?,?,'PENDING_APPROVAL') RETURNING id", Long.class,
                     project.getId(), actor.getId(), input.category(), input.amount(), input.expenseDate(), input.description().trim(), receipt == null ? null : receipt.key(), receipt == null ? null : receipt.name(), receipt == null ? null : receipt.type(), receipt == null ? null : receipt.size());
             history(id, actor.getId(), "PENDING_APPROVAL", null);
-            Long managerId = project.getProjectManager() == null ? null : project.getProjectManager().getId();
-            if (managerId != null && !managerId.equals(actor.getId())) notifications.createNotification(managerId, "EXPENSE_SUBMITTED", "Expense awaiting review", project.getCode() + " expense submitted", id, "ProjectExpense");
+            Long reviewerId = access.hasProjectRole(project.getId(), actor.getId(), "PROJECT_MANAGER")
+                    ? project.getProjectManagerHoursApprover() == null ? null : project.getProjectManagerHoursApprover().getId()
+                    : project.getProjectManager() == null ? null : project.getProjectManager().getId();
+            if (reviewerId != null && !reviewerId.equals(actor.getId())) notifications.createNotification(reviewerId, "EXPENSE_SUBMITTED", "Expense awaiting review", project.getCode() + " expense submitted", id, "ProjectExpense");
             return detail(email, id);
         } catch (RuntimeException ex) {
             if (receipt != null) try { Files.deleteIfExists(path(receipt.key())); } catch (IOException ignored) {}
@@ -130,6 +145,7 @@ public class ExpenseService {
         if (!"CHANGES_REQUESTED".equals(old.get("status"))) throw new IllegalArgumentException("Only expenses with requested changes can be resubmitted");
         validate(input);
         if (!Objects.equals(((Number)old.get("project_id")).longValue(), input.projectId())) throw new IllegalArgumentException("Project cannot be changed");
+        access.requireMaySubmit(input.projectId(), actor.getId(), "expenses");
         if (!assignments.existsByProjectIdAndUserIdAndIsActiveTrue(input.projectId(), actor.getId())) throw new AccessDeniedException("An active project assignment is required");
         FileData receipt = file == null ? null : saveFile(file);
         if (receipt != null) {
@@ -141,7 +157,10 @@ public class ExpenseService {
             if (changed != 1) throw new IllegalArgumentException("Expense status changed; reload and try again");
             history(id,actor.getId(),"PENDING_APPROVAL","Resubmitted");
             Project project = project(input.projectId());
-            if (project.getProjectManager() != null && !Objects.equals(project.getProjectManager().getId(),actor.getId())) notifications.createNotification(project.getProjectManager().getId(),"EXPENSE_SUBMITTED","Expense awaiting review",project.getCode() + " expense resubmitted",id,"ProjectExpense");
+            Long reviewerId = access.hasProjectRole(project.getId(), actor.getId(), "PROJECT_MANAGER")
+                    ? project.getProjectManagerHoursApprover() == null ? null : project.getProjectManagerHoursApprover().getId()
+                    : project.getProjectManager() == null ? null : project.getProjectManager().getId();
+            if (reviewerId != null && !Objects.equals(reviewerId, actor.getId())) notifications.createNotification(reviewerId,"EXPENSE_SUBMITTED","Expense awaiting review",project.getCode() + " expense resubmitted",id,"ProjectExpense");
             return detail(email,id);
         } catch (RuntimeException ex) {
             if (receipt != null) try { Files.deleteIfExists(path(receipt.key())); } catch (IOException ignored) {}
@@ -151,16 +170,24 @@ public class ExpenseService {
     public Map<String,Object> decide(String email, Long id, Decision decision) {
         User actor = user(email);
         Map<String,Object> expense = row(id);
-        requireReviewer(actor, project(((Number)expense.get("project_id")).longValue()));
+        long projectId = ((Number)expense.get("project_id")).longValue();
+        requireReviewer(actor, project(projectId));
         if (!"PENDING_APPROVAL".equals(expense.get("status"))) throw new IllegalArgumentException("Expense is not pending approval");
         if (decision == null || decision.status() == null || !Set.of("APPROVED","REJECTED","CHANGES_REQUESTED").contains(decision.status())) throw new IllegalArgumentException("Invalid review decision");
+        if ("CHANGES_REQUESTED".equals(decision.status())
+                && access.hasModeratorGrant(projectId, actor.getId(), true)
+                && !access.hasProjectRole(projectId, actor.getId(), "PROJECT_MANAGER")
+                && !access.hasProjectRole(projectId, actor.getId(), "PROJECT_ADMIN"))
+            throw new AccessDeniedException("Moderators may only approve or reject expenses");
         if (!"APPROVED".equals(decision.status()) && (decision.comment() == null || decision.comment().isBlank())) throw new IllegalArgumentException("A reviewer comment is required");
         if (decision.comment() != null && decision.comment().length() > 2000) throw new IllegalArgumentException("Reviewer comment is too long");
+        long employeeId = ((Number)expense.get("employee_id")).longValue();
+        access.requireMayReview(projectId, actor.getId(), employeeId, true, decision.fallbackReason());
         int changed = db.update("UPDATE project_expenses SET status=?,reviewer_id=?,reviewed_at=now(),reviewer_comments=?,updated_at=now() WHERE id=? AND status='PENDING_APPROVAL'", decision.status(),actor.getId(),decision.comment(),id);
         if (changed != 1) throw new IllegalArgumentException("Expense status changed; reload and try again");
-        history(id,actor.getId(),decision.status(),decision.comment());
-        Long employeeId = ((Number)expense.get("employee_id")).longValue();
-        if (!employeeId.equals(actor.getId())) notifications.createNotification(employeeId,"EXPENSE_REVIEWED","Expense " + decision.status().toLowerCase().replace('_',' '),"Your expense has been reviewed",id,"ProjectExpense");
+        history(id,actor.getId(),decision.status(),Objects.toString(decision.comment(), "")
+                + (decision.fallbackReason() == null ? "" : "; Project Admin fallback: " + decision.fallbackReason().trim()));
+        if (employeeId != actor.getId()) notifications.createNotification(employeeId,"EXPENSE_REVIEWED","Expense " + decision.status().toLowerCase().replace('_',' '),"Your expense has been reviewed",id,"ProjectExpense");
         return detail(email,id);
     }
     private void history(Long id, Long actor, String status, String comment) {

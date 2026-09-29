@@ -42,6 +42,7 @@ export default function AdminDashboard() {
   const [rejectReason, setRejectReason] = useState('');
   const [reviewingExpense, setReviewingExpense] = useState(null);
   const [expenseComment, setExpenseComment] = useState('');
+  const [fallbackReason, setFallbackReason] = useState('');
   const [expenseBusy, setExpenseBusy] = useState(false);
   const [reviewingOpening, setReviewingOpening] = useState(null);
   const [openingComment, setOpeningComment] = useState('');
@@ -117,6 +118,7 @@ export default function AdminDashboard() {
       status: task.status,
       kind: 'timesheet',
       isOwn: task.userId === user?.id,
+      fallbackRequired: task.fallbackRequired,
     })),
     ...pendingVacations.map((task) => ({
       id: `vacation-${task.id}`,
@@ -174,12 +176,15 @@ export default function AdminDashboard() {
 
   const decideExpense = async status => {
     if (!reviewingExpense || expenseBusy) return;
+    if (reviewingExpense.fallback_required && !fallbackReason.trim()) { setError('Explain why Project Admin fallback is needed.'); return; }
     setExpenseBusy(true);
     setError('');
     try {
-      await expenseAPI.decide(reviewingExpense.id, status, expenseComment.trim());
+      await expenseAPI.decide(reviewingExpense.id, status, expenseComment.trim(),
+        reviewingExpense.fallback_required ? fallbackReason.trim() : null);
       setReviewingExpense(null);
       setExpenseComment('');
+      setFallbackReason('');
       await loadPendingItems();
     } catch (err) {
       setError(apiErrorMessage(err, 'Failed to review expense'));
@@ -320,7 +325,7 @@ export default function AdminDashboard() {
                       Review
                     </button>
                   ) : null}
-                  {task.kind !== 'letter' && task.kind !== 'expense' && task.kind !== 'opening' && (
+                  {task.kind !== 'letter' && task.kind !== 'expense' && task.kind !== 'opening' && !task.fallbackRequired && (
                     <>
                       {task.kind === 'vacation' && needsLeaveClassification(task.vacationType)
                         ? <button className="button button-small button-secondary" onClick={() => { setReviewingLeave(task); setSpecialAccounting(''); }}>Review</button>
@@ -357,7 +362,10 @@ export default function AdminDashboard() {
           {error && <p role="alert" className="error-message">{error}</p>}
           {reviewingExpense.receipt_name && <button type="button" className="button button-secondary button-small" onClick={() => downloadReceipt(reviewingExpense.id, reviewingExpense.receipt_name).catch(err => setError(apiErrorMessage(err, 'Unable to download receipt')))}>Download receipt</button>}
           <label className="expense-review-comment">Reviewer comments<textarea value={expenseComment} maxLength="2000" rows="3" onChange={event => setExpenseComment(event.target.value)} placeholder="Required when requesting changes or rejecting" /></label>
-          <div className="expense-actions"><button type="button" disabled={expenseBusy} className="button button-primary" onClick={() => decideExpense('APPROVED')}>Approve</button><button type="button" disabled={expenseBusy || !expenseComment.trim()} className="button button-secondary" onClick={() => decideExpense('CHANGES_REQUESTED')}>Request changes</button><button type="button" disabled={expenseBusy || !expenseComment.trim()} className="button button-secondary" onClick={() => decideExpense('REJECTED')}>Reject</button></div>
+          {reviewingExpense.fallback_required && <label className="expense-review-comment">Reason for Project Admin fallback
+            <textarea value={fallbackReason} maxLength="500" rows="2" onChange={event => setFallbackReason(event.target.value)}
+              placeholder="Why is the Project Manager unavailable?" /></label>}
+          <div className="expense-actions"><button type="button" disabled={expenseBusy} className="button button-primary" onClick={() => decideExpense('APPROVED')}>Approve</button>{!reviewingExpense.moderator_only && <button type="button" disabled={expenseBusy || !expenseComment.trim()} className="button button-secondary" onClick={() => decideExpense('CHANGES_REQUESTED')}>Request changes</button>}<button type="button" disabled={expenseBusy || !expenseComment.trim()} className="button button-secondary" onClick={() => decideExpense('REJECTED')}>Reject</button></div>
         </div>
       </div>}
 

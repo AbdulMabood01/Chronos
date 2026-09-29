@@ -149,6 +149,8 @@ public class LetterRequestService {
     public LetterRequestDTO rejectLetterRequest(Long requestId, String rejectionReason, Long adminId) {
         User admin = requireAdmin(adminId);
         LetterRequest request = requireSubmittedRequest(requestId);
+        if (request.getUser().getId().equals(adminId))
+            throw new IllegalArgumentException("You cannot reject your own letter request");
 
         String reason = trim(rejectionReason);
         if (reason == null || reason.isBlank()) {

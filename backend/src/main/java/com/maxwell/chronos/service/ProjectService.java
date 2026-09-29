@@ -52,14 +52,22 @@ public class ProjectService {
     private final AuditService auditService;
     private final NotificationService notificationService;
     private final JdbcTemplate jdbc;
+    private final CompanyAccessService access;
 
     public List<ProjectDTO> getProjects(User requester) {
-        if (requester == null || (!requester.isAdmin() && !requester.isProjectAdmin() && !canManageProjects(requester.getId()))) {
+        if (requester == null || !(access.hasPlatformRole(requester.getId(), "PLATFORM_ADMIN")
+                || access.hasAnyCompanyRole(requester.getId(), "COMPANY_ADMIN")
+                || canManageProjects(requester.getId()) || canReviewProjects(requester.getId()))) {
             throw new org.springframework.security.access.AccessDeniedException("Project view permission required");
         }
         return visibleProjects(requester).stream()
+                .filter(project -> canViewManagementProject(project, requester.getId()))
                 .sorted(Comparator.comparing(Project::getCode, String.CASE_INSENSITIVE_ORDER))
-                .map(this::toDTO)
+                .map(project -> {
+                    ProjectDTO dto = toDTO(project);
+                    dto.setCanManage(access.mayManageProject(project.getId(), requester.getId()));
+                    return dto;
+                })
                 .toList();
     }
 
@@ -75,15 +83,32 @@ public class ProjectService {
             validatePeriod(year, month);
         }
         return assignmentRepository.findByUserId(userId).stream()
+                .filter(assignment -> access.maySubmit(assignment.getProject().getId(), userId))
                 .sorted(Comparator.comparing(assignment -> assignment.getProject().getCode(), String.CASE_INSENSITIVE_ORDER))
                 .map(assignment -> toDTO(assignment.getProject(), List.of(toAssignmentDTO(assignment, year, month))))
                 .toList();
     }
 
     public ProjectDTO saveProject(Long projectId, SaveProjectRequest request, User requester) {
-        requireProjectAdmin(requester);
+        if (requester == null) throw new org.springframework.security.access.AccessDeniedException("Sign in required");
         Project project = projectId == null ? Project.builder().isActive(false).status(ProjectStatus.DRAFT).build()
                 : projectRepository.findById(projectId).orElseThrow(() -> new IllegalArgumentException("Project not found"));
+        if (projectId == null) {
+            Long companyId = request.getCompanyId();
+            if (companyId == null) throw new IllegalArgumentException("Company is required");
+            if (!access.mayCreateProject(companyId, requester.getId()))
+                throw new org.springframework.security.access.AccessDeniedException("Company Project Admin role required");
+            jdbc.queryForObject("SELECT id FROM companies WHERE id=? FOR UPDATE", Long.class, companyId);
+            Integer max = jdbc.queryForObject("SELECT project_limit FROM companies WHERE id=?", Integer.class, companyId);
+            Integer count = jdbc.queryForObject("SELECT count(*) FROM projects WHERE company_id=?", Integer.class, companyId);
+            if (count >= max) throw new IllegalArgumentException("Project limit reached for this company tier");
+            project.setCompanyId(companyId);
+            project.setOwnerUserId(requester.getId());
+        } else {
+            requireProjectAdmin(projectId, requester);
+            if (request.getCompanyId() != null && !request.getCompanyId().equals(project.getCompanyId()))
+                throw new IllegalArgumentException("Project company cannot be changed");
+        }
         ProjectStatus previousStatus = project.getStatus();
 
         Long previousManagerId = project.getProjectManager() == null ? null : project.getProjectManager().getId();
@@ -100,7 +125,7 @@ public class ProjectService {
             throw new IllegalArgumentException("Expense budget must be a nonnegative monetary amount with at most two decimals");
         }
 
-        projectRepository.findByCodeIgnoreCase(code)
+        projectRepository.findByCompanyIdAndCodeIgnoreCase(project.getCompanyId(), code)
                 .filter(existing -> project.getId() == null || !existing.getId().equals(project.getId()))
                 .ifPresent(existing -> {
                     throw new IllegalArgumentException("Project code already exists");
@@ -145,6 +170,8 @@ public class ProjectService {
             User manager = userRepository.findById(request.getProjectManagerId())
                     .orElseThrow(() -> new IllegalArgumentException("Project manager not found"));
             requireEligibleReviewer(manager);
+            if (!access.companyIds(manager.getId()).contains(project.getCompanyId()))
+                throw new IllegalArgumentException("Project Manager must accept a company invitation first");
             project.setProjectManager(manager);
         } else {
             project.setProjectManager(null);
@@ -154,12 +181,21 @@ public class ProjectService {
             User approver = userRepository.findById(request.getProjectManagerHoursApproverId())
                     .orElseThrow(() -> new IllegalArgumentException("Project manager hours approver not found"));
             requireEligibleReviewer(approver);
+            if (!access.hasCompanyRole(project.getCompanyId(), approver.getId(), "PROJECT_ADMIN")
+                    && (project.getId() == null || !access.hasProjectRole(project.getId(), approver.getId(), "PROJECT_ADMIN")))
+                throw new IllegalArgumentException("PM hours approver must be an appointed Project Admin");
+            if (Objects.equals(request.getProjectManagerId(), approver.getId()))
+                throw new IllegalArgumentException("Project Manager cannot approve their own hours");
             project.setProjectManagerHoursApprover(approver);
         } else {
             project.setProjectManagerHoursApprover(null);
         }
 
         Project saved = projectRepository.save(project);
+        if (projectId == null) access.activateProjectRole(saved.getCompanyId(), saved.getId(), requester.getId(), "PROJECT_ADMIN", requester.getId());
+        if (request.getProjectManagerId() != null) access.activateProjectRole(saved.getCompanyId(), saved.getId(), request.getProjectManagerId(), "PROJECT_MANAGER", requester.getId());
+        if (request.getProjectManagerHoursApproverId() != null && !access.hasProjectRole(saved.getId(), request.getProjectManagerHoursApproverId(), "PROJECT_ADMIN"))
+            access.activateProjectRole(saved.getCompanyId(), saved.getId(), request.getProjectManagerHoursApproverId(), "PROJECT_ADMIN", requester.getId());
         if (!Objects.equals(previousBudget, saved.getExpenseBudget())) {
             jdbc.update("INSERT INTO project_expense_budget_history(project_id,actor_id,previous_budget,new_budget) VALUES (?,?,?,?)",
                     saved.getId(), requester.getId(), previousBudget, saved.getExpenseBudget());
@@ -184,7 +220,7 @@ public class ProjectService {
 
     public ProjectDTO assignEmployee(Long projectId, Long userId, LocalDate startDate, LocalDate endDate,
                                      BigDecimal billRate, BigDecimal plannedHours, User requester) {
-        requireProjectAdmin(requester);
+        requireProjectAdmin(projectId, requester);
         if (plannedHours == null || plannedHours.signum() <= 0) {
             throw new IllegalArgumentException("Assigned hours must be greater than zero");
         }
@@ -196,6 +232,8 @@ public class ProjectService {
                 .orElseThrow(() -> new IllegalArgumentException("Project not found"));
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        if (!access.companyIds(userId).contains(project.getCompanyId()))
+            throw new IllegalArgumentException("Team member must accept a company invitation first");
         if (!Boolean.TRUE.equals(user.getIsActive())) {
             throw new IllegalArgumentException("Inactive employees cannot be assigned to projects");
         }
@@ -212,6 +250,7 @@ public class ProjectService {
         assignment.setEndDate(endDate);
         assignment.setBillRate(billRate);
         assignmentRepository.save(assignment);
+        access.activateProjectRole(project.getCompanyId(), projectId, userId, "USER", requester.getId());
         auditService.logAction(requester.getId(), "PROJECT_ASSIGNED", "Project", projectId,
                 "Assigned user " + user.getFullName());
         return toDTO(project);
@@ -219,7 +258,7 @@ public class ProjectService {
 
     public ProjectDTO updateAssignmentDates(Long projectId, Long userId, LocalDate startDate, LocalDate endDate,
                                             BigDecimal billRate, User requester) {
-        requireProjectAdmin(requester);
+        requireProjectAdmin(projectId, requester);
         validateAssignmentDetails(startDate, endDate, billRate);
         ProjectAssignment assignment = assignmentRepository.findByProjectIdAndUserId(projectId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Assignment not found"));
@@ -276,11 +315,14 @@ public class ProjectService {
 
     public List<ProjectHoursDashboardDTO> getProjectHoursDashboard(int year, int month, User requester) {
         validatePeriod(year, month);
-        if (requester == null || (!requester.isAdmin() && !requester.isProjectAdmin() && !canManageProjects(requester.getId()))) {
+        if (requester == null || !(access.hasPlatformRole(requester.getId(), "PLATFORM_ADMIN")
+                || access.hasAnyCompanyRole(requester.getId(), "COMPANY_ADMIN")
+                || canManageProjects(requester.getId()) || canReviewProjects(requester.getId()))) {
             throw new IllegalArgumentException("Project dashboard permission required");
         }
 
-        List<Project> projects = visibleProjects(requester);
+        List<Project> projects = visibleProjects(requester).stream()
+                .filter(project -> canViewManagementProject(project, requester.getId())).toList();
         List<Timesheet> timesheets = timesheetRepository.findByYearAndMonth(year, month);
         Map<Long, Timesheet> timesheetsByUser = timesheets.stream()
                 .collect(Collectors.toMap(timesheet -> timesheet.getUser().getId(), Function.identity(), (left, right) -> left));
@@ -313,7 +355,7 @@ public class ProjectService {
     }
 
     public ProjectDTO removeEmployee(Long projectId, Long userId, Long replacementManagerId, User requester) {
-        requireProjectAdmin(requester);
+        requireProjectAdmin(projectId, requester);
         ProjectAssignment assignment = assignmentRepository.findByProjectIdAndUserId(projectId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Assignment not found"));
         requireActiveAssignment(assignment);
@@ -327,15 +369,18 @@ public class ProjectService {
             }
             User replacementUser = userRepository.findById(replacementManagerId)
                     .orElseThrow(() -> new IllegalArgumentException("Replacement PM not found"));
-            if (replacementUser.getRole() != com.maxwell.chronos.enums.UserRole.PROJECT_ADMIN) {
+            if (!access.mayManageProject(projectId, replacementManagerId)) {
                 ProjectAssignment replacement = assignmentRepository.findByProjectIdAndUserId(projectId, replacementManagerId)
                         .orElseThrow(() -> new IllegalArgumentException("The secondary PM must be an active project team member or Project Admin"));
                 requireActiveAssignment(replacement);
             }
             requireEligibleReviewer(replacementUser);
+            if (!access.companyIds(replacementManagerId).contains(project.getCompanyId()))
+                throw new IllegalArgumentException("Replacement PM must belong to the project company");
             Long previousApproverId = project.getProjectManagerHoursApprover() == null ? null : project.getProjectManagerHoursApprover().getId();
             project.setProjectManager(replacementUser);
             projectRepository.save(project);
+            access.activateProjectRole(project.getCompanyId(), projectId, replacementManagerId, "PROJECT_MANAGER", requester.getId());
             transferPendingApprovals(project, requester, userId, previousApproverId);
         }
         assignment.setPlannedHours(approvedHoursToDate(projectId, userId));
@@ -344,6 +389,7 @@ public class ProjectService {
             assignment.setEndDate(LocalDate.now());
         }
         assignmentRepository.save(assignment);
+        access.removeProjectRole(projectId, userId, "USER");
         auditService.logAction(requester.getId(), "PROJECT_UNASSIGNED", "Project", projectId,
                 "Ended assignment for " + assignment.getUser().getFullName());
         return toDTO(assignment.getProject());
@@ -401,39 +447,50 @@ public class ProjectService {
     }
 
     private List<Project> visibleProjects(User requester) {
-        if (requester.isProjectAdmin() || requester.isAdmin()) return projectRepository.findAll();
-        var assigned = assignmentRepository.findByUserId(requester.getId()).stream()
-                .filter(a -> Boolean.TRUE.equals(a.getIsActive()))
-                .map(a -> a.getProject().getId()).collect(Collectors.toSet());
+        if (access.hasPlatformRole(requester.getId(), "PLATFORM_ADMIN")) return projectRepository.findAll();
         return projectRepository.findAll().stream().filter(p ->
-                (p.getProjectManager() != null && requester.getId().equals(p.getProjectManager().getId())) ||
-                (p.getProjectManagerHoursApprover() != null && requester.getId().equals(p.getProjectManagerHoursApprover().getId())) ||
-                assigned.contains(p.getId())).toList();
+                access.companyIds(requester.getId()).contains(p.getCompanyId()) &&
+                (access.hasCompanyRole(p.getCompanyId(), requester.getId(), "COMPANY_ADMIN") ||
+                 access.hasProjectRole(p.getId(), requester.getId(), "PROJECT_ADMIN") ||
+                 access.hasProjectRole(p.getId(), requester.getId(), "PROJECT_MANAGER") ||
+                 access.hasProjectRole(p.getId(), requester.getId(), "USER") ||
+                 access.hasModeratorGrant(p.getId(), requester.getId(), false) ||
+                 access.hasModeratorGrant(p.getId(), requester.getId(), true))).toList();
     }
 
     public boolean canReviewProjects(Long userId) {
-        return projectRepository.existsByProjectManagerIdOrProjectManagerHoursApproverId(userId, userId);
+        return access.hasAnyProjectRole(userId, "PROJECT_MANAGER") || access.hasAnyProjectRole(userId, "PROJECT_ADMIN")
+                || access.hasAnyModeratorGrant(userId);
     }
 
     public boolean canManageProjects(Long userId) {
-        return projectRepository.existsByProjectManagerId(userId);
+        return access.hasAnyProjectRole(userId, "PROJECT_ADMIN") || Boolean.TRUE.equals(jdbc.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM role_assignments r JOIN company_memberships m " +
+                "ON m.company_id=r.company_id AND m.user_id=r.user_id WHERE r.user_id=? " +
+                "AND r.role_key='PROJECT_ADMIN' AND r.project_id IS NULL AND r.removed_at IS NULL " +
+                "AND m.status='ACTIVE')", Boolean.class, userId));
     }
 
     public boolean canApproveProjectManagerHours(Long projectId, Long approverId) {
-        return projectRepository.findById(projectId)
-                .map(project -> project.getProjectManagerHoursApprover() != null
-                        && project.getProjectManagerHoursApprover().getId().equals(approverId))
-                .orElse(false);
+        return access.hasProjectRole(projectId, approverId, "PROJECT_ADMIN");
     }
 
-    private void requireProjectAdmin(User user) {
-        if (user == null || !user.canManageProjects()) {
-            throw new org.springframework.security.access.AccessDeniedException("Admin or Project Admin permission required");
-        }
+    private void requireProjectAdmin(Long projectId, User user) {
+        if (user == null || !access.mayManageProject(projectId, user.getId()))
+            throw new org.springframework.security.access.AccessDeniedException("Project Admin permission required");
+    }
+
+    private boolean canViewManagementProject(Project project, long userId) {
+        return access.hasPlatformRole(userId, "PLATFORM_ADMIN")
+                || access.hasCompanyRole(project.getCompanyId(), userId, "COMPANY_ADMIN")
+                || access.hasProjectRole(project.getId(), userId, "PROJECT_ADMIN")
+                || access.hasProjectRole(project.getId(), userId, "PROJECT_MANAGER")
+                || access.hasModeratorGrant(project.getId(), userId, false)
+                || access.hasModeratorGrant(project.getId(), userId, true);
     }
 
     private void requireCanPlanProject(Long projectId, User requester) {
-        if (requester == null || !requester.isProjectAdmin()) {
+        if (requester == null || !access.mayManageProject(projectId, requester.getId())) {
             throw new org.springframework.security.access.AccessDeniedException("Project planning permission required");
         }
     }
@@ -469,6 +526,8 @@ public class ProjectService {
     private ProjectDTO toDTO(Project project, List<ProjectAssignmentDTO> assignments) {
         return ProjectDTO.builder()
                 .id(project.getId())
+                .companyId(project.getCompanyId())
+                .ownerUserId(project.getOwnerUserId())
                 .code(project.getCode())
                 .name(project.getName())
                 .description(project.getDescription())

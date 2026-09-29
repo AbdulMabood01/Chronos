@@ -113,6 +113,7 @@ public class ApprovalsController {
     @PostMapping("/timesheet-project/{submissionId}/approve")
     public ResponseEntity<TimesheetProjectSubmissionDTO> approveProjectTimesheet(
             @PathVariable Long submissionId,
+            @RequestBody(required = false) Map<String, String> body,
             @AuthenticationPrincipal Jwt jwt) {
         String email = jwt.getClaimAsString("preferred_username");
         var user = userService.findUserEntityByEmail(email);
@@ -122,7 +123,8 @@ public class ApprovalsController {
         }
 
         try {
-            TimesheetProjectSubmissionDTO submission = timesheetService.approveProjectSubmission(submissionId, user.getId());
+            TimesheetProjectSubmissionDTO submission = timesheetService.approveProjectSubmission(submissionId,
+                    user.getId(), body == null ? null : body.get("fallbackReason"));
             return ResponseEntity.ok(submission);
         } catch (IllegalArgumentException e) {
             throw e;
@@ -144,7 +146,8 @@ public class ApprovalsController {
 
         try {
             String rejectionReason = reason != null ? reason : body != null ? body.get("reason") : null;
-            TimesheetProjectSubmissionDTO submission = timesheetService.rejectProjectSubmission(submissionId, rejectionReason, user.getId());
+            TimesheetProjectSubmissionDTO submission = timesheetService.rejectProjectSubmission(submissionId,
+                    rejectionReason, user.getId(), body == null ? null : body.get("fallbackReason"));
             return ResponseEntity.ok(submission);
         } catch (IllegalArgumentException e) {
             throw e;

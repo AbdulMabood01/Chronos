@@ -25,6 +25,8 @@ public class TimesheetProjectSubmissionDTO {
     private String projectManagerHoursApproverName;
     private String routedApproverName;
     private Long routedApproverId;
+    private Boolean reviewAllowed;
+    private Boolean fallbackRequired;
     private Long userId;
     private String userName;
     private String userJobTitle;
