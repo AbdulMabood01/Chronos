@@ -15,6 +15,8 @@ public interface VacationRequestRepository extends JpaRepository<VacationRequest
     List<VacationRequest> findByUserId(Long userId);
     List<VacationRequest> findByStatus(VacationStatus status);
     List<VacationRequest> findByUserIdAndStatus(Long userId, VacationStatus status);
+    List<VacationRequest> findByUserIdAndStatusInAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
+            Long userId, List<VacationStatus> statuses, LocalDate endDate, LocalDate startDate);
     List<VacationRequest> findByStartDateBetween(LocalDate startDate, LocalDate endDate);
     List<VacationRequest> findByUserIdAndStartDateGreaterThanEqual(Long userId, LocalDate date);
     List<VacationRequest> findByUserIdAndStartDateLessThanEqualAndEndDateGreaterThanEqual(

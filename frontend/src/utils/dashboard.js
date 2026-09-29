@@ -27,7 +27,7 @@ export function capacityExceptions(projects, now, completeScope) {
   }));
   return [...people.values()].filter(person => person.daily > 8.0001 || (completeScope && !person.unknown && person.daily < 6.4))
     .sort((a, b) => b.daily - a.daily)
-    .map(person => ({ id: `capacity-${person.id}`, title: person.name, icon: 'users', to: '/project-hours',
+    .map(person => ({ id: `capacity-${person.id}`, title: person.name, icon: 'users', to: '/projects',
       urgent: person.daily > 8, detail: `${person.daily > 8 ? 'Overallocated' : 'Underutilized'} · ${displayNumber(person.daily / 8 * 100)}% planned allocation${completeScope ? '' : ' in visible projects'}` }));
 }
 
@@ -52,9 +52,9 @@ export function buildDashboard(data, user = {}, now = new Date()) {
       // Approval queues have their own rows; keep delivery alerts concise and avoid duplicate actions.
       const signals = (project.signals || []).filter(signal => signal.code !== 'APPROVALS');
       if (signals.length) add(`health-${project.projectId}`, `${project.projectCode} · ${project.projectName}`, signals.slice(0, 2).map(signal => signal.message).join(' · ') + (signals.length > 2 ? ` · +${signals.length - 2} more` : ''), projectLink(project.projectId), { urgent: project.status === 'AT_RISK', icon: 'briefcase' });
-      if (systemAdmin && project.pendingApprovals > 0) add(`approvals-${project.projectId}`, `${project.projectCode} · Timesheet approvals`, 'Waiting on project reviewers. Open Project Hours to review submission status.', '/project-hours', { count: project.pendingApprovals, icon: 'clock' });
+      if (systemAdmin && project.pendingApprovals > 0) add(`approvals-${project.projectId}`, `${project.projectCode} · Timesheet approvals`, 'Waiting on project reviewers. Open Approvals to review submission status.', '/admin', { count: project.pendingApprovals, icon: 'clock' });
     });
-    if (capacity.length) add('capacity', 'Review resource allocation', `${capacity.length} ${capacity.length === 1 ? 'employee has' : 'employees have'} allocation outside 80–100% of daily capacity.`, '/project-hours', { count: capacity.length, icon: 'users' });
+    if (capacity.length) add('capacity', 'Review resource allocation', `${capacity.length} ${capacity.length === 1 ? 'employee has' : 'employees have'} allocation outside 80–100% of daily capacity.`, '/projects', { count: capacity.length, icon: 'users' });
   } else {
     sheets.forEach(sheet => {
       const period = `${sheet.year}-${String(sheet.month).padStart(2, '0')}`;
@@ -97,7 +97,7 @@ export function buildDashboard(data, user = {}, now = new Date()) {
   const pendingApprovals = systemAdmin ? health.reduce((sum, item) => sum + Number(item.pendingApprovals || 0), 0) : approvals.length;
   const metrics = manager ? [
     { label: 'Active Projects', value: data.projects ? active.length : null, detail: 'Currently in delivery', to: '/projects' },
-    { label: systemAdmin ? 'Employees' : 'Team Members', value: systemAdmin ? data.employees?.filter(person => person.isActive !== false && person.role !== 'ADMIN').length : data.projects ? new Set(active.flatMap(project => (project.assignments || []).filter(assignedToday).map(item => item.userId))).size : null, detail: systemAdmin ? 'Active employees' : 'Assigned today', to: systemAdmin ? '/users' : '/project-hours' },
+    { label: systemAdmin ? 'Employees' : 'Team Members', value: systemAdmin ? data.employees?.filter(person => person.isActive !== false && person.role !== 'ADMIN').length : data.projects ? new Set(active.flatMap(project => (project.assignments || []).filter(assignedToday).map(item => item.userId))).size : null, detail: systemAdmin ? 'Active employees' : 'Assigned today', to: systemAdmin ? '/users' : '/projects' },
     { label: systemAdmin ? 'Pending Actions' : 'Pending Approvals', value: systemAdmin ? actionsKnown ? actionCount : null : data.approvals ? pendingApprovals : null, detail: systemAdmin ? 'Items needing attention' : 'Waiting on your review', to: systemAdmin ? '/dashboard#needs-attention' : '/admin' },
     { label: 'Projects Needing Attention', value: data.health ? health.filter(item => item.status !== 'HEALTHY').length : null, detail: 'Delivery or submission issues', to: '/projects' },
   ] : [

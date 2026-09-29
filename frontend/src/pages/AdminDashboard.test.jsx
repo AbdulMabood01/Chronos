@@ -15,6 +15,7 @@ beforeEach(() => {
   currentUser.role = 'ADMIN';
   currentUser.canReviewProjects = false;
   timesheetAPI.getPendingProjectSubmissions.mockResolvedValue({ data: [] });
+  timesheetAPI.getPendingOpeningRequests.mockResolvedValue({ data: [] });
   letterRequestAPI.getPendingRequests.mockResolvedValue({ data: [] });
   expenseAPI.pending.mockResolvedValue({ data: [] });
   vacationAPI.getPendingRequests.mockResolvedValue({
@@ -45,6 +46,23 @@ it('reviews a pending expense from Approvals', async () => {
   await waitFor(() => expect(expenseAPI.decide).toHaveBeenCalledWith(42, 'APPROVED', ''));
   await waitFor(() => expect(screen.queryByText('Sam Lee')).toBeNull());
   expect(document.querySelectorAll('.admin-pending-section .task-row')).toHaveLength(1);
+});
+
+it('lets a Project Admin review and approve an employee opening request', async () => {
+  currentUser.role = 'PROJECT_ADMIN';
+  timesheetAPI.getPendingOpeningRequests.mockResolvedValueOnce({ data: [{
+    id: 9, timesheetId: 4, projectId: 3, projectCode: 'P1', userName: 'Abdul Mabood',
+    year: 2026, month: 8, status: 'PENDING', employeeComment: 'I missed project hours',
+    createdAt: '2026-09-01T12:00:00',
+  }] }).mockResolvedValue({ data: [] });
+  timesheetAPI.decideOpeningRequest.mockResolvedValue({ data: {} });
+  render(<MemoryRouter><AdminDashboard /></MemoryRouter>);
+  const task = (await screen.findByText('Abdul Mabood')).closest('article');
+  fireEvent.click(within(task).getByRole('button', { name: 'Review' }));
+  const dialog = screen.getByRole('dialog', { name: 'Review timesheet opening' });
+  expect(within(dialog).getByText('I missed project hours')).toBeTruthy();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Approve for 7 days' }));
+  await waitFor(() => expect(timesheetAPI.decideOpeningRequest).toHaveBeenCalledWith(9, true, ''));
 });
 
 afterEach(cleanup);

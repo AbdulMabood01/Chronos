@@ -54,6 +54,13 @@ apiClient.interceptors.response.use((response) => {
   const validationMessage = leaveRequest && (status === 400 || status === 409)
     && typeof error.response?.data?.message === 'string'
     ? error.response.data.message.trim() : '';
+  const correctionRequestMessage = /^\/timesheet-corrections(?:\/|$)/.test(error.config?.url || '')
+    && (status === 400 || status === 409) && typeof error.response?.data?.message === 'string'
+    ? error.response.data.message.trim() : '';
+  const timesheetClosedMessage = /^\/timesheets(?:\/|$)/.test(error.config?.url || '')
+    && status === 400
+    && error.response?.data?.message === 'This timesheet month is closed; request an opening from your Project Admin'
+    ? 'This timesheet month is closed. Request an opening from your Project Admin.' : '';
   const passwordRequest = /^\/auth\/(?:reset-password(?:\/validate)?|change-password)$/.test(error.config?.url || '');
   const passwordErrors = new Set([
     'This reset link is invalid or expired. Request a new reset link.',
@@ -75,7 +82,7 @@ apiClient.interceptors.response.use((response) => {
       ? 'Your account is locked. Contact an administrator.'
     : status >= 500 ? 'Something went wrong on our side. Please try again.'
     : status === 429 && error.config?.publicAuth ? 'Unable to sign in. Check your credentials or try again later.'
-    : validationMessage || passwordMessage || (status === 400 ? 'Please check your entries and try again.'
+    : validationMessage || correctionRequestMessage || timesheetClosedMessage || passwordMessage || (status === 400 ? 'Please check your entries and try again.'
       : 'Unable to complete the request. Please try again.');
   error.userMessage = message;
   error.message = message;
@@ -161,7 +168,10 @@ export const timesheetAPI = {
   submitTimesheet: (timesheetId) => apiClient.post(`/timesheets/${timesheetId}/submit`),
   getProjectSubmission: (timesheetId, projectId) => apiClient.get(`/timesheets/${timesheetId}/projects/${projectId}/submission`),
   submitProjectTimesheet: (timesheetId, projectId) => apiClient.post(`/timesheets/${timesheetId}/projects/${projectId}/submit`),
-  reopenTimesheet: (timesheetId, reason) => apiClient.post(`/timesheets/${timesheetId}/reopen`, { reason }),
+  requestOpening: (timesheetId, projectId, comment) => apiClient.post(`/timesheet-corrections/${timesheetId}/projects/${projectId}`, { comment }),
+  getOpeningRequests: (timesheetId, projectId) => apiClient.get(`/timesheet-corrections/${timesheetId}/projects/${projectId}`),
+  getPendingOpeningRequests: () => apiClient.get('/timesheet-corrections/pending'),
+  decideOpeningRequest: (requestId, approve, comment) => apiClient.post(`/timesheet-corrections/${requestId}/${approve ? 'approve' : 'decline'}`, { comment }),
   approveTimesheet: (timesheetId) => apiClient.post(`/approvals/timesheet/${timesheetId}/approve`),
   rejectTimesheet: (timesheetId, reason) => apiClient.post(`/approvals/timesheet/${timesheetId}/reject`, { reason }),
   approveProjectSubmission: (submissionId) => apiClient.post(`/approvals/timesheet-project/${submissionId}/approve`),
@@ -225,7 +235,7 @@ export const letterRequestAPI = {
   getRequest: (requestId) => apiClient.get(`/letter-requests/${requestId}`),
   getMyRequests: () => apiClient.get('/letter-requests/my'),
   getPendingRequests: () => apiClient.get('/letter-requests/pending'),
-  approveRequest: (requestId) => apiClient.post(`/approvals/letter-request/${requestId}/approve`),
+  approveRequest: (requestId, review) => apiClient.post(`/approvals/letter-request/${requestId}/approve`, review),
   rejectRequest: (requestId, reason) => apiClient.post(`/approvals/letter-request/${requestId}/reject`, { reason }),
   downloadPdf: (requestId) => apiClient.get(`/letter-requests/${requestId}/pdf`, { responseType: 'blob' }),
 };

@@ -42,6 +42,8 @@ public class TimesheetProjectSubmissionDTO {
     private LocalDateTime rejectedAt;
     private String rejectedByName;
     private String rejectionReason;
+    private LocalDateTime correctionUntil;
+    private Boolean openingActive;
     private Boolean editable;
     private Boolean pdfExportEligible;
     private List<TimeEntryDTO> timeEntries;

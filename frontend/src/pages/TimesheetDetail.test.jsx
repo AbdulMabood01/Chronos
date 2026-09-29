@@ -17,8 +17,10 @@ vi.mock('../api', () => ({
     submitProjectTimesheet: vi.fn(),
     approveProjectSubmission: vi.fn(),
     getApprovalHistory: vi.fn(),
+    getOpeningRequests: vi.fn(),
+    requestOpening: vi.fn(),
   },
-  projectAPI: { getAssignedProjects: vi.fn() },
+  projectAPI: { getAssignedProjects: vi.fn(), getProjects: vi.fn() },
   reportsAPI: { exportProjectTimesheetPdf: vi.fn() },
 }));
 const employee = { id: 1, role: 'EMPLOYEE' };
@@ -41,9 +43,32 @@ beforeEach(() => {
   timesheetAPI.updateTimeEntry.mockResolvedValue({ data: {} });
   timesheetAPI.deleteTimeEntry.mockResolvedValue({});
   timesheetAPI.getApprovalHistory.mockResolvedValue({ data: [] });
+  timesheetAPI.getOpeningRequests.mockResolvedValue({ data: [] });
   projectAPI.getAssignedProjects.mockResolvedValue({ data: [{ id: 4, code: 'ATLAS', name: 'Atlas' }] });
+  projectAPI.getProjects.mockResolvedValue({ data: [] });
 });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
+
+it('allows month-end edits through day seven and freezes them on day eight', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(2026, 9, 6, 12));
+  const septemberSheet = { ...sheet, year: 2026, month: 9, status: 'DRAFT', timeEntries: [] };
+  timesheetAPI.getTimesheetById.mockResolvedValue({ data: septemberSheet });
+  timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, status: 'DRAFT', plannedHours: 160 } });
+  projectAPI.getAssignedProjects.mockResolvedValue({ data: [{ id: 4, code: 'ATLAS', name: 'Atlas',
+    status: 'ACTIVE', isActive: true, assignments: [{ userId: 1, isActive: false,
+      startDate: '2026-09-01', endDate: '2026-09-30', plannedHours: 160 }] }] });
+  const view = open();
+  const input = await screen.findByLabelText('Hours for 2026-09-03');
+  await waitFor(() => expect(input.disabled).toBe(false));
+  expect(screen.getByText(/You can edit this month through Oct 7, 2026/)).toBeTruthy();
+  view.unmount();
+
+  vi.setSystemTime(new Date(2026, 9, 8, 12));
+  open();
+  expect(await screen.findByRole('button', { name: 'Request opening' })).toBeTruthy();
+  expect(screen.queryByLabelText('Hours for 2026-09-03')?.disabled ?? true).toBe(true);
+});
 it('lets a project manager enter hours on their own assigned project', async () => {
   employee.canReviewProjects = true;
   const now = new Date();
@@ -94,7 +119,7 @@ describe('daily notes and summary', () => {
   it('saves notes using the existing entry hours and sessions', async () => {
     HTMLDialogElement.prototype.showModal = vi.fn(function () { this.setAttribute('open', ''); });
     timesheetAPI.getTimesheetById.mockResolvedValue({ data: { ...sheet, status: 'DRAFT', timeEntries: [{ ...sheet.timeEntries[0], notes: 'Planning' }] } });
-    timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, status: 'DRAFT', plannedHours: 160 } });
+    timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, status: 'DRAFT', plannedHours: 160, correctionUntil: '2099-01-01T00:00:00' } });
     open(false);
     await waitFor(() => expect(screen.getByLabelText('Hours for 2026-08-03').disabled).toBe(false));
     fireEvent.click(screen.getByRole('button', { name: 'Notes for 2026-08-03' }));
@@ -268,6 +293,70 @@ it('hides approval actions from admins even when they are the routed approver', 
   expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull();
 });
 
+it('lets an employee request an opening with a comment during the 30-day window', async () => {
+  const now = new Date();
+  const previous = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  timesheetAPI.getTimesheetById.mockResolvedValue({ data: {
+    ...sheet, year: previous.getFullYear(), month: previous.getMonth() + 1, status: 'DRAFT', timeEntries: [],
+  } });
+  timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, id: null, status: 'DRAFT', correctionUntil: null } });
+  timesheetAPI.requestOpening.mockResolvedValue({ data: {} });
+  open(false);
+  fireEvent.click(await screen.findByRole('button', { name: 'Request opening' }));
+  fireEvent.change(screen.getByLabelText('Why do you need this timesheet opened?'), { target: { value: 'Missed project hours' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send request to Project Admin' }));
+  await waitFor(() => expect(timesheetAPI.requestOpening).toHaveBeenCalledWith(2, '4', 'Missed project hours'));
+});
+
+it('refreshes an approved opening and lets the employee resubmit instead of showing frozen', async () => {
+  const now = new Date();
+  const previous = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const entryDate = `${previous.getFullYear()}-${String(previous.getMonth() + 1).padStart(2, '0')}-03`;
+  const monthSheet = { ...sheet, year: previous.getFullYear(), month: previous.getMonth() + 1,
+    approvalFrozen: true, timeEntries: [{ ...sheet.timeEntries[0], entryDate }] };
+  let opened = false;
+  let requestStatus = 'PENDING';
+  timesheetAPI.getTimesheetById.mockImplementation(() => Promise.resolve({ data: {
+    ...monthSheet, status: opened ? 'DRAFT' : 'APPROVED',
+  } }));
+  timesheetAPI.getProjectSubmission.mockImplementation(() => Promise.resolve({ data: opened
+    ? { ...approval, status: 'DRAFT', plannedHours: 160, openingActive: true, correctionUntil: '2099-01-01T00:00:00' }
+    : { ...approval, status: 'APPROVED', plannedHours: 160, openingActive: false } }));
+  timesheetAPI.getOpeningRequests.mockImplementation(() => Promise.resolve({ data: [{ id: 9, status: requestStatus }] }));
+  timesheetAPI.submitProjectTimesheet.mockResolvedValue({ data: {} });
+  open();
+  expect(await screen.findByText('Request pending Project Admin review.')).toBeTruthy();
+  opened = true;
+  requestStatus = 'APPROVED';
+  fireEvent.focus(window);
+  const button = await screen.findByRole('button', { name: 'Resubmit for Approval' });
+  expect(button.disabled).toBe(false);
+  expect(screen.queryByText('TIMESHEET FROZEN')).toBeNull();
+  expect(screen.getByText(/Opening approved through/)).toBeTruthy();
+  fireEvent.click(button);
+  await waitFor(() => expect(timesheetAPI.submitProjectTimesheet).toHaveBeenCalledWith(2, '4'));
+});
+
+it('shows submitted reopened hours as awaiting approval without a frozen banner', async () => {
+  timesheetAPI.getTimesheetById.mockResolvedValue({ data: { ...sheet, status: 'SUBMITTED', approvalFrozen: true } });
+  timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, status: 'SUBMITTED', openingActive: false } });
+  open();
+  expect(await screen.findByText(/read-only until a Project Manager approves or rejects it/)).toBeTruthy();
+  expect(screen.queryByText('TIMESHEET FROZEN')).toBeNull();
+});
+
+it('shows the expired deadline without an opening action', async () => {
+  const now = new Date();
+  const old = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+  timesheetAPI.getTimesheetById.mockResolvedValue({ data: {
+    ...sheet, year: old.getFullYear(), month: old.getMonth() + 1, status: 'DRAFT', timeEntries: [],
+  } });
+  timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, id: null, status: 'DRAFT', correctionUntil: null } });
+  open(false);
+  expect(await screen.findByText(/The request deadline has passed/)).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Request opening' })).toBeNull();
+});
+
 
 describe('favorites and corrections', () => {
   it('sorts project favorites first from the shared project favorites store', async () => {
@@ -283,7 +372,7 @@ describe('favorites and corrections', () => {
   });
   it('shows the correction reason and resubmits to the selected project', async () => {
     timesheetAPI.getTimesheetById.mockResolvedValue({ data: { ...sheet, status: 'REJECTED' } });
-    timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, status: 'REJECTED', plannedHours: 160, rejectionReason: 'Please correct Monday hours', rejectedByName: 'Sam Manager' } });
+    timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, status: 'REJECTED', plannedHours: 160, correctionUntil: '2099-01-01T00:00:00', rejectionReason: 'Please correct Monday hours', rejectedByName: 'Sam Manager' } });
     timesheetAPI.submitProjectTimesheet.mockResolvedValue({ data: {} });
     open(false);
     expect(await screen.findByRole('region', { name: 'Requested corrections' })).toBeTruthy();

@@ -57,6 +57,29 @@ class VacationRoutingTest {
         verify(notifications).createNotification(eq(1L), eq("VACATION_APPROVED"), anyString(), anyString(), eq(10L), eq("VacationRequest"));
     }
 
+    @Test void overlappingSubmittedLeaveCannotBeSubmittedOrApproved() {
+        var draft = request(VacationStatus.DRAFT);
+        var existing = VacationRequest.builder().id(11L).user(employee).status(VacationStatus.APPROVED)
+                .startDate(LocalDate.of(2026, 10, 2)).endDate(LocalDate.of(2026, 10, 3)).build();
+        when(users.findForUpdate(1L)).thenReturn(Optional.of(employee));
+        when(users.findById(2L)).thenReturn(Optional.of(admin));
+        when(vacations.findByUserIdAndStatusInAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
+                eq(1L), anyList(), any(), any())).thenReturn(List.of(existing));
+        assertThrows(IllegalArgumentException.class, () -> service.submitVacationRequest(10L, 1L));
+        assertEquals(VacationStatus.DRAFT, draft.getStatus());
+        draft.setStatus(VacationStatus.SUBMITTED);
+        assertThrows(IllegalArgumentException.class, () -> service.approveVacationRequest(10L, 2L));
+        assertEquals(VacationStatus.SUBMITTED, draft.getStatus());
+        verify(vacations, never()).save(any());
+    }
+
+    @Test void vacationRejectionRequiresAReason() {
+        var submitted = request(VacationStatus.SUBMITTED);
+        when(users.findById(2L)).thenReturn(Optional.of(admin));
+        assertThrows(IllegalArgumentException.class, () -> service.rejectVacationRequest(10L, " ", 2L));
+        assertEquals(VacationStatus.SUBMITTED, submitted.getStatus());
+    }
+
     @Test void specialLeaveRequiresAnExplicitAccountingDecision() {
         var request = request(VacationStatus.SUBMITTED);
         request.setVacationType(VacationType.SPECIAL);

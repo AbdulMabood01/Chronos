@@ -21,6 +21,7 @@ public class LetterRequestDTO {
     private String employeeId;
     private String email;
     private String jobTitle;
+    private LocalDate userJoiningDate;
     private LetterRequestType requestType;
     private VacationStatus status;
     private String recipientOrganization;
@@ -29,6 +30,10 @@ public class LetterRequestDTO {
     private String requestedFullName;
     private String requestedJobTitle;
     private LocalDate employmentStartDate;
+    private String approvedFullName;
+    private String approvedJobTitle;
+    private LocalDate approvedEmploymentStartDate;
+    private String reviewNote;
     private String immigrationCaseType;
     private String destinationCountry;
     private String consulateName;

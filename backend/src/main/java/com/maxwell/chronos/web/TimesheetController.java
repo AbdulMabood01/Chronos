@@ -149,26 +149,6 @@ public class TimesheetController {
         }
     }
 
-    @PostMapping("/{timesheetId}/reopen")
-    public ResponseEntity<TimesheetDTO> reopenTimesheet(@PathVariable Long timesheetId,
-                                                        @RequestBody(required = false) java.util.Map<String, String> body,
-                                                        @AuthenticationPrincipal Jwt jwt) {
-        String email = jwt.getClaimAsString("preferred_username");
-        var user = userService.findUserEntityByEmail(email);
-
-        if (user == null || !user.isAdmin()) {
-            return ResponseEntity.status(403).build();
-        }
-
-        try {
-            String reason = body != null ? body.get("reason") : null;
-            TimesheetDTO timesheet = timesheetService.reopenTimesheet(timesheetId, reason, user.getId());
-            return ResponseEntity.ok(timesheet);
-        } catch (IllegalArgumentException e) {
-            throw e;
-        }
-    }
-
     @PostMapping("/{timesheetId}/submit")
     public ResponseEntity<TimesheetDTO> submitTimesheet(@PathVariable Long timesheetId,
                                                        @AuthenticationPrincipal Jwt jwt) {

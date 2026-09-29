@@ -35,6 +35,8 @@ export default function LetterRequestReview() {
   const [error, setError] = useState('');
   const [rejecting, setRejecting] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  const [review, setReview] = useState({ fullName: '', jobTitle: '', employmentStartDate: '', reviewNote: '' });
+  const [reviewConfirmed, setReviewConfirmed] = useState(false);
 
   useEffect(() => {
     loadRequest();
@@ -44,6 +46,13 @@ export default function LetterRequestReview() {
     try {
       const response = await letterRequestAPI.getRequest(id);
       setRequest(response.data);
+      setReview({
+        fullName: response.data.approvedFullName || response.data.requestedFullName || '',
+        jobTitle: response.data.approvedJobTitle || response.data.requestedJobTitle || '',
+        employmentStartDate: response.data.approvedEmploymentStartDate || response.data.employmentStartDate || '',
+        reviewNote: response.data.reviewNote || '',
+      });
+      setReviewConfirmed(false);
       setError('');
     } catch (err) {
       setError('Failed to load letter request');
@@ -65,12 +74,19 @@ export default function LetterRequestReview() {
   };
 
   const approve = async () => {
+    const corrected = review.fullName.trim() !== request.requestedFullName?.trim()
+      || review.jobTitle.trim() !== request.requestedJobTitle?.trim()
+      || review.employmentStartDate !== request.employmentStartDate;
+    if (corrected && !review.reviewNote.trim()) {
+      setError('Explain changes to the employee\'s requested details before approval');
+      return;
+    }
     setWorking(true);
     try {
-      await letterRequestAPI.approveRequest(id);
+      await letterRequestAPI.approveRequest(id, review);
       navigate('/admin');
     } catch (err) {
-      setError('Failed to approve letter request');
+      setError(err?.response?.data?.message || 'Failed to approve letter request');
       setWorking(false);
     }
   };
@@ -195,14 +211,25 @@ export default function LetterRequestReview() {
             <span>Started</span>
             <strong>{formatDate(request.employmentStartDate)}</strong>
           </div>
+          {request.status === 'SUBMITTED' && <div className="card">
+            <h3>Confirm details for the final letter</h3>
+            <p>Requested: {request.requestedFullName} · {request.requestedJobTitle} · {formatDate(request.employmentStartDate)}</p>
+            <p>Profile: {request.userName} · {request.jobTitle || 'Title missing'} · {request.userJoiningDate ? formatDate(request.userJoiningDate) : 'Joining date missing'}</p>
+            <label>Confirmed name<input value={review.fullName} maxLength="200" onChange={event => { setReview({ ...review, fullName: event.target.value }); setReviewConfirmed(false); }} /></label>
+            <label>Confirmed title<input value={review.jobTitle} maxLength="120" onChange={event => { setReview({ ...review, jobTitle: event.target.value }); setReviewConfirmed(false); }} /></label>
+            <label>Confirmed employment start date<input type="date" value={review.employmentStartDate} onChange={event => { setReview({ ...review, employmentStartDate: event.target.value }); setReviewConfirmed(false); }} /></label>
+            <label>Reason for a correction<textarea value={review.reviewNote} maxLength="500" onChange={event => setReview({ ...review, reviewNote: event.target.value })} /></label>
+            <label><input type="checkbox" checked={reviewConfirmed} onChange={event => setReviewConfirmed(event.target.checked)} /> I verified these details for the final PDF</label>
+          </div>}
           <button className="button button-secondary" onClick={downloadPdf} type="button">
-            Show Letter in PDF
+            {request.status === 'SUBMITTED' ? 'Show requested letter preview' : 'Show Letter in PDF'}
           </button>
           {request.status === 'SUBMITTED' && (
             <>
-              <button className="button button-success" onClick={approve} type="button" disabled={working}>
+              <button className="button button-success" onClick={approve} type="button" disabled={working || !reviewConfirmed || !review.fullName.trim() || !review.jobTitle.trim() || !review.employmentStartDate || request.userId === user?.id}>
                 {working ? <LoadingIndicator label="Working..." /> : 'Approve'}
               </button>
+              {request.userId === user?.id && <p>You cannot approve your own letter request.</p>}
               <button className="button button-danger" onClick={() => setRejecting(true)} type="button" disabled={working}>
                 Reject
               </button>

@@ -1,0 +1,27 @@
+.opening-review-modal {
+  max-width: 580px;
+  border: 1px solid var(--border-color);
+  border-top: 4px solid var(--primary-color);
+  background: var(--surface-color);
+  color: var(--text-primary);
+}
+.opening-review-modal .modal-header { margin-bottom: 16px; }
+.opening-review-modal > p:first-of-type {
+  margin: 0 0 16px; padding: 12px 14px; border-radius: 9px;
+  background: var(--surface-muted); color: var(--text-secondary); font-size: 13px;
+}
+.opening-review-modal > p:first-of-type strong { color: var(--text-primary); }
+.opening-review-modal .opening-review-reason {
+  margin: 0 0 15px; padding: 15px 16px;
+  border: 1px solid var(--border-color); border-left: 3px solid var(--primary-color);
+  border-radius: 9px; background: var(--surface-color);
+  color: var(--text-primary); white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.opening-review-modal .opening-review-reason span {
+  display: block; margin-bottom: 5px; color: var(--text-secondary);
+  font-size: 11px; font-weight: 700; letter-spacing: .03em;
+}
+.opening-review-modal .expense-review-comment textarea:focus-visible {
+  outline: none; border-color: var(--primary-color); box-shadow: var(--focus-ring);
+}
+.opening-review-modal .expense-actions { gap: 9px; margin-top: 18px; }

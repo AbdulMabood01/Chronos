@@ -31,6 +31,7 @@ public class TimesheetDTO {
     private BigDecimal approvedHourlyRate;
     private LocalDateTime submittedAt;
     private LocalDateTime approvedAt;
+    private boolean approvalFrozen;
     private String approvedByName;
     private LocalDateTime rejectedAt;
     private String rejectedByName;

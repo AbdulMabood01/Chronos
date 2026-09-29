@@ -41,6 +41,8 @@ import java.util.stream.Collectors;
 @Transactional
 @RequiredArgsConstructor
 public class TimesheetService {
+    public static final int EDIT_DAYS_AFTER_MONTH_END = 7;
+    public static final int APPROVED_OPENING_DAYS = 7;
     private final TimesheetRepository timesheetRepository;
     private final TimeEntryRepository timeEntryRepository;
     private final TimesheetProjectSubmissionRepository projectSubmissionRepository;
@@ -204,55 +206,55 @@ public class TimesheetService {
         return toDTO(timesheet);
     }
 
-    public TimesheetDTO reopenTimesheet(Long timesheetId, String reason, Long reopeningUserId) {
-        User reopeningUser = userRepository.findById(reopeningUserId)
-                .orElseThrow(() -> new IllegalArgumentException("Reopening user not found"));
-
-        if (!reopeningUser.isAdmin()) {
-            throw new IllegalArgumentException("Only Admin can reopen timesheets");
-        }
-
+    public TimesheetProjectSubmissionDTO openAfterApprovedRequest(Long timesheetId, Long projectId, String reason, Long projectAdminId) {
+        User projectAdmin = userRepository.findById(projectAdminId)
+                .orElseThrow(() -> new IllegalArgumentException("Project Admin not found"));
+        if (!projectAdmin.isProjectAdmin())
+            throw new org.springframework.security.access.AccessDeniedException("Only Project Admin can approve opening requests");
+        if (reason == null || reason.isBlank() || reason.trim().length() > 500)
+            throw new IllegalArgumentException("A reason of up to 500 characters is required");
         Timesheet timesheet = timesheetRepository.findForUpdate(timesheetId)
                 .orElseThrow(() -> new IllegalArgumentException("Timesheet not found"));
-
-        if (!timesheet.getStatus().equals(TimesheetStatus.APPROVED) && !timesheet.getStatus().equals(TimesheetStatus.LOCKED)) {
-            throw new IllegalArgumentException("Only approved or locked timesheets can be reopened");
-        }
-
-        if (reason == null || reason.isBlank()) throw new IllegalArgumentException("Reopening reason is required");
-        for (var submission : projectSubmissionRepository.findByTimesheetId(timesheetId)) {
+        if (YearMonth.of(timesheet.getYear(), timesheet.getMonth()).isAfter(YearMonth.now()))
+            throw new IllegalArgumentException("Future timesheets cannot be opened");
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new IllegalArgumentException("Project not found"));
+        var assignment = projectAssignmentRepository.findByProjectIdAndUserId(projectId, timesheet.getUser().getId())
+                .orElseThrow(() -> new IllegalArgumentException("Project assignment not found"));
+        YearMonth period = YearMonth.of(timesheet.getYear(), timesheet.getMonth());
+        if ((assignment.getStartDate() != null && assignment.getStartDate().isAfter(period.atEndOfMonth()))
+                || (assignment.getEndDate() != null && assignment.getEndDate().isBefore(period.atDay(1))))
+            throw new IllegalArgumentException("Project assignment did not cover this timesheet month");
+        TimesheetProjectSubmission submission = getOrCreateProjectSubmission(timesheet, project);
+        if (submission.getStatus() == TimesheetStatus.SUBMITTED || submission.getStatus() == TimesheetStatus.CHANGE_REQUESTED)
+            throw new IllegalArgumentException("A submitted project timesheet must be reviewed before reopening");
+        if (submission.getCorrectionPlannedHours() == null)
+            submission.setCorrectionPlannedHours(resolvePlannedHours(timesheet, project)
+                    .max(submission.getTotalHours() == null ? BigDecimal.ZERO : submission.getTotalHours()));
+        if (!submission.isEditable() || timesheet.isLocked() || timesheet.getStatus() == TimesheetStatus.APPROVED
+                || timesheet.isApprovalFrozen()) {
             submission.setStatus(TimesheetStatus.DRAFT);
-            submission.setSubmittedAt(null);
             submission.setApprovedAt(null);
             submission.setApprovedBy(null);
             submission.setApprovedBillRate(null);
+            submission.setSubmittedAt(null);
             submission.setRejectedAt(null);
             submission.setRejectedBy(null);
             submission.setRejectionReason(null);
-            projectSubmissionRepository.save(submission);
+            timesheet.setStatus(TimesheetStatus.DRAFT);
+            timesheet.setApprovedAt(null);
+            timesheet.setApprovedBy(null);
+            timesheet.setApprovedHourlyRate(null);
+            timesheetRepository.save(timesheet);
         }
-        timesheet.setApprovedHourlyRate(null);
-        timesheet.setSubmittedAt(null);
-        timesheet.setRejectedAt(null);
-        timesheet.setRejectedBy(null);
-        timesheet.setRejectionReason(null);
-        timesheet.setStatus(TimesheetStatus.DRAFT);
-        timesheet.setApprovedAt(null);
-        timesheet.setApprovedBy(null);
-        Timesheet saved = timesheetRepository.save(timesheet);
-
-        auditService.logAction(reopeningUserId, "TIMESHEET_REOPENED", "Timesheet", timesheetId,
-                "Reason: " + reason);
-
-        // Notify employee
-        notificationService.createNotification(saved.getUser().getId(),
-                "TIMESHEET_REOPENED",
-                "Timesheet Reopened",
-                "Your " + saved.getMonth() + "/" + saved.getYear() + " timesheet has been reopened.",
-                timesheetId,
-                "Timesheet");
-
-        return toDTO(saved);
+        submission.setCorrectionUntil(java.time.LocalDateTime.now().plusDays(APPROVED_OPENING_DAYS));
+        projectSubmissionRepository.save(submission);
+        auditService.logAction(projectAdminId, "TIMESHEET_REOPENED", "TimesheetProjectSubmission", submission.getId(),
+                "Opening request approved: " + reason.trim());
+        notificationService.createNotification(timesheet.getUser().getId(), "TIMESHEET_REOPENED", "Correction window opened",
+                "You can enter or correct " + submission.getProject().getCode() + " hours until " + submission.getCorrectionUntil(),
+                submission.getId(), "TimesheetProjectSubmission");
+        return toProjectSubmissionDTO(submission);
     }
 
     public TimeEntryDTO addTimeEntry(Long timesheetId, LocalDate entryDate, BigDecimal hours, String notes,
@@ -264,12 +266,12 @@ public class TimesheetService {
             throw new IllegalArgumentException("User cannot edit another user's timesheet");
         }
 
-        var project = requireAssignedProject(projectId, userId);
+        var project = requireAssignedProject(projectId, userId, timesheet);
         TimesheetProjectSubmission submission = getOrCreateProjectSubmission(timesheet, project);
         if (java.time.YearMonth.of(timesheet.getYear(), timesheet.getMonth()).isAfter(java.time.YearMonth.now())) {
             throw new IllegalArgumentException("Future timesheets are read-only until that month begins");
         }
-        requireCurrentEditingPeriod(timesheet);
+        requireEditingPeriod(timesheet, submission);
         if (timesheet.isLocked() || !submission.isEditable()) {
             throw new IllegalArgumentException("Project timesheet is not editable");
         }
@@ -339,11 +341,12 @@ public class TimesheetService {
             throw new IllegalArgumentException("Approved vacation days cannot have billable hours");
         }
 
-        Project project = requireAssignedProject(projectId, userId);
-        if (entry.getProject() != null) requireAssignedProject(entry.getProject().getId(), userId);
+        Project project = requireAssignedProject(projectId, userId, timesheet);
+        if (entry.getProject() != null) requireAssignedProject(entry.getProject().getId(), userId, timesheet);
         TimesheetProjectSubmission existingSubmission = getOrCreateProjectSubmission(timesheet, entry.getProject() != null ? entry.getProject() : project);
         TimesheetProjectSubmission targetSubmission = getOrCreateProjectSubmission(timesheet, project);
-        requireCurrentEditingPeriod(timesheet);
+        requireEditingPeriod(timesheet, existingSubmission);
+        if (existingSubmission != targetSubmission) requireEditingPeriod(timesheet, targetSubmission);
         if (timesheet.isLocked() || !existingSubmission.isEditable() || !targetSubmission.isEditable()) {
             throw new IllegalArgumentException("Project timesheet is not editable");
         }
@@ -386,9 +389,9 @@ public class TimesheetService {
         if (entry.getProject() == null) {
             throw new IllegalArgumentException("Time entry does not have a project code");
         }
-        requireAssignedProject(entry.getProject().getId(), userId);
+        requireAssignedProject(entry.getProject().getId(), userId, timesheet);
         TimesheetProjectSubmission submission = getOrCreateProjectSubmission(timesheet, entry.getProject());
-        requireCurrentEditingPeriod(timesheet);
+        requireEditingPeriod(timesheet, submission);
         if (timesheet.isLocked() || !submission.isEditable()) {
             throw new IllegalArgumentException("Project timesheet is not editable");
         }
@@ -463,9 +466,9 @@ public class TimesheetService {
         }
         requireCanSubmit(timesheet.getUser());
 
-        Project project = requireAssignedProject(projectId, userId);
+        Project project = requireAssignedProject(projectId, userId, timesheet);
         TimesheetProjectSubmission submission = getOrCreateProjectSubmission(timesheet, project);
-        requireCurrentEditingPeriod(timesheet);
+        requireEditingPeriod(timesheet, submission);
         if (timesheet.isLocked() || !submission.isEditable()) {
             throw new IllegalArgumentException("Project timesheet cannot be submitted from its current status");
         }
@@ -489,6 +492,8 @@ public class TimesheetService {
         submission.setRejectedAt(null);
         submission.setRejectedBy(null);
         submission.setRejectionReason(null);
+        submission.setCorrectionUntil(null);
+        submission.setCorrectionPlannedHours(null);
         TimesheetProjectSubmission saved = projectSubmissionRepository.save(submission);
         updateMonthlyStatus(timesheet);
 
@@ -522,6 +527,7 @@ public class TimesheetService {
         submission.setRejectedAt(null);
         submission.setRejectedBy(null);
         submission.setRejectionReason(null);
+        submission.setCorrectionUntil(null);
         TimesheetProjectSubmission saved = projectSubmissionRepository.save(submission);
         updateMonthlyStatus(saved.getTimesheet());
 
@@ -563,6 +569,8 @@ public class TimesheetService {
         submission.setRejectedAt(java.time.LocalDateTime.now());
         submission.setRejectedBy(rejectingUser);
         submission.setRejectionReason(rejectionReason);
+        submission.setCorrectionPlannedHours(resolvePlannedHours(submission.getTimesheet(), submission.getProject()));
+        submission.setCorrectionUntil(java.time.LocalDateTime.now().plusDays(APPROVED_OPENING_DAYS));
         submission.setApprovedAt(null);
         submission.setApprovedBy(null);
         TimesheetProjectSubmission saved = projectSubmissionRepository.save(submission);
@@ -574,7 +582,7 @@ public class TimesheetService {
                 "TIMESHEET_REJECTED",
                 "Project Timesheet Rejected",
                 saved.getProject().getCode() + " for " + saved.getTimesheet().getMonth() + "/" + saved.getTimesheet().getYear()
-                        + " was rejected. Reason: " + rejectionReason,
+                        + " was rejected. Reason: " + rejectionReason + ". Correction window ends " + saved.getCorrectionUntil(),
                 saved.getId(),
                 "TimesheetProjectSubmission");
 
@@ -745,6 +753,10 @@ public class TimesheetService {
         if (timesheet == null || project == null || timesheet.getUser() == null) {
             return BigDecimal.ZERO;
         }
+        var correctionSubmission = projectSubmissionRepository.findByTimesheetIdAndProjectId(timesheet.getId(), project.getId());
+        if (correctionSubmission.isPresent() && correctionOpen(timesheet, correctionSubmission.get())
+                && correctionSubmission.get().getCorrectionPlannedHours() != null)
+            return correctionSubmission.get().getCorrectionPlannedHours();
         return projectAssignmentRepository.findByProjectIdAndUserId(project.getId(), timesheet.getUser().getId())
                 .map(assignment -> assignment.getPlannedHours())
                 .or(() -> projectHourPlanRepository
@@ -765,6 +777,7 @@ public class TimesheetService {
             timesheet.setStatus(TimesheetStatus.SUBMITTED);
         } else if (submissions.stream().allMatch(TimesheetProjectSubmission::isPdfExportEligible)) {
             timesheet.setStatus(TimesheetStatus.APPROVED);
+            timesheet.setApprovalFrozen(true);
         } else {
             timesheet.setStatus(TimesheetStatus.DRAFT);
         }
@@ -792,24 +805,54 @@ public class TimesheetService {
                 .collect(Collectors.toSet());
     }
 
-    private com.maxwell.chronos.domain.Project requireAssignedProject(Long projectId, Long userId) {
+    private com.maxwell.chronos.domain.Project requireAssignedProject(Long projectId, Long userId, Timesheet timesheet) {
         if (projectId == null) {
             throw new IllegalArgumentException("Project code is required");
         }
-        if (!projectService.isAssigned(projectId, userId)) {
+        boolean correction = projectSubmissionRepository.findByTimesheetIdAndProjectId(timesheet.getId(), projectId)
+                .map(submission -> correctionOpen(timesheet, submission)).orElse(false);
+        boolean historicalGrace = YearMonth.of(timesheet.getYear(), timesheet.getMonth()).isBefore(YearMonth.now())
+                && standardEditingOpen(timesheet);
+        if (!correction && !historicalGrace && !projectService.isAssigned(projectId, userId))
             throw new IllegalArgumentException("Employee is not assigned to this project");
+        if (correction || historicalGrace) {
+            var assignment = projectAssignmentRepository.findByProjectIdAndUserId(projectId, userId)
+                    .orElseThrow(() -> new IllegalArgumentException("Project assignment not found"));
+            if ((assignment.getStartDate() != null && assignment.getStartDate().isAfter(YearMonth.of(timesheet.getYear(), timesheet.getMonth()).atEndOfMonth()))
+                    || (assignment.getEndDate() != null && assignment.getEndDate().isBefore(YearMonth.of(timesheet.getYear(), timesheet.getMonth()).atDay(1))))
+                throw new IllegalArgumentException("Project assignment did not cover this timesheet month");
         }
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new IllegalArgumentException("Project not found"));
-        if (project.getStatus() != ProjectStatus.ACTIVE || Boolean.FALSE.equals(project.getIsActive())) {
+        if (!correction && (project.getStatus() != ProjectStatus.ACTIVE || Boolean.FALSE.equals(project.getIsActive()))) {
             throw new IllegalArgumentException("Hour entry is frozen while this project is " + project.getStatus().name().toLowerCase().replace('_', ' '));
         }
         return project;
     }
 
-    private void requireCurrentEditingPeriod(Timesheet timesheet) {
-        if (!YearMonth.of(timesheet.getYear(), timesheet.getMonth()).equals(YearMonth.now())) {
-            throw new IllegalArgumentException("Only the current month's timesheet can be edited or submitted");
+    private boolean correctionOpen(Timesheet timesheet, TimesheetProjectSubmission submission) {
+        return submission.getCorrectionUntil() != null
+                && submission.getCorrectionUntil().isAfter(java.time.LocalDateTime.now())
+                && submission.isEditable();
+    }
+
+    private boolean standardEditingOpen(Timesheet timesheet) {
+        return standardEditingOpen(timesheet, java.time.LocalDate.now());
+    }
+
+    static boolean standardEditingOpen(Timesheet timesheet, java.time.LocalDate today) {
+        YearMonth period = YearMonth.of(timesheet.getYear(), timesheet.getMonth());
+        return !period.isAfter(YearMonth.from(today))
+                && !today.isAfter(period.atEndOfMonth().plusDays(EDIT_DAYS_AFTER_MONTH_END));
+    }
+
+    private void requireEditingPeriod(Timesheet timesheet, TimesheetProjectSubmission submission) {
+        if ((timesheet.isApprovalFrozen() || timesheet.getStatus() == TimesheetStatus.APPROVED
+                || timesheet.isLocked()) && !correctionOpen(timesheet, submission)) {
+            throw new IllegalArgumentException("This timesheet was approved; request an opening from your Project Admin");
+        }
+        if (!standardEditingOpen(timesheet) && !correctionOpen(timesheet, submission)) {
+            throw new IllegalArgumentException("This timesheet month is closed; request an opening from your Project Admin");
         }
     }
 
@@ -987,6 +1030,8 @@ public class TimesheetService {
                 .rejectedAt(submission.getRejectedAt())
                 .rejectedByName(submission.getRejectedBy() != null ? submission.getRejectedBy().getFullName() : null)
                 .rejectionReason(submission.getRejectionReason())
+                .correctionUntil(submission.getCorrectionUntil())
+                .openingActive(correctionOpen(timesheet, submission))
                 .editable(submission.isEditable())
                 .pdfExportEligible(submission.isPdfExportEligible())
                 .timeEntries(timesheet.getTimeEntries().stream()
@@ -1015,6 +1060,7 @@ public class TimesheetService {
                 .approvedHourlyRate(timesheet.getApprovedHourlyRate())
                 .submittedAt(timesheet.getSubmittedAt())
                 .approvedAt(timesheet.getApprovedAt())
+                .approvalFrozen(timesheet.isApprovalFrozen())
                 .approvedByName(timesheet.getApprovedBy() != null ? timesheet.getApprovedBy().getFullName() : null)
                 .rejectedAt(timesheet.getRejectedAt())
                 .rejectedByName(timesheet.getRejectedBy() != null ? timesheet.getRejectedBy().getFullName() : null)

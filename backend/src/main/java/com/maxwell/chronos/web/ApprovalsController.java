@@ -154,6 +154,7 @@ public class ApprovalsController {
     @PostMapping("/letter-request/{requestId}/approve")
     public ResponseEntity<LetterRequestDTO> approveLetterRequest(
             @PathVariable Long requestId,
+            @RequestBody com.maxwell.chronos.dto.LetterReviewRequest review,
             @AuthenticationPrincipal Jwt jwt) {
         String email = jwt.getClaimAsString("preferred_username");
         var user = userService.findUserEntityByEmail(email);
@@ -163,7 +164,7 @@ public class ApprovalsController {
         }
 
         try {
-            LetterRequestDTO request = letterRequestService.approveLetterRequest(requestId, user.getId());
+            LetterRequestDTO request = letterRequestService.approveLetterRequest(requestId, user.getId(), review);
             return ResponseEntity.ok(request);
         } catch (IllegalArgumentException e) {
             throw e;

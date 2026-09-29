@@ -55,6 +55,18 @@ public class LetterRequest {
 
     private LocalDate employmentStartDate;
 
+    @Column(name = "approved_full_name", length = 200)
+    private String approvedFullName;
+
+    @Column(name = "approved_job_title", length = 120)
+    private String approvedJobTitle;
+
+    @Column(name = "approved_employment_start_date")
+    private LocalDate approvedEmploymentStartDate;
+
+    @Column(name = "review_note", length = 500)
+    private String reviewNote;
+
     @Column(length = 120)
     private String immigrationCaseType;
 

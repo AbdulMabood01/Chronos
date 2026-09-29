@@ -31,7 +31,6 @@ export default function WorkspaceLayout({ children, darkBackground, onToggleBack
     ...(projectManager ? [['/projects', 'Projects', 'briefcase']] : []),
     ...(systemAdmin ? [['/reports', 'Reports', 'file']] : []),
     ...(operations ? [['/time-reports', 'Time & leave reports', 'chart']] : []),
-    ...(projectManager && !operations ? [['/project-hours', 'Project hours', 'chart']] : []),
     ...(systemAdmin ? [['/users', 'People', 'users'], ['/audit', 'Audit log', 'file'], ['/settings', 'Settings', 'settings']] : []),
   ];
   const development = [['/feedback', 'Feedback', 'users'], ['/performance-reviews', 'Performance Reviews', 'file']];

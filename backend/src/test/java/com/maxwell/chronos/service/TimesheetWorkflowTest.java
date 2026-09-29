@@ -124,6 +124,30 @@ class TimesheetWorkflowTest {
         assertNull(submission.getRejectionReason());
     }
 
+    @Test void rejectedPriorMonthCanBeCorrectedAfterOffboardingAndResubmitted() {
+        YearMonth previous = YearMonth.now().minusMonths(1);
+        LocalDate workDay = previous.atDay(10);
+        sheet.setYear(previous.getYear());
+        sheet.setMonth(previous.getMonthValue());
+        var assignment = ProjectAssignment.builder().project(project).user(employee)
+                .plannedHours(new BigDecimal("160")).startDate(previous.atDay(1))
+                .endDate(previous.atEndOfMonth()).isActive(false).build();
+        when(assignments.findByProjectIdAndUserId(3L, 1L)).thenReturn(Optional.of(assignment));
+        when(projectService.isAssigned(3L, 1L)).thenReturn(false);
+        var manager = User.builder().id(6L).role(UserRole.EMPLOYEE).build();
+        project.setProjectManager(manager);
+        when(users.findById(6L)).thenReturn(Optional.of(manager));
+        submission.setStatus(TimesheetStatus.SUBMITTED);
+        when(projectService.managesProject(3L, 6L)).thenReturn(true);
+
+        service.rejectProjectSubmission(5L, "Correct hours", 6L);
+        assertNotNull(submission.getCorrectionUntil());
+        assertTrue(submission.getCorrectionUntil().isBefore(LocalDateTime.now().plusDays(8)));
+        service.addTimeEntry(4L, workDay, new BigDecimal("8"), "Corrected", 3L, List.of(), 1L);
+        assertEquals(TimesheetStatus.SUBMITTED, service.submitProjectTimesheet(4L, 3L, 1L).getStatus());
+        assertNull(submission.getCorrectionUntil());
+    }
+
     @Test void approvalHistoryPreservesRejectionsAndResubmissionsAndRejectsStrangers() {
         when(timesheets.findById(4L)).thenReturn(Optional.of(sheet));
         var rejected = com.maxwell.chronos.dto.AuditLogDTO.builder().id(10L).action(AuditAction.TIMESHEET_REJECTED).createdAt(LocalDateTime.of(2026,9,10,12,0)).build();
@@ -258,15 +282,24 @@ class TimesheetWorkflowTest {
         assertEquals(sheet.getTotalHours(), submission.getTotalHours());
     }
 
-    @Test void reopenClearsProjectApprovalAndAllowsEditing() {
+    @Test void approvedOpeningClearsProjectApprovalAndAllowsEditingForSevenDays() {
+        admin.setRole(UserRole.PROJECT_ADMIN);
         sheet.setStatus(TimesheetStatus.APPROVED);
+        sheet.setApprovalFrozen(true);
         submission.setStatus(TimesheetStatus.APPROVED);
         submission.setApprovedBillRate(new BigDecimal("75"));
-        service.reopenTimesheet(4L, "Correct hours", 2L);
+        var opened = service.openAfterApprovedRequest(4L, 3L, "Correct hours", 2L);
         assertTrue(submission.isEditable());
+        assertTrue(opened.getOpeningActive());
         assertNull(submission.getApprovedBillRate());
+        assertTrue(sheet.isApprovalFrozen());
+        assertTrue(submission.getCorrectionUntil().isBefore(LocalDateTime.now().plusDays(8)));
         add(LocalDate.of(2026,9,10), "8", List.of());
         assertEquals(new BigDecimal("8"), submission.getTotalHours());
+        var resubmitted = service.submitProjectTimesheet(4L, 3L, 1L);
+        assertEquals(TimesheetStatus.SUBMITTED, resubmitted.getStatus());
+        assertFalse(resubmitted.getOpeningActive());
+        assertTrue(sheet.isApprovalFrozen());
     }
 
     @Test void systemAdminCannotReviewEvenWhenAssignedAsManager() {
@@ -292,6 +325,7 @@ class TimesheetWorkflowTest {
         service.approveTimesheet(4L, 2L);
         assertEquals(TimesheetStatus.APPROVED, submission.getStatus());
         assertEquals(TimesheetStatus.APPROVED, sheet.getStatus());
+        assertTrue(sheet.isApprovalFrozen());
         assertEquals(new BigDecimal("75"), submission.getApprovedBillRate());
         assertThrows(IllegalArgumentException.class, () -> add(LocalDate.of(2026,9,11), "8", List.of()));
     }
@@ -305,6 +339,64 @@ class TimesheetWorkflowTest {
         verify(entries, never()).save(any());
     }
 
+    @Test void projectAdminCanOpenPastDraftBeforeFirstHourEntry() {
+        admin.setRole(UserRole.PROJECT_ADMIN);
+        YearMonth past = YearMonth.now().minusMonths(2);
+        sheet.setYear(past.getYear());
+        sheet.setMonth(past.getMonthValue());
+        var assignment = assignments.findByProjectIdAndUserId(3L, 1L).orElseThrow();
+        assignment.setStartDate(past.atDay(1));
+        assignment.setEndDate(past.atEndOfMonth());
+        when(submissions.findByTimesheetIdAndProjectId(4L, 3L)).thenReturn(Optional.empty());
+        when(submissions.save(any())).thenAnswer(i -> {
+            TimesheetProjectSubmission saved = i.getArgument(0);
+            saved.setId(5L);
+            when(submissions.findByTimesheetIdAndProjectId(4L, 3L)).thenReturn(Optional.of(saved));
+            return saved;
+        });
+
+        assertEquals("This timesheet month is closed; request an opening from your Project Admin",
+                assertThrows(IllegalArgumentException.class,
+                        () -> add(past.atDay(10), "8", List.of())).getMessage());
+        var opened = service.openAfterApprovedRequest(4L, 3L, "Late entry approved", 2L);
+        assertNotNull(opened.getCorrectionUntil());
+        assertEquals(new BigDecimal("160"), opened.getPlannedHours());
+        add(past.atDay(10), "8", List.of());
+        assertEquals(new BigDecimal("8"), service.submitProjectTimesheet(4L, 3L, 1L).getTotalHours());
+    }
+
+    @Test void projectAdminCannotOpenPastDraftOutsideAssignmentDates() {
+        admin.setRole(UserRole.PROJECT_ADMIN);
+        YearMonth past = YearMonth.now().minusMonths(2);
+        sheet.setYear(past.getYear());
+        sheet.setMonth(past.getMonthValue());
+        assertEquals("Project assignment did not cover this timesheet month",
+                assertThrows(IllegalArgumentException.class,
+                        () -> service.openAfterApprovedRequest(4L, 3L, "Late entry approved", 2L)).getMessage());
+    }
+
+    @Test void projectAdminCanOpenOnlyTheRequestedProjectFromLockedMonth() {
+        admin.setRole(UserRole.PROJECT_ADMIN);
+        YearMonth past = YearMonth.now().minusMonths(1);
+        sheet.setYear(past.getYear());
+        sheet.setMonth(past.getMonthValue());
+        sheet.setStatus(TimesheetStatus.LOCKED);
+        submission.setStatus(TimesheetStatus.APPROVED);
+        submission.setTotalHours(new BigDecimal("8"));
+        submission.setApprovedBillRate(new BigDecimal("75"));
+        var assignment = assignments.findByProjectIdAndUserId(3L, 1L).orElseThrow();
+        assignment.setStartDate(past.atDay(1));
+        assignment.setEndDate(past.atEndOfMonth());
+
+        service.openAfterApprovedRequest(4L, 3L, "Approved correction", 2L);
+
+        assertEquals(TimesheetStatus.DRAFT, sheet.getStatus());
+        assertEquals(TimesheetStatus.DRAFT, submission.getStatus());
+        assertNotNull(submission.getCorrectionUntil());
+        assertNull(submission.getApprovedBillRate());
+        add(past.atDay(10), "8", List.of());
+    }
+
     @Test void futureMonthCannotBeSubmitted() {
         YearMonth future = YearMonth.now().plusMonths(1);
         sheet.setYear(future.getYear());
@@ -313,11 +405,38 @@ class TimesheetWorkflowTest {
         verify(submissions, never()).save(any());
     }
 
-    @Test void approvedMonthDoesNotFreezeAnotherDraftProject() {
+    @Test void approvedMonthFreezesAnotherDraftProject() {
         sheet.setStatus(TimesheetStatus.APPROVED);
+        sheet.setApprovalFrozen(true);
         submission.setStatus(TimesheetStatus.DRAFT);
+        assertThrows(IllegalArgumentException.class, () -> add(LocalDate.of(2026, 9, 10), "8", List.of()));
+        verify(entries, never()).save(any());
+    }
+
+    @Test void ordinaryEditingClosesAfterTheSeventhDayFollowingMonthEnd() {
+        sheet.setYear(2026);
+        sheet.setMonth(9);
+        assertTrue(TimesheetService.standardEditingOpen(sheet, LocalDate.of(2026, 10, 7)));
+        assertFalse(TimesheetService.standardEditingOpen(sheet, LocalDate.of(2026, 10, 8)));
+    }
+
+    @Test void openingOneProjectKeepsOtherDraftProjectsFrozen() {
+        admin.setRole(UserRole.PROJECT_ADMIN);
+        sheet.setStatus(TimesheetStatus.APPROVED);
+        sheet.setApprovalFrozen(true);
+        submission.setStatus(TimesheetStatus.APPROVED);
+        var otherProject = Project.builder().id(30L).code("P2").name("Other project")
+                .status(ProjectStatus.ACTIVE).build();
+        var otherSubmission = TimesheetProjectSubmission.builder().id(31L).timesheet(sheet)
+                .project(otherProject).status(TimesheetStatus.DRAFT).totalHours(BigDecimal.ZERO).build();
+        when(projects.findById(30L)).thenReturn(Optional.of(otherProject));
+        when(projectService.isAssigned(30L, 1L)).thenReturn(true);
+        when(submissions.findByTimesheetIdAndProjectId(4L, 30L)).thenReturn(Optional.of(otherSubmission));
+        service.openAfterApprovedRequest(4L, 3L, "Correct P1", 2L);
+        assertTrue(sheet.isApprovalFrozen());
+        assertThrows(IllegalArgumentException.class, () -> service.addTimeEntry(4L,
+                LocalDate.of(2026, 9, 10), new BigDecimal("8"), "", 30L, List.of(), 1L));
         add(LocalDate.of(2026, 9, 10), "8", List.of());
-        verify(entries).save(any());
     }
 
     @Test void approvedProjectStillRejectsChanges() {

@@ -7,6 +7,7 @@ import { expenseAPI, letterRequestAPI, timesheetAPI, vacationAPI } from '../api'
 import { LoadingIndicator } from '../components/Hourglass';
 import { downloadReceipt } from './Expenses';
 import './Expenses.css';
+import './AdminDashboard.css';
 import '../styles.css';
 
 
@@ -34,6 +35,7 @@ export default function AdminDashboard() {
   const [pendingVacations, setPendingVacations] = useState([]);
   const [pendingLetters, setPendingLetters] = useState([]);
   const [pendingExpenses, setPendingExpenses] = useState([]);
+  const [pendingOpeningRequests, setPendingOpeningRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [rejectingTask, setRejectingTask] = useState(null);
@@ -41,6 +43,9 @@ export default function AdminDashboard() {
   const [reviewingExpense, setReviewingExpense] = useState(null);
   const [expenseComment, setExpenseComment] = useState('');
   const [expenseBusy, setExpenseBusy] = useState(false);
+  const [reviewingOpening, setReviewingOpening] = useState(null);
+  const [openingComment, setOpeningComment] = useState('');
+  const [openingBusy, setOpeningBusy] = useState(false);
   const [reviewingLeave, setReviewingLeave] = useState(null);
   const [specialAccounting, setSpecialAccounting] = useState('');
   const isReviewer = user?.canReviewProjects || ['PROJECT_ADMIN', 'ADMIN'].includes(user?.role);
@@ -58,13 +63,15 @@ export default function AdminDashboard() {
         user?.role === 'ADMIN' ? vacationAPI.getPendingRequests() : Promise.resolve({ data: [] }),
         canReviewLetters ? letterRequestAPI.getPendingRequests() : Promise.resolve({ data: [] }),
         expenseAPI.pending(),
+        user?.role === 'PROJECT_ADMIN' ? timesheetAPI.getPendingOpeningRequests() : Promise.resolve({ data: [] }),
       ];
-      const [timesheetRes, vacationRes, letterRes, expenseRes] = await Promise.allSettled(requests);
+      const [timesheetRes, vacationRes, letterRes, expenseRes, openingRes] = await Promise.allSettled(requests);
       if (timesheetRes.status === 'fulfilled') setPendingTimesheets(timesheetRes.value.data || []);
       if (vacationRes.status === 'fulfilled') setPendingVacations(vacationRes.value.data || []);
       if (letterRes.status === 'fulfilled') setPendingLetters(letterRes.value.data || []);
       if (expenseRes.status === 'fulfilled') setPendingExpenses(expenseRes.value.data || []);
-      const failed = [[timesheetRes, 'timesheets'], [vacationRes, 'vacation requests'], [letterRes, 'letters'], [expenseRes, 'expenses']]
+      if (openingRes.status === 'fulfilled') setPendingOpeningRequests(openingRes.value.data || []);
+      const failed = [[timesheetRes, 'timesheets'], [vacationRes, 'vacation requests'], [letterRes, 'letters'], [expenseRes, 'expenses'], [openingRes, 'timesheet openings']]
         .filter(([result]) => result?.status === 'rejected').map(([, label]) => label);
       setError(failed.length ? 'Could not refresh ' + failed.join(', ') + '. Previously loaded items may be out of date. Please retry.' : '');
     } catch (err) {
@@ -76,6 +83,22 @@ export default function AdminDashboard() {
   };
 
   const pendingTasks = useMemo(() => [
+    ...pendingOpeningRequests.map((task) => ({
+      id: `opening-${task.id}`,
+      entityId: task.id,
+      timesheetId: task.timesheetId,
+      projectId: task.projectId,
+      type: 'Timesheet Opening',
+      employee: task.userName,
+      project: task.projectCode,
+      period: `${task.month}/${task.year}`,
+      detail: 'Opening requested',
+      timeDetail: task.employeeComment,
+      submittedAt: task.createdAt,
+      status: task.status,
+      kind: 'opening',
+      opening: task,
+    })),
     ...pendingTimesheets.map((task) => ({
       id: `timesheet-${task.id}`,
       entityId: task.id,
@@ -133,7 +156,21 @@ export default function AdminDashboard() {
       kind: 'expense',
       expense: task,
     })),
-  ].sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0)), [pendingTimesheets, pendingVacations, pendingLetters, pendingExpenses, user?.id]);
+  ].sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0)), [pendingOpeningRequests, pendingTimesheets, pendingVacations, pendingLetters, pendingExpenses, user?.id]);
+
+  const decideOpening = async approve => {
+    if (!reviewingOpening || openingBusy) return;
+    if (!approve && !openingComment.trim()) { setError('Explain why the opening request is declined.'); return; }
+    setOpeningBusy(true);
+    setError('');
+    try {
+      await timesheetAPI.decideOpeningRequest(reviewingOpening.id, approve, openingComment.trim());
+      setReviewingOpening(null);
+      setOpeningComment('');
+      await loadPendingItems();
+    } catch (err) { setError(apiErrorMessage(err, 'Failed to decide opening request')); }
+    finally { setOpeningBusy(false); }
+  };
 
   const decideExpense = async status => {
     if (!reviewingExpense || expenseBusy) return;
@@ -222,7 +259,7 @@ export default function AdminDashboard() {
           </div>
           <div>
             <span>Timesheets</span>
-            <strong>{pendingTimesheets.length}</strong>
+            <strong>{pendingTimesheets.length + pendingOpeningRequests.length}</strong>
           </div>
           <div>
             <span>Vacation</span>
@@ -259,7 +296,7 @@ export default function AdminDashboard() {
                   <h3>{task.employee}</h3>
                   <p>{task.designation}</p>
                   <div className="request-meta">
-                    {task.kind === 'timesheet' && <span>{task.project}</span>}
+                    {['timesheet', 'opening'].includes(task.kind) && <span>{task.project}</span>}
                     <span>{task.period}</span>
                     <span>{task.detail}</span>
                     <span>Submitted {formatDate(task.submittedAt)}</span>
@@ -268,7 +305,9 @@ export default function AdminDashboard() {
                   {task.timeDetail && <p className="task-letter-preview">{task.timeDetail}</p>}
                 </div>
                 <div className="task-actions">
-                  {task.kind === 'timesheet' ? (
+                  {task.kind === 'opening' ? (
+                    <button className="button button-small button-secondary" onClick={() => { setReviewingOpening(task.opening); setOpeningComment(''); setError(''); }} type="button">Review</button>
+                  ) : task.kind === 'timesheet' ? (
                     <button className="button button-small button-secondary" onClick={() => navigate(`/timesheet/${task.timesheetId}?projectId=${task.projectId}`)}>
                       Review
                     </button>
@@ -281,7 +320,7 @@ export default function AdminDashboard() {
                       Review
                     </button>
                   ) : null}
-                  {task.kind !== 'letter' && task.kind !== 'expense' && (
+                  {task.kind !== 'letter' && task.kind !== 'expense' && task.kind !== 'opening' && (
                     <>
                       {task.kind === 'vacation' && needsLeaveClassification(task.vacationType)
                         ? <button className="button button-small button-secondary" onClick={() => { setReviewingLeave(task); setSpecialAccounting(''); }}>Review</button>
@@ -297,6 +336,18 @@ export default function AdminDashboard() {
           </div>
         )}
       </section>
+
+      {reviewingOpening && <div className="modal-backdrop" role="presentation">
+        <div className="modal-card expense-review-modal opening-review-modal" role="dialog" aria-modal="true" aria-labelledby="opening-review-title">
+          <div className="modal-header"><h2 id="opening-review-title">Review timesheet opening</h2><button type="button" className="modal-close" aria-label="Close" onClick={() => setReviewingOpening(null)}>&times;</button></div>
+          <p><strong>{reviewingOpening.userName}</strong> / {reviewingOpening.projectCode} / {reviewingOpening.month}/{reviewingOpening.year}</p>
+          <p className="opening-review-reason"><span>Employee comment</span>{reviewingOpening.employeeComment}</p>
+          <button type="button" className="button button-secondary button-small" onClick={() => navigate(`/timesheet/${reviewingOpening.timesheetId}?projectId=${reviewingOpening.projectId}`)}>View timesheet</button>
+          {error && <p role="alert" className="error-message">{error}</p>}
+          <label className="expense-review-comment">Project Admin comment<textarea value={openingComment} maxLength={500} rows={3} onChange={event => setOpeningComment(event.target.value)} placeholder="Optional for approval, required to decline" /></label>
+          <div className="expense-actions"><button type="button" disabled={openingBusy} className="button button-primary" onClick={() => decideOpening(true)}>Approve for 7 days</button><button type="button" disabled={openingBusy || !openingComment.trim()} className="button button-secondary" onClick={() => decideOpening(false)}>Decline</button></div>
+        </div>
+      </div>}
 
       {reviewingExpense && <div className="modal-backdrop" role="presentation">
         <div className="modal-card expense-review-modal" role="dialog" aria-modal="true" aria-labelledby="expense-review-title">

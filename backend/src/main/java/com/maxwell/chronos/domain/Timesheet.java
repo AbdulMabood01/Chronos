@@ -64,6 +64,9 @@ public class Timesheet {
     @Column(name = "approved_at")
     private LocalDateTime approvedAt;
 
+    @Column(name = "approval_frozen", nullable = false)
+    private boolean approvalFrozen;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "approved_by_id")
     private User approvedBy;
