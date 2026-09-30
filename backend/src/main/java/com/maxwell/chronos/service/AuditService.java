@@ -42,6 +42,14 @@ public class AuditService {
         }
     }
 
+    public void logRequiredAction(Long userId, AuditAction action, String entityType, Long entityId, String details) {
+        ObjectNode detailsNode = objectMapper.createObjectNode();
+        detailsNode.put("message", details == null ? "" : details);
+        auditLogRepository.save(AuditLog.builder()
+                .user(userRepository.findById(userId).orElseThrow())
+                .action(action).entityType(entityType).entityId(entityId).details(detailsNode).build());
+    }
+
     public void logSecurityAction(Long actorId, AuditAction action, Long targetId) {
         ObjectNode details = objectMapper.createObjectNode();
         details.put("message", action.name());

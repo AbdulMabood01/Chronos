@@ -14,6 +14,7 @@ import java.time.LocalDate;
 @AllArgsConstructor
 @Builder
 public class SaveProjectRequest {
+    private Long companyId;
     private String code;
     private String name;
     private String description;
@@ -21,6 +22,7 @@ public class SaveProjectRequest {
     private ProjectStatus status;
     private BigDecimal totalAllocatedHours;
     private BigDecimal expenseBudget;
+    private String approvalFrequency;
     private Long projectManagerId;
     private Long projectManagerHoursApproverId;
     private LocalDate projectManagerStartDate;

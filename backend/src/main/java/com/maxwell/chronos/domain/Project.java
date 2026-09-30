@@ -8,6 +8,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -23,7 +24,13 @@ public class Project {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true, length = 50)
+    @Column(name = "company_id", nullable = false)
+    private Long companyId;
+
+    @Column(name = "owner_user_id")
+    private Long ownerUserId;
+
+    @Column(nullable = false, length = 50)
     private String code;
 
     @Column(nullable = false, length = 150)
@@ -44,6 +51,16 @@ public class Project {
 
     @Column(name = "expense_budget", precision = 14, scale = 2)
     private BigDecimal expenseBudget;
+
+    @Column(name = "approval_frequency", nullable = false, length = 10)
+    @Builder.Default
+    private String approvalFrequency = "MONTHLY";
+
+    @Column(name = "pending_approval_frequency", length = 10)
+    private String pendingApprovalFrequency;
+
+    @Column(name = "approval_frequency_effective_on")
+    private LocalDate approvalFrequencyEffectiveOn;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "project_manager_id")

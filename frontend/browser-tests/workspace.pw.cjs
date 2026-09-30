@@ -10,10 +10,17 @@ async function mockWorkspace(page, role = 'EMPLOYEE') {
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url());
     let data = [];
-    if (url.pathname === '/api/auth/me') data = { ...employee, role };
+    if (url.pathname === '/api/auth/me') data = { ...employee, role, canSubmitWork: role !== 'ADMIN' };
     else if (url.pathname.includes('/notifications/unread-count')) data = 3;
+    else if (url.pathname === '/api/timesheet-periods') data = {
+      id: 3, userId: 1, projectId: 4, periodStart: `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`,
+      periodEnd: `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${new Date(now.getFullYear(), now.getMonth()+1, 0).getDate()}`,
+      frequency: 'MONTHLY', status: 'APPROVED', pdfExportEligible: true, approvedByName: 'Taylor Morgan',
+      approvedAt: '2026-09-01T10:00:00', billRate: 85, plannedHours: 160, totalHours: 64,
+    };
     else if (url.pathname.includes('/submission')) data = { id: 3, timesheetId: 2, projectId: 4, status: 'APPROVED', pdfExportEligible: true, approvedByName: 'Taylor Morgan', approvedAt: '2026-09-01T10:00:00', billRate: 85, plannedHours: 160, totalHours: 64 };
     else if (url.pathname === '/api/timesheets/my') data = [sheet];
+    else if (url.pathname === '/api/timesheets') data = sheet;
     else if (/\/timesheets\/(\d|id)/.test(url.pathname)) data = sheet;
     else if (url.pathname === '/api/projects/assigned') data = [{ id: 4, code: 'ATLAS', name: 'Atlas Platform', projectManagerName: 'Taylor Morgan' }];
     else if (url.pathname === '/api/vacation/my') data = [{ id: 1, status: 'APPROVED', hours: 24, startDate: '2026-08-17', endDate: '2026-08-19', vacationType: 'VACATION' }];

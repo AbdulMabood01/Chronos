@@ -14,7 +14,9 @@ beforeEach(() => {
   vi.resetAllMocks();
   currentUser.role = 'ADMIN';
   currentUser.canReviewProjects = false;
-  timesheetAPI.getPendingProjectSubmissions.mockResolvedValue({ data: [] });
+  currentUser.canManageProjects = false;
+  timesheetAPI.getPendingApprovalPeriods.mockResolvedValue({ data: [] });
+  timesheetAPI.getPendingPeriodOpenings.mockResolvedValue({ data: [] });
   letterRequestAPI.getPendingRequests.mockResolvedValue({ data: [] });
   expenseAPI.pending.mockResolvedValue({ data: [] });
   vacationAPI.getPendingRequests.mockResolvedValue({
@@ -42,9 +44,27 @@ it('reviews a pending expense from Approvals', async () => {
   fireEvent.click(within(expenseTask).getByRole('button', { name: 'Review' }));
   const dialog = screen.getByRole('dialog', { name: 'Review expense' });
   fireEvent.click(within(dialog).getByRole('button', { name: 'Approve' }));
-  await waitFor(() => expect(expenseAPI.decide).toHaveBeenCalledWith(42, 'APPROVED', ''));
+  await waitFor(() => expect(expenseAPI.decide).toHaveBeenCalledWith(42, 'APPROVED', '', null));
   await waitFor(() => expect(screen.queryByText('Sam Lee')).toBeNull());
   expect(document.querySelectorAll('.admin-pending-section .task-row')).toHaveLength(1);
+});
+
+it('lets a Project Admin review and approve an employee opening request', async () => {
+  currentUser.role = 'PROJECT_ADMIN';
+  currentUser.canManageProjects = true;
+  timesheetAPI.getPendingPeriodOpenings.mockResolvedValueOnce({ data: [{
+    id: 9, timesheetId: 4, projectId: 3, projectCode: 'P1', userName: 'Abdul Mabood',
+    periodStart: '2026-08-01', periodEnd: '2026-08-31', openingStatus: 'PENDING', openingReason: 'I missed project hours',
+    openingRequestedAt: '2026-09-01T12:00:00',
+  }] }).mockResolvedValue({ data: [] });
+  timesheetAPI.decidePeriodOpening.mockResolvedValue({ data: {} });
+  render(<MemoryRouter><AdminDashboard /></MemoryRouter>);
+  const task = (await screen.findByText('Abdul Mabood')).closest('article');
+  fireEvent.click(within(task).getByRole('button', { name: 'Review' }));
+  const dialog = screen.getByRole('dialog', { name: 'Review timesheet opening' });
+  expect(within(dialog).getByText('I missed project hours')).toBeTruthy();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Approve for 7 days' }));
+  await waitFor(() => expect(timesheetAPI.decidePeriodOpening).toHaveBeenCalledWith(9, true, ''));
 });
 
 afterEach(cleanup);
@@ -76,18 +96,17 @@ it('requires a classification before approving special leave', async () => {
 });
 
 
-it('shows a PM their own pending submission on the Approvals screen', async () => {
+it('lets a PM approve another employee submission on the Approvals screen', async () => {
   currentUser.role = 'EMPLOYEE';
   currentUser.canReviewProjects = true;
-  timesheetAPI.getPendingProjectSubmissions.mockResolvedValue({ data: [{
+  timesheetAPI.getPendingApprovalPeriods.mockResolvedValue({ data: [{
     id: 22, timesheetId: 12, projectId: 4, projectCode: 'ATLAS', projectName: 'Atlas',
-    userId: 1, userName: 'PM Own Hours', status: 'SUBMITTED', month: 9, year: 2026,
-    totalHours: 8, routedApproverId: 9, projectManagerId: 1,
+    userId: 2, userName: 'Team Member', status: 'SUBMITTED', periodStart: '2026-09-01', periodEnd: '2026-09-30',
+    totalHours: 8,
   }] });
-  timesheetAPI.approveProjectSubmission.mockResolvedValue({ data: {} });
+  timesheetAPI.decideApprovalPeriod.mockResolvedValue({ data: {} });
   render(<MemoryRouter><AdminDashboard /></MemoryRouter>);
-  expect(await screen.findByText('PM Own Hours')).toBeTruthy();
-  expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull();
+  expect(await screen.findByText('Team Member')).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
-  await waitFor(() => expect(timesheetAPI.approveProjectSubmission).toHaveBeenCalledWith(22));
+  await waitFor(() => expect(timesheetAPI.decideApprovalPeriod).toHaveBeenCalledWith(22, true, null, null));
 });

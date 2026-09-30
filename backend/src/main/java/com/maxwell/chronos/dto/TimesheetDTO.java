@@ -17,6 +17,7 @@ import java.util.Set;
 public class TimesheetDTO {
     private Long id;
     private Long userId;
+    private Long companyId;
     private String userName;
     private String userJobTitle;
     private Long primaryProjectId;
@@ -31,6 +32,7 @@ public class TimesheetDTO {
     private BigDecimal approvedHourlyRate;
     private LocalDateTime submittedAt;
     private LocalDateTime approvedAt;
+    private boolean approvalFrozen;
     private String approvedByName;
     private LocalDateTime rejectedAt;
     private String rejectedByName;

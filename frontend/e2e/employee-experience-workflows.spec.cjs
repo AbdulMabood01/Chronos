@@ -163,3 +163,51 @@ test('rejected timesheet is corrected, resubmitted, and approved', async ({ page
   await page.goto(`/timesheet/${sheet.id}?projectId=${fixture.projectId}`);
   await expect(page.getByText('APPROVED', { exact: true }).first()).toBeVisible();
 });
+
+test('approved current-month timesheet opens on request and can be resubmitted', async ({ page, request }) => {
+  test.setTimeout(90000);
+  const employee = await apiAs(request, 'employee');
+  const manager = await apiAs(request, 'projectAdmin');
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  const entryDate = `${year}-${String(month).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  let response = await employee.post('/api/timesheets', { params: { year, month } });
+  expect(response.ok()).toBeTruthy();
+  const sheet = await response.json();
+  response = await employee.post(`/api/timesheets/${sheet.id}/time-entries`, { data: {
+    timesheetId: sheet.id, entryDate, hours: '4', notes: 'Hours before reopening', projectId: fixture.projectId,
+  } });
+  expect(response.ok()).toBeTruthy();
+  response = await employee.post(`/api/timesheets/${sheet.id}/projects/${fixture.projectId}/submit`);
+  expect(response.ok()).toBeTruthy();
+  let submission = await response.json();
+  response = await manager.post(`/api/approvals/timesheet-project/${submission.id}/approve`);
+  expect(response.ok()).toBeTruthy();
+
+  await authenticatePage(page, request, 'employee');
+  await page.goto(`/timesheet/${sheet.id}?projectId=${fixture.projectId}`);
+  await expect(page.getByText('TIMESHEET FROZEN')).toBeVisible();
+  await page.getByRole('button', { name: 'Request opening' }).click();
+  await page.getByLabel('Why do you need this timesheet opened?').fill('Correct approved hours');
+  await page.getByRole('button', { name: 'Send request to Project Admin' }).click();
+  await expect(page.getByText('Request pending Project Admin review.')).toBeVisible();
+
+  response = await manager.get('/api/timesheet-corrections/pending');
+  expect(response.ok()).toBeTruthy();
+  const opening = (await response.json()).find(item => item.timesheetId === sheet.id && item.projectId === fixture.projectId);
+  expect(opening).toBeTruthy();
+  response = await manager.post(`/api/timesheet-corrections/${opening.id}/approve`, { data: { comment: 'Approved correction' } });
+  expect(response.ok()).toBeTruthy();
+
+  await expect(page.getByRole('button', { name: 'Resubmit for Approval' })).toBeEnabled({ timeout: 20000 });
+  await expect(page.getByText('TIMESHEET FROZEN')).toHaveCount(0);
+  await expect(page.getByText(/Opening approved through/)).toBeVisible();
+  await page.getByRole('button', { name: 'Resubmit for Approval' }).click();
+  await expect(page.getByText(/read-only until a Project Manager approves or rejects it/)).toBeVisible();
+  await expect(page.getByText('TIMESHEET FROZEN')).toHaveCount(0);
+  response = await employee.get(`/api/timesheets/${sheet.id}/projects/${fixture.projectId}/submission`);
+  submission = await response.json();
+  expect(submission.status).toBe('SUBMITTED');
+  expect(submission.openingActive).toBe(false);
+});

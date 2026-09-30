@@ -118,7 +118,7 @@
 .report-case-meta { display: flex; flex-wrap: wrap; gap: 8px 19px; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
 .report-case-meta span + span::before { content: '·'; margin-right: 19px; color: var(--border-color); }
 .report-case .concern-id { min-width: 0; max-width: none; margin-top: 11px; color: var(--text-secondary); font-size: 11px; }
-.employee-concerns .report-case-action:not(.button) { min-width: 116px; padding: 10px 14px; border-color: color-mix(in srgb, var(--primary-color) 25%, var(--border-color)); background: color-mix(in srgb, var(--primary-color) 7%, var(--surface-color)); color: var(--primary-color); font-size: 12px; }
+.employee-concerns .report-case-action:not(.button) { min-width: 116px; min-height: 44px; padding: 10px 14px; border-color: color-mix(in srgb, var(--primary-color) 25%, var(--border-color)); background: color-mix(in srgb, var(--primary-color) 7%, var(--surface-color)); color: var(--primary-color); font-size: 12px; }
 .employee-concerns .report-case-action:hover:not(.button) { background: color-mix(in srgb, var(--primary-color) 13%, var(--surface-color)); }
 .report-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; min-height: 215px; justify-content: center; padding: 24px clamp(18px, 4vw, 48px); border: 1px dashed color-mix(in srgb, var(--primary-color) 25%, var(--border-color)); border-radius: 14px; background: color-mix(in srgb, var(--primary-color) 3%, var(--surface-color)); }
 .report-empty > svg { color: var(--primary-color); }

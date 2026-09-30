@@ -54,6 +54,13 @@ apiClient.interceptors.response.use((response) => {
   const validationMessage = leaveRequest && (status === 400 || status === 409)
     && typeof error.response?.data?.message === 'string'
     ? error.response.data.message.trim() : '';
+  const correctionRequestMessage = /^\/timesheet-corrections(?:\/|$)/.test(error.config?.url || '')
+    && (status === 400 || status === 409) && typeof error.response?.data?.message === 'string'
+    ? error.response.data.message.trim() : '';
+  const timesheetClosedMessage = /^\/timesheets(?:\/|$)/.test(error.config?.url || '')
+    && status === 400
+    && error.response?.data?.message === 'This timesheet month is closed; request an opening from your Project Admin'
+    ? 'This timesheet month is closed. Request an opening from your Project Admin.' : '';
   const passwordRequest = /^\/auth\/(?:reset-password(?:\/validate)?|change-password)$/.test(error.config?.url || '');
   const passwordErrors = new Set([
     'This reset link is invalid or expired. Request a new reset link.',
@@ -75,7 +82,7 @@ apiClient.interceptors.response.use((response) => {
       ? 'Your account is locked. Contact an administrator.'
     : status >= 500 ? 'Something went wrong on our side. Please try again.'
     : status === 429 && error.config?.publicAuth ? 'Unable to sign in. Check your credentials or try again later.'
-    : validationMessage || passwordMessage || (status === 400 ? 'Please check your entries and try again.'
+    : validationMessage || correctionRequestMessage || timesheetClosedMessage || passwordMessage || (status === 400 ? 'Please check your entries and try again.'
       : 'Unable to complete the request. Please try again.');
   error.userMessage = message;
   error.message = message;
@@ -107,11 +114,28 @@ export const authAPI = {
     timeout: 5000, headers: { Authorization: `Bearer ${token}` } }),
 };
 
+export const companyAPI = {
+  mine: () => apiClient.get('/companies'),
+  create: (name, slug) => apiClient.post('/companies', { name, slug }),
+  members: id => apiClient.get(`/companies/${id}/members`),
+  invite: (id, data) => apiClient.post(`/companies/${id}/invitations`, data),
+  invitations: id => apiClient.get(`/companies/${id}/invitations`),
+  revokeInvitation: (id, invitationId) => apiClient.delete(`/companies/${id}/invitations/${invitationId}`),
+  accept: token => apiClient.post('/companies/invitations/accept', { token }),
+  grantModerator: (id, data) => apiClient.post(`/companies/${id}/moderator-grants`, data),
+  moderatorGrants: id => apiClient.get(`/companies/${id}/moderator-grants`),
+  revokeModerator: (id, grantId) => apiClient.delete(`/companies/${id}/moderator-grants/${grantId}`),
+  removeRole: (id, role, userId, projectId) => apiClient.delete(`/companies/${id}/roles/${role}/users/${userId}`, { params: { projectId } }),
+  transferOwner: (id, projectId, userId) => apiClient.post(`/companies/${id}/projects/${projectId}/owner`, { userId }),
+  projectRoles: (id, projectId) => apiClient.get(`/companies/${id}/projects/${projectId}/roles`),
+};
+
 export const expenseAPI = {
   mine: () => apiClient.get('/expenses/mine'),
   pending: () => apiClient.get('/expenses/pending'),
   project: id => apiClient.get(`/expenses/projects/${id}`),
   totals: id => apiClient.get(`/expenses/projects/${id}/totals`),
+  budgetCheck: (id, amount, excludeExpenseId) => apiClient.get(`/expenses/projects/${id}/budget-check`, { params: { amount, excludeExpenseId } }),
   detail: id => apiClient.get(`/expenses/${id}`),
   save: (id, expense, receipt) => {
     const data = new FormData();
@@ -120,7 +144,7 @@ export const expenseAPI = {
     return id ? apiClient.put(`/expenses/${id}`, data, { headers: { 'Content-Type': 'multipart/form-data' } })
       : apiClient.post('/expenses', data, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
-  decide: (id, status, comment) => apiClient.post(`/expenses/${id}/decision`, { status, comment }),
+  decide: (id, status, comment, fallbackReason) => apiClient.post(`/expenses/${id}/decision`, { status, comment, fallbackReason }),
   receipt: id => apiClient.get(`/expenses/${id}/receipt`, { responseType: 'blob' }),
 };
 
@@ -150,9 +174,17 @@ export const userAPI = {
 };
 
 export const timesheetAPI = {
+  getApprovalPeriod: (projectId, date, userId) => apiClient.get('/timesheet-periods', { params: { projectId, date, userId } }),
+  submitApprovalPeriod: (projectId, date) => apiClient.post('/timesheet-periods/submit', null, { params: { projectId, date } }),
+  decideApprovalPeriod: (id, approve, comment, fallbackReason) => apiClient.post(`/timesheet-periods/${id}/decision`, { approve, comment, fallbackReason }),
+  requestPeriodOpening: (projectId, date, reason) => apiClient.post('/timesheet-periods/opening', { reason }, { params: { projectId, date } }),
+  decidePeriodOpening: (id, approve, comment) => apiClient.post(`/timesheet-periods/${id}/opening-decision`, { approve, comment }),
+  getPendingApprovalPeriods: () => apiClient.get('/timesheet-periods/pending'),
+  getApprovalPeriodHistory: id => apiClient.get(`/timesheet-periods/${id}/history`),
+  getPendingPeriodOpenings: () => apiClient.get('/timesheet-periods/openings/pending'),
   getApprovalHistory: (id, projectId) => apiClient.get('/timesheets/' + id + '/projects/' + projectId + '/history'),
   getMissingTimesheets: (year, month) => apiClient.get('/timesheets/missing', { params: { year, month } }),
-  getTimesheet: (year, month) => apiClient.get(`/timesheets/${year}/${month}`),
+  getTimesheet: (year, month, companyId) => apiClient.post('/timesheets', null, { params: { year, month, companyId } }),
   getTimesheetById: (timesheetId, projectId) => apiClient.get(`/timesheets/id/${timesheetId}`, projectId ? { params: { projectId } } : undefined),
   createTimesheet: (year, month) => apiClient.post('/timesheets', null, { params: { year, month } }),
   addTimeEntry: (timesheetId, data) => apiClient.post(`/timesheets/${timesheetId}/time-entries`, data),
@@ -161,11 +193,14 @@ export const timesheetAPI = {
   submitTimesheet: (timesheetId) => apiClient.post(`/timesheets/${timesheetId}/submit`),
   getProjectSubmission: (timesheetId, projectId) => apiClient.get(`/timesheets/${timesheetId}/projects/${projectId}/submission`),
   submitProjectTimesheet: (timesheetId, projectId) => apiClient.post(`/timesheets/${timesheetId}/projects/${projectId}/submit`),
-  reopenTimesheet: (timesheetId, reason) => apiClient.post(`/timesheets/${timesheetId}/reopen`, { reason }),
+  requestOpening: (timesheetId, projectId, comment) => apiClient.post(`/timesheet-corrections/${timesheetId}/projects/${projectId}`, { comment }),
+  getOpeningRequests: (timesheetId, projectId) => apiClient.get(`/timesheet-corrections/${timesheetId}/projects/${projectId}`),
+  getPendingOpeningRequests: () => apiClient.get('/timesheet-corrections/pending'),
+  decideOpeningRequest: (requestId, approve, comment) => apiClient.post(`/timesheet-corrections/${requestId}/${approve ? 'approve' : 'decline'}`, { comment }),
   approveTimesheet: (timesheetId) => apiClient.post(`/approvals/timesheet/${timesheetId}/approve`),
   rejectTimesheet: (timesheetId, reason) => apiClient.post(`/approvals/timesheet/${timesheetId}/reject`, { reason }),
-  approveProjectSubmission: (submissionId) => apiClient.post(`/approvals/timesheet-project/${submissionId}/approve`),
-  rejectProjectSubmission: (submissionId, reason) => apiClient.post(`/approvals/timesheet-project/${submissionId}/reject`, { reason }),
+  approveProjectSubmission: (submissionId, fallbackReason) => apiClient.post(`/approvals/timesheet-project/${submissionId}/approve`, { fallbackReason }),
+  rejectProjectSubmission: (submissionId, reason, fallbackReason) => apiClient.post(`/approvals/timesheet-project/${submissionId}/reject`, { reason, fallbackReason }),
   getPendingTimesheets: () => apiClient.get('/timesheets/pending'),
   getPendingProjectSubmissions: () => apiClient.get('/timesheets/project-submissions/pending'),
   getMyTimesheets: () => apiClient.get('/timesheets/my'),
@@ -225,7 +260,7 @@ export const letterRequestAPI = {
   getRequest: (requestId) => apiClient.get(`/letter-requests/${requestId}`),
   getMyRequests: () => apiClient.get('/letter-requests/my'),
   getPendingRequests: () => apiClient.get('/letter-requests/pending'),
-  approveRequest: (requestId) => apiClient.post(`/approvals/letter-request/${requestId}/approve`),
+  approveRequest: (requestId, review) => apiClient.post(`/approvals/letter-request/${requestId}/approve`, review),
   rejectRequest: (requestId, reason) => apiClient.post(`/approvals/letter-request/${requestId}/reject`, { reason }),
   downloadPdf: (requestId) => apiClient.get(`/letter-requests/${requestId}/pdf`, { responseType: 'blob' }),
 };
@@ -255,6 +290,8 @@ export const settingsAPI = {
 };
 
 export const reportsAPI = {
+  approvalPeriods: (year, month) => apiClient.get('/reports/timesheet-periods', { params: { year, month } }),
+  exportApprovalPeriods: ids => apiClient.get('/reports/timesheet-periods/export', { params: { ids: ids.join(',') }, responseType: 'blob' }),
   exportTimesheets: (year, month, userIds = []) => apiClient.get('/reports/timesheets/export', {
     params: { year, month, ...(userIds.length ? { userIds: userIds.join(',') } : {}) },
     responseType: 'blob',
@@ -268,6 +305,7 @@ export const reportsAPI = {
   }),
   exportSingleTimesheetPdf: (timesheetId) => apiClient.get(`/reports/timesheets/${timesheetId}/pdf`, { responseType: 'blob' }),
   exportProjectTimesheetPdf: (submissionId) => apiClient.get(`/reports/timesheet-projects/${submissionId}/pdf`, { responseType: 'blob' }),
+  exportApprovalPeriodPdf: id => apiClient.get(`/reports/timesheet-periods/${id}/pdf`, { responseType: 'blob' }),
   exportVacationRequests: (year) => apiClient.get('/reports/vacation/export', { params: { year }, responseType: 'blob' }),
   getMonthlySummary: (year, month) => apiClient.get('/reports/summary', { params: { year, month } }),
 };

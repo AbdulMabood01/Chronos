@@ -5,7 +5,7 @@ import ScreenTitle from '../components/ScreenTitle';
 import Icon from '../components/Icon';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { format, startOfMonth, subMonths } from 'date-fns';
-import { projectAPI, userAPI, expenseAPI } from '../api';
+import { projectAPI, userAPI, expenseAPI, companyAPI } from '../api';
 import { ProjectExpenseHistory } from './Expenses';
 import { useAuth } from '../AuthContext';
 import { LoadingIndicator } from '../components/Hourglass';
@@ -22,10 +22,12 @@ const projectTabs = [
 ];
 
 const emptyForm = {
+  companyId: '',
   code: '',
   name: '',
   description: '',
   status: 'DRAFT',
+  approvalFrequency: 'MONTHLY',
   projectManagerId: '',
   projectManagerHoursApproverId: '',
   isActive: false,
@@ -145,13 +147,22 @@ export default function ProjectManagement() {
   const favoritesKey = 'chronos:project-favorites:' + user?.id;
   const [favorites, setFavorites] = useState([]);
 
-  const canView = user?.canReviewProjects || ['PROJECT_ADMIN', 'ADMIN'].includes(user?.role);
-  const canManage = user?.role === 'PROJECT_ADMIN';
+  const canView = user?.canReviewProjects || user?.canManageProjects || ['PROJECT_ADMIN', 'ADMIN'].includes(user?.role);
+  const selectedProject = isCreatingProject ? null : projects.find((project) => project.id === selectedProjectId) || null;
+  const canManage = Boolean(user?.canManageProjects && (isCreatingProject || selectedProject?.canManage));
+  const canCreateProject = Boolean(user?.canCreateProjects);
+  const [companies, setCompanies] = useState([]);
+  const [companyMembers, setCompanyMembers] = useState([]);
+  const [scopedProjectRoles, setScopedProjectRoles] = useState([]);
   // const healthState = useProjectHealth(canView, projects);
   const selectedOption = options.find((option) => option.value === selectedPeriod) || options[0];
-  const activeUsers = useMemo(() => users.filter((item) => item.isActive), [users]);
+  const activeUsers = useMemo(() => users.filter((item) => item.isActive
+    && (!form.companyId || companyMembers.some(member => member.user_id === item.id && member.status === 'ACTIVE'))),
+  [users, form.companyId, companyMembers]);
   const eligibleReviewers = activeUsers.filter((item) => item.role !== 'ADMIN');
-  const selectedProject = isCreatingProject ? null : projects.find((project) => project.id === selectedProjectId) || null;
+  const eligibleApprovers = eligibleReviewers.filter(item =>
+    companyMembers.some(member => member.user_id === item.id && (member.roles || []).includes('PROJECT_ADMIN'))
+    || scopedProjectRoles.some(role => role.user_id === item.id && role.role_key === 'PROJECT_ADMIN'));
   const projectFormDirty = JSON.stringify(form) !== originalForm.current;
   const budgetDirty = Boolean(selectedProject) && String(budgetDraft) !== String(selectedProject.expenseBudget ?? '');
   useEffect(() => {
@@ -181,6 +192,17 @@ export default function ProjectManagement() {
     if (!canView) return;
     loadData();
   }, [canView, selectedPeriod]);
+
+  useEffect(() => { companyAPI.mine().then(response => setCompanies(response.data || [])).catch(() => {}); }, []);
+  useEffect(() => {
+    if (!form.companyId) { setCompanyMembers([]); return; }
+    companyAPI.members(form.companyId).then(response => setCompanyMembers(response.data || [])).catch(() => setCompanyMembers([]));
+  }, [form.companyId]);
+  useEffect(() => {
+    if (!selectedProjectId || !form.companyId) { setScopedProjectRoles([]); return; }
+    companyAPI.projectRoles(form.companyId, selectedProjectId).then(response => setScopedProjectRoles(response.data || []))
+      .catch(() => setScopedProjectRoles([]));
+  }, [form.companyId, selectedProjectId]);
 
   useEffect(() => {
     try {
@@ -218,7 +240,7 @@ export default function ProjectManagement() {
     try {
       const [projectRes, userRes, dashboardRes] = await Promise.all([
         projectAPI.getProjects(),
-        canManage ? userAPI.getAllUsers() : Promise.resolve({ data: [] }),
+        user?.canManageProjects ? userAPI.getAllUsers() : Promise.resolve({ data: [] }),
         projectAPI.getHoursDashboard(selectedOption.year, selectedOption.month),
       ]);
       const loadedProjects = projectRes.data || [];
@@ -258,10 +280,12 @@ export default function ProjectManagement() {
     setAssignHours('');
     setOffboarding(null);
     const nextForm = {
+      companyId: project?.companyId || '',
       code: project?.code || '',
       name: project?.name || '',
       description: project?.description || '',
       status: project?.status || (project?.isActive ? 'ACTIVE' : 'ARCHIVED'),
+      approvalFrequency: project?.pendingApprovalFrequency || project?.approvalFrequency || 'MONTHLY',
       projectManagerId: project?.projectManagerId || '',
       projectManagerHoursApproverId: project?.projectManagerHoursApproverId || '',
       isActive: project?.isActive ?? true,
@@ -360,7 +384,8 @@ export default function ProjectManagement() {
       setError('Save or reset the expense budget before saving project details.');
       return;
     }
-    const duplicate = projects.some(project => project.code?.toLowerCase() === form.code.trim().toLowerCase() && project.id !== selectedProject?.id);
+    const duplicate = projects.some(project => String(project.companyId) === String(form.companyId)
+      && project.code?.toLowerCase() === form.code.trim().toLowerCase() && project.id !== selectedProject?.id);
     if (duplicate) {
       setFieldErrors({ code: 'This project code is already in use.' });
       return;
@@ -371,6 +396,7 @@ export default function ProjectManagement() {
     }
     const payload = {
       ...form,
+      companyId: form.companyId ? Number(form.companyId) : null,
       status: isCreatingProject ? 'DRAFT' : form.status,
       isActive: !isCreatingProject && form.status === 'ACTIVE',
       projectManagerId: form.projectManagerId ? Number(form.projectManagerId) : null,
@@ -620,7 +646,7 @@ export default function ProjectManagement() {
           <ScreenTitle title="Project Control" icon="briefcase" eyebrow="PROJECT OPERATIONS" />
           <p className="page-subtitle">Keep your projects, people, and delivery plans in focus.</p>
         </div>
-        {canManage && <button className="button button-primary" type="button" onClick={startNewProject}><span aria-hidden="true">+</span> New Project</button>}
+        {canCreateProject && <button className="button button-primary" type="button" onClick={startNewProject}><span aria-hidden="true">+</span> New Project</button>}
       </div>
 
       <ValidationMessage message={error} onDismiss={() => setError('')} />
@@ -993,6 +1019,10 @@ export default function ProjectManagement() {
               <section className="pc-detail-card pc-identity-card" aria-labelledby="pc-identity-title">
                 <div className="pc-detail-card-heading"><span className="pc-detail-icon"><Icon name="briefcase" size={19} /></span><div><h4 id="pc-identity-title">Identity</h4><p>What the team will see across Chronos.</p></div></div>
                 <div className="pc-detail-fields">
+                  {isCreatingProject && <div className="form-group"><label htmlFor="project-company">Company</label>
+                    <select id="project-company" required value={form.companyId} onChange={event => setForm({ ...form, companyId: event.target.value })}>
+                      <option value="">Select company</option>{companies.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}
+                    </select></div>}
                   <div className="form-group">
                     <label htmlFor="projectmanagement-field-2">Project Name</label>
                     <input id="projectmanagement-field-2" maxLength={150} value={form.name} onChange={(event) => { const name = event.target.value; setForm({ ...form, name, code: isCreatingProject && !codeEdited ? name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) : form.code }); }} required />
@@ -1008,14 +1038,27 @@ export default function ProjectManagement() {
                     <textarea id="projectmanagement-field-7" maxLength={500} placeholder="What is this project for?" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
                     <small className="pc-field-hint">A short purpose helps the team identify the right project.</small>
                   </div>
+                  {isCreatingProject && <div className="form-group">
+                    <label htmlFor="new-project-frequency">Timesheet approval frequency</label>
+                    <select id="new-project-frequency" value={form.approvalFrequency} onChange={event => setForm({ ...form, approvalFrequency: event.target.value })}>
+                      <option value="DAILY">Daily</option><option value="WEEKLY">Weekly (Monday–Sunday)</option><option value="MONTHLY">Monthly</option>
+                    </select>
+                  </div>}
                 </div>
               </section>
               {!isCreatingProject && <section className="pc-detail-card pc-routing-card" aria-labelledby="pc-routing-title">
                 <div className="pc-detail-card-heading"><span className="pc-detail-icon"><Icon name="users" size={19} /></span><div><h4 id="pc-routing-title">Ownership & approvals</h4><p>Who leads the project and reviews the PM's hours.</p></div></div>
                 <div className="pc-detail-fields">
                   <div className="form-group">
+                    <label htmlFor="project-approval-frequency">Timesheet approval frequency</label>
+                    <select id="project-approval-frequency" value={form.approvalFrequency} onChange={(event) => setForm({ ...form, approvalFrequency: event.target.value })}>
+                      <option value="DAILY">Daily</option><option value="WEEKLY">Weekly (Monday–Sunday)</option><option value="MONTHLY">Monthly</option>
+                    </select>
+                    <small className="pc-field-hint">The calendar stays daily. Frequency changes take effect next approval period.{selectedProject?.approvalFrequencyEffectiveOn ? ` Scheduled for ${dateText(selectedProject.approvalFrequencyEffectiveOn)}.` : ''}</small>
+                  </div>
+                  <div className="form-group">
                     <label htmlFor="projectmanagement-field-5">Primary Project Manager</label>
-                    <select id="projectmanagement-field-5" required={form.status !== 'DRAFT'} value={form.projectManagerId} onChange={(event) => setForm({ ...form, projectManagerId: event.target.value, projectManagerHoursApproverId: !form.projectManagerHoursApproverId || String(form.projectManagerHoursApproverId) === String(form.projectManagerId) ? event.target.value : form.projectManagerHoursApproverId })}>
+                    <select id="projectmanagement-field-5" required={form.status !== 'DRAFT'} value={form.projectManagerId} onChange={(event) => setForm({ ...form, projectManagerId: event.target.value, projectManagerHoursApproverId: String(form.projectManagerHoursApproverId) === String(event.target.value) ? '' : form.projectManagerHoursApproverId })}>
                       <option value="">Select PM</option>
                       {!canManage && selectedProject?.projectManagerId && <option value={selectedProject.projectManagerId}>{selectedProject.projectManagerName || selectedProject.projectManagerId}</option>}
                       {eligibleReviewers.map((item) => <option key={item.id} value={item.id}>{item.firstName} {item.lastName}</option>)}
@@ -1026,9 +1069,9 @@ export default function ProjectManagement() {
                     <select id="projectmanagement-field-6" required={form.status !== 'DRAFT'} value={form.projectManagerHoursApproverId} onChange={(event) => setForm({ ...form, projectManagerHoursApproverId: event.target.value })}>
                       <option value="">Select approver</option>
                       {!canManage && selectedProject?.projectManagerHoursApproverId && <option value={selectedProject.projectManagerHoursApproverId}>{selectedProject.projectManagerHoursApproverName || selectedProject.projectManagerHoursApproverId}</option>}
-                      {eligibleReviewers.map((item) => <option key={item.id} value={item.id}>{item.firstName} {item.lastName}</option>)}
+                      {eligibleApprovers.filter(item => item.id !== Number(form.projectManagerId)).map((item) => <option key={item.id} value={item.id}>{item.firstName} {item.lastName}</option>)}
                     </select>
-                    <small className="pc-field-hint">Defaults to the PM. Assign the PM in Team if they will log hours.</small>
+                    <small className="pc-field-hint">Choose a Project Admin. A manager cannot approve their own hours.</small>
                   </div>
                 </div>
                 {selectedProject?.status !== 'DRAFT' && selectedProject && (String(form.projectManagerId) !== String(selectedProject.projectManagerId) || String(form.projectManagerHoursApproverId) !== String(selectedProject.projectManagerHoursApproverId)) && <div className="pc-handover-note" role="status"><strong>Approval handover</strong><p>{selectedProject.pendingApprovalCount || 0} pending submissions will move to the responsible approver when you save. Completed approvals keep their history. The outgoing PM stays on the team until offboarded.</p></div>}

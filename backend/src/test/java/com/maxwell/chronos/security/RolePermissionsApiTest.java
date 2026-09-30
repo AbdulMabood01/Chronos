@@ -28,6 +28,8 @@ class RolePermissionsApiTest {
     @MockitoBean JwtDecoder decoder;
     @MockitoBean org.springframework.jdbc.core.JdbcTemplate db;
     @MockitoBean com.maxwell.chronos.service.AuthSessionService sessions;
+    @MockitoBean CompanyAccessService access;
+    @MockitoBean TimesheetPeriodService periods;
     @MockitoBean UserService userService;
     @MockitoBean UserRepository users;
     @MockitoBean ProjectRepository projects;
@@ -47,6 +49,8 @@ class RolePermissionsApiTest {
                 .role(UserRole.ADMIN).isActive(true).passwordHash("test-account-hash").ssnLast4("1234").build();
         when(users.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
         when(userService.findUserEntityByEmail(user.getEmail())).thenReturn(user);
+        lenient().when(access.hasPlatformRole(1L, "PLATFORM_ADMIN"))
+                .thenAnswer(call -> user.getRole() == UserRole.ADMIN);
     }
 
     private org.springframework.test.web.servlet.request.RequestPostProcessor token() {
@@ -57,9 +61,8 @@ class RolePermissionsApiTest {
         mvc.perform(get("/vacation/team-calendar").param("year", "2026").param("month", "9").with(token())).andExpect(status().isOk());
         user.setRole(UserRole.EMPLOYEE);
         mvc.perform(get("/vacation/team-calendar").param("year", "2026").param("month", "9").with(token())).andExpect(status().isForbidden());
-        when(projects.existsByProjectManagerIdOrProjectManagerHoursApproverId(1L,1L)).thenReturn(true);
         mvc.perform(get("/vacation/team-calendar").param("year", "2026").param("month", "9").with(token())).andExpect(status().isForbidden());
-        when(projects.existsByProjectManagerId(1L)).thenReturn(true);
+        when(access.hasAnyProjectRole(1L, "PROJECT_ADMIN")).thenReturn(true);
         mvc.perform(get("/vacation/team-calendar").param("year", "2026").param("month", "9").with(token())).andExpect(status().isOk());
     }
 
@@ -94,12 +97,12 @@ class RolePermissionsApiTest {
         mvc.perform(get("/auth/me").with(token())).andExpect(status().isOk())
                 .andExpect(jsonPath("$.ssnLast4").doesNotExist());
         user.setRole(UserRole.EMPLOYEE);
-        when(projects.existsByProjectManagerIdOrProjectManagerHoursApproverId(1L, 1L)).thenReturn(true);
-        when(projects.existsByProjectManagerId(1L)).thenReturn(true);
+        when(access.hasAnyProjectRole(1L, "PROJECT_MANAGER")).thenReturn(true);
         mvc.perform(get("/auth/me").with(token())).andExpect(status().isOk())
                 .andExpect(jsonPath("$.role").value("EMPLOYEE"))
                 .andExpect(jsonPath("$.canReviewProjects").value(true))
-                .andExpect(jsonPath("$.canManageProjects").value(true));
+                .andExpect(jsonPath("$.canViewProjects").value(true))
+                .andExpect(jsonPath("$.canManageProjects").value(false));
     }
 
     @Test void removedGlobalRoleCannotBeAssigned() throws Exception {

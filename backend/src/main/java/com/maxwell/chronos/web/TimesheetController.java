@@ -39,22 +39,9 @@ public class TimesheetController {
         return ResponseEntity.ok(timesheetService.getMissingTimesheets(year, month, user));
     }
 
-    @GetMapping("/{year}/{month}")
-    public ResponseEntity<TimesheetDTO> getTimesheet(@PathVariable int year, @PathVariable int month,
-                                                     @AuthenticationPrincipal Jwt jwt) {
-        String email = jwt.getClaimAsString("preferred_username");
-        var user = userService.findUserEntityByEmail(email);
-
-        if (user == null) {
-            return ResponseEntity.status(403).build();
-        }
-
-        TimesheetDTO timesheet = timesheetService.getOrCreateTimesheet(user.getId(), year, month);
-        return ResponseEntity.ok(timesheet);
-    }
-
     @PostMapping
     public ResponseEntity<TimesheetDTO> getOrCreateTimesheet(@RequestParam int year, @RequestParam int month,
+                                                            @RequestParam(required = false) Long companyId,
                                                             @AuthenticationPrincipal Jwt jwt) {
         String email = jwt.getClaimAsString("preferred_username");
         var user = userService.findUserEntityByEmail(email);
@@ -63,7 +50,8 @@ public class TimesheetController {
             return ResponseEntity.status(403).build();
         }
 
-        TimesheetDTO timesheet = timesheetService.getOrCreateTimesheet(user.getId(), year, month);
+        TimesheetDTO timesheet = companyId == null ? timesheetService.getOrCreateTimesheet(user.getId(), year, month)
+                : timesheetService.getOrCreateTimesheet(user.getId(), companyId, year, month);
         return ResponseEntity.ok(timesheet);
     }
 
@@ -80,7 +68,7 @@ public class TimesheetController {
 
         try {
             TimesheetDTO timesheet = projectId == null
-                    ? timesheetService.getTimesheetById(timesheetId, user.getId(), user.isAdmin() || user.isProjectAdmin())
+                    ? timesheetService.getTimesheetById(timesheetId, user.getId(), user.isAdmin())
                     : timesheetService.getProjectTimesheet(timesheetId, projectId, user);
             return ResponseEntity.ok(timesheet);
         } catch (IllegalArgumentException e) {
@@ -144,26 +132,6 @@ public class TimesheetController {
         try {
             timesheetService.deleteTimeEntry(timesheetId, entryId, user.getId());
             return ResponseEntity.noContent().build();
-        } catch (IllegalArgumentException e) {
-            throw e;
-        }
-    }
-
-    @PostMapping("/{timesheetId}/reopen")
-    public ResponseEntity<TimesheetDTO> reopenTimesheet(@PathVariable Long timesheetId,
-                                                        @RequestBody(required = false) java.util.Map<String, String> body,
-                                                        @AuthenticationPrincipal Jwt jwt) {
-        String email = jwt.getClaimAsString("preferred_username");
-        var user = userService.findUserEntityByEmail(email);
-
-        if (user == null || !user.isAdmin()) {
-            return ResponseEntity.status(403).build();
-        }
-
-        try {
-            String reason = body != null ? body.get("reason") : null;
-            TimesheetDTO timesheet = timesheetService.reopenTimesheet(timesheetId, reason, user.getId());
-            return ResponseEntity.ok(timesheet);
         } catch (IllegalArgumentException e) {
             throw e;
         }

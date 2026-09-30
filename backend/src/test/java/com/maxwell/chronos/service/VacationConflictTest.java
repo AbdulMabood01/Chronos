@@ -15,7 +15,8 @@ class VacationConflictTest {
         var vacations = mock(VacationRequestRepository.class);
         var service = new VacationService(vacations, mock(UserRepository.class), mock(TimesheetRepository.class),
                 mock(TimesheetProjectSubmissionRepository.class), mock(ProjectAssignmentRepository.class),
-                mock(AuditService.class), mock(NotificationService.class), mock(LeaveBalanceService.class));
+                mock(AuditService.class), mock(NotificationService.class), mock(LeaveBalanceService.class),
+                mock(TimesheetPeriodService.class));
         var user = User.builder().id(1L).role(UserRole.ADMIN).build();
         var vacation = VacationRequest.builder().id(3L).user(user).status(VacationStatus.DRAFT).build();
         when(vacations.findById(3L)).thenReturn(Optional.of(vacation));
@@ -28,7 +29,8 @@ class VacationConflictTest {
         var vacations = mock(VacationRequestRepository.class);
         var assignments = mock(ProjectAssignmentRepository.class);
         var service = new VacationService(vacations, mock(UserRepository.class), mock(TimesheetRepository.class),
-                mock(TimesheetProjectSubmissionRepository.class), assignments, mock(AuditService.class), mock(NotificationService.class), mock(LeaveBalanceService.class));
+                mock(TimesheetProjectSubmissionRepository.class), assignments, mock(AuditService.class), mock(NotificationService.class),
+                mock(LeaveBalanceService.class), mock(TimesheetPeriodService.class));
         var employee = User.builder().id(1L).role(UserRole.EMPLOYEE).build();
         var manager = User.builder().id(2L).role(UserRole.EMPLOYEE).isActive(true).build();
         var project = Project.builder().id(4L).projectManager(manager).build();
@@ -47,7 +49,8 @@ class VacationConflictTest {
         var sheets = mock(TimesheetRepository.class);
         var submissions = mock(TimesheetProjectSubmissionRepository.class);
         var service = new VacationService(vacations, users, sheets, submissions, mock(ProjectAssignmentRepository.class),
-                mock(AuditService.class), mock(NotificationService.class), mock(LeaveBalanceService.class));
+                mock(AuditService.class), mock(NotificationService.class), mock(LeaveBalanceService.class),
+                mock(TimesheetPeriodService.class));
         var employee = User.builder().id(1L).build();
         var admin = User.builder().id(2L).role(UserRole.ADMIN).build();
         var date = LocalDate.of(2026,9,10);
@@ -64,7 +67,7 @@ class VacationConflictTest {
         when(users.findForUpdate(1L)).thenReturn(Optional.of(employee));
         when(vacations.findById(3L)).thenReturn(Optional.of(vacation));
         when(vacations.save(vacation)).thenReturn(vacation);
-        when(sheets.findPeriodForUpdate(1L,2026,9)).thenReturn(Optional.of(sheet));
+        when(sheets.findAllPeriodsForUpdate(1L,2026,9)).thenReturn(List.of(sheet));
         when(submissions.findByTimesheetIdAndProjectId(5L,4L)).thenReturn(Optional.of(submission));
         when(submissions.findByTimesheetId(5L)).thenReturn(List.of(submission));
         assertThrows(IllegalArgumentException.class, () -> service.approveVacationRequest(3L,2L));

@@ -1,6 +1,6 @@
 # Build and security checks
 
-The workflow runs on pull requests, pushes to `master`/`main`, manual requests,
+The workflow runs on pull requests, pushes to `master`/`dev`, manual requests,
 and every Monday at 07:23 UTC. It does not deploy anything.
 
 Jobs run Maven tests against an isolated PostgreSQL 16 service, Vitest tests,

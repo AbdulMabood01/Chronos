@@ -37,6 +37,7 @@ public class VacationService {
     private final AuditService auditService;
     private final NotificationService notificationService;
     private final LeaveBalanceService leaveBalanceService;
+    private final TimesheetPeriodService approvalPeriods;
 
     public VacationRequestDTO createVacationRequest(Long userId, LocalDate startDate, LocalDate endDate, 
                                                    VacationType vacationType, String notes) {
@@ -150,6 +151,9 @@ public class VacationService {
             throw new IllegalArgumentException("Vacation request cannot be submitted from its current status");
         }
 
+        userRepository.findForUpdate(userId).orElseThrow(() -> new IllegalArgumentException("User not found"));
+        requireNoOverlappingLeave(vacation);
+
         vacation.setStatus(VacationStatus.SUBMITTED);
         vacation.setSubmittedAt(java.time.LocalDateTime.now());
         VacationRequest saved = vacationRequestRepository.save(vacation);
@@ -181,6 +185,7 @@ public class VacationService {
         }
 
         userRepository.findForUpdate(vacation.getUser().getId()).orElseThrow();
+        requireNoOverlappingLeave(vacation);
         var accounting = accountingForApproval(vacation, requestedAccounting);
         leaveBalanceService.validateApproval(vacation, accounting);
         vacation.setAccountingType(accounting);
@@ -216,6 +221,11 @@ public class VacationService {
         if (!vacation.getStatus().equals(VacationStatus.SUBMITTED)) {
             throw new IllegalArgumentException("Only submitted vacation requests can be rejected");
         }
+        if (rejectionReason == null || rejectionReason.isBlank())
+            throw new IllegalArgumentException("Rejection reason is required");
+        if (rejectionReason.trim().length() > 500)
+            throw new IllegalArgumentException("Rejection reason cannot exceed 500 characters");
+        rejectionReason = rejectionReason.trim();
 
         vacation.setStatus(VacationStatus.REJECTED);
         vacation.setRejectedAt(java.time.LocalDateTime.now());
@@ -315,8 +325,8 @@ public class VacationService {
                 .collect(Collectors.toSet());
 
         for (YearMonth month : affectedMonths) {
-            timesheetRepository.findPeriodForUpdate(vacation.getUser().getId(), month.getYear(), month.getMonthValue())
-                    .ifPresent(timesheet -> zeroMatchingEntries(timesheet, vacationDates));
+            timesheetRepository.findAllPeriodsForUpdate(vacation.getUser().getId(), month.getYear(), month.getMonthValue())
+                    .forEach(timesheet -> zeroMatchingEntries(timesheet, vacationDates));
         }
     }
 
@@ -332,6 +342,8 @@ public class VacationService {
                     if (!timesheet.isEditable() || (submission != null && !submission.isEditable())) {
                         throw new IllegalArgumentException("Vacation conflicts with submitted or finalized hours; reopen the timesheet first");
                     }
+                    if (entry.getProject() != null)
+                        approvalPeriods.requireEditable(timesheet.getUser().getId(),entry.getProject().getId(),entry.getEntryDate());
                     entry.setHours(BigDecimal.ZERO);
                     entry.getSessions().clear();
                     changed = true;
@@ -383,10 +395,21 @@ public class VacationService {
             if (type.equals("VACATION_SUBMITTED") && manager.isAdmin()) {
                 continue;
             }
-            notificationService.createNotification(manager.getId(), type, title,
+            notificationService.createNotification(manager.getId(), type,
+                    type.equals("VACATION_SUBMITTED") ? "Team leave request submitted (Admin reviews)" : title,
                     vacation.getUser().getFullName() + action + " from " + vacation.getStartDate()
                             + " to " + vacation.getEndDate(), vacation.getId(), "VacationRequest");
         }
+    }
+
+    private void requireNoOverlappingLeave(VacationRequest vacation) {
+        boolean overlap = vacationRequestRepository
+                .findByUserIdAndStatusInAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
+                        vacation.getUser().getId(),
+                        List.of(VacationStatus.SUBMITTED, VacationStatus.APPROVED, VacationStatus.LOCKED),
+                        vacation.getEndDate(), vacation.getStartDate())
+                .stream().anyMatch(other -> !Objects.equals(other.getId(), vacation.getId()));
+        if (overlap) throw new IllegalArgumentException("These dates overlap another submitted or approved leave request");
     }
 
     private List<User> findProjectManagers(VacationRequest vacation) {

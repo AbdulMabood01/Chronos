@@ -218,7 +218,7 @@ export default function UserManagement() {
                       disabled={targetUser.id === user.id}
                     >
                       <option value="EMPLOYEE">Employee</option>
-                      <option value="PROJECT_ADMIN">Project Admin</option>
+                      {targetUser.role === 'PROJECT_ADMIN' && <option value="PROJECT_ADMIN" disabled>Project Admin (legacy)</option>}
                       <option value="ADMIN">Admin</option>
                     </select>
                   ) : (

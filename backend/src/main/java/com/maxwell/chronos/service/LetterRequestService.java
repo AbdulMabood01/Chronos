@@ -4,6 +4,7 @@ import com.maxwell.chronos.domain.LetterRequest;
 import com.maxwell.chronos.domain.User;
 import com.maxwell.chronos.dto.CreateLetterRequest;
 import com.maxwell.chronos.dto.LetterRequestDTO;
+import com.maxwell.chronos.dto.LetterReviewRequest;
 import com.maxwell.chronos.enums.LetterRequestType;
 import com.maxwell.chronos.enums.UserRole;
 import com.maxwell.chronos.enums.VacationStatus;
@@ -103,10 +104,31 @@ public class LetterRequestService {
         return toDTO(request);
     }
 
-    public LetterRequestDTO approveLetterRequest(Long requestId, Long adminId) {
+    public LetterRequestDTO approveLetterRequest(Long requestId, Long adminId, LetterReviewRequest review) {
         User admin = requireAdmin(adminId);
         LetterRequest request = requireSubmittedRequest(requestId);
+        if (request.getUser().getId().equals(adminId))
+            throw new IllegalArgumentException("You cannot approve your own letter request");
+        if (review == null || isBlank(review.fullName()) || isBlank(review.jobTitle())
+                || review.employmentStartDate() == null)
+            throw new IllegalArgumentException("Confirm the name, title, and employment start date before approval");
+        String fullName = trim(review.fullName());
+        String jobTitle = trim(review.jobTitle());
+        String note = trim(review.reviewNote());
+        if (fullName.length() > 200 || jobTitle.length() > 120 || (note != null && note.length() > 500))
+            throw new IllegalArgumentException("Reviewed letter details are too long");
+        if (review.employmentStartDate().isAfter(LocalDate.now()))
+            throw new IllegalArgumentException("Employment start date cannot be in the future");
+        if ((!fullName.equals(trim(request.getRequestedFullName()))
+                || !jobTitle.equals(trim(request.getRequestedJobTitle()))
+                || !review.employmentStartDate().equals(request.getEmploymentStartDate()))
+                && isBlank(note))
+            throw new IllegalArgumentException("Explain corrections to the employee's requested details");
 
+        request.setApprovedFullName(fullName);
+        request.setApprovedJobTitle(jobTitle);
+        request.setApprovedEmploymentStartDate(review.employmentStartDate());
+        request.setReviewNote(note);
         request.setStatus(VacationStatus.APPROVED);
         request.setApprovedAt(LocalDateTime.now());
         request.setApprovedBy(admin);
@@ -127,6 +149,8 @@ public class LetterRequestService {
     public LetterRequestDTO rejectLetterRequest(Long requestId, String rejectionReason, Long adminId) {
         User admin = requireAdmin(adminId);
         LetterRequest request = requireSubmittedRequest(requestId);
+        if (request.getUser().getId().equals(adminId))
+            throw new IllegalArgumentException("You cannot reject your own letter request");
 
         String reason = trim(rejectionReason);
         if (reason == null || reason.isBlank()) {
@@ -247,6 +271,7 @@ public class LetterRequestService {
                 .employeeId(request.getUser().getEmployeeId())
                 .email(request.getUser().getEmail())
                 .jobTitle(request.getUser().getJobTitle())
+                .userJoiningDate(request.getUser().getJoiningDate())
                 .requestType(request.getRequestType())
                 .status(request.getStatus())
                 .recipientOrganization(request.getRecipientOrganization())
@@ -255,6 +280,10 @@ public class LetterRequestService {
                 .requestedFullName(request.getRequestedFullName())
                 .requestedJobTitle(request.getRequestedJobTitle())
                 .employmentStartDate(request.getEmploymentStartDate())
+                .approvedFullName(request.getApprovedFullName())
+                .approvedJobTitle(request.getApprovedJobTitle())
+                .approvedEmploymentStartDate(request.getApprovedEmploymentStartDate())
+                .reviewNote(request.getReviewNote())
                 .immigrationCaseType(request.getImmigrationCaseType())
                 .destinationCountry(request.getDestinationCountry())
                 .consulateName(request.getConsulateName())
@@ -278,10 +307,11 @@ public class LetterRequestService {
 
     private String buildLetterText(LetterRequest request) {
         User user = request.getUser();
-        String date = formatDate(LocalDate.now());
-        String fullName = valueOrDefault(request.getRequestedFullName(), user.getFullName());
-        String jobTitle = valueOrDefault(request.getRequestedJobTitle(), valueOrDefault(user.getJobTitle(), "employee"));
-        String employmentStart = formatDate(request.getEmploymentStartDate());
+        String date = formatDate(request.getApprovedAt() == null ? LocalDate.now() : request.getApprovedAt().toLocalDate());
+        String fullName = valueOrDefault(request.getApprovedFullName(), valueOrDefault(request.getRequestedFullName(), user.getFullName()));
+        String jobTitle = valueOrDefault(request.getApprovedJobTitle(), valueOrDefault(request.getRequestedJobTitle(), valueOrDefault(user.getJobTitle(), "employee")));
+        String employmentStart = formatDate(request.getApprovedEmploymentStartDate() == null
+                ? request.getEmploymentStartDate() : request.getApprovedEmploymentStartDate());
         String company = "Maxwell Network Inc";
 
         String body = switch (request.getRequestType()) {

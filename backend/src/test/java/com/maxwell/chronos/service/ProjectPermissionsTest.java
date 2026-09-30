@@ -8,6 +8,8 @@ import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.security.access.AccessDeniedException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -16,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class ProjectPermissionsTest {
     @Mock ProjectRepository projects;
     @Mock ProjectAssignmentRepository assignments;
@@ -26,16 +29,34 @@ class ProjectPermissionsTest {
     @Mock AuditService audit;
     @Mock NotificationService notifications;
     @Mock org.springframework.jdbc.core.JdbcTemplate jdbc;
+    @Mock CompanyAccessService access;
     @InjectMocks ProjectService service;
     User systemAdmin = User.builder().id(1L).role(UserRole.ADMIN).build();
     User admin = User.builder().id(2L).role(UserRole.PROJECT_ADMIN).isActive(true).build();
     User manager = User.builder().id(3L).role(UserRole.EMPLOYEE).isActive(true).build();
     User approver = User.builder().id(4L).role(UserRole.EMPLOYEE).isActive(true).build();
 
+    @BeforeEach void accessSetup() {
+        when(access.hasPlatformRole(1L, "PLATFORM_ADMIN")).thenReturn(true);
+        when(access.companyIds(anyLong())).thenReturn(List.of(1L));
+        when(access.mayCreateProject(1L, 2L)).thenReturn(true);
+        when(access.mayManageProject(anyLong(), eq(2L))).thenReturn(true);
+        when(access.hasAnyProjectRole(2L, "PROJECT_ADMIN")).thenReturn(true);
+        when(access.hasProjectRole(anyLong(), eq(2L), eq("PROJECT_ADMIN"))).thenReturn(true);
+        when(access.hasCompanyRole(1L, 4L, "PROJECT_ADMIN")).thenReturn(true);
+        when(jdbc.queryForObject(eq("SELECT id FROM companies WHERE id=? FOR UPDATE"), eq(Long.class), anyLong())).thenReturn(1L);
+        when(jdbc.queryForObject(eq("SELECT project_limit FROM companies WHERE id=?"), eq(Integer.class), anyLong())).thenReturn(100);
+        when(jdbc.queryForObject(eq("SELECT count(*) FROM projects WHERE company_id=?"), eq(Integer.class), anyLong())).thenReturn(0);
+        when(jdbc.queryForObject(eq("SELECT count(*) FROM timesheet_approval_periods WHERE project_id=? AND status='SUBMITTED'"),
+                eq(Long.class), anyLong())).thenReturn(0L);
+    }
+
     @Test void managerVisibilityExcludesUnrelatedProjectsAndEmployees() {
-        var managed = Project.builder().id(10L).code("MANAGED").projectManager(manager).build();
-        var member = Project.builder().id(11L).code("MEMBER").build();
-        var unrelated = Project.builder().id(12L).code("OTHER").build();
+        when(access.hasProjectRole(10L, 3L, "PROJECT_MANAGER")).thenReturn(true);
+        when(access.hasProjectRole(11L, 3L, "USER")).thenReturn(true);
+        var managed = Project.builder().id(10L).companyId(1L).code("MANAGED").projectManager(manager).build();
+        var member = Project.builder().id(11L).companyId(1L).code("MEMBER").build();
+        var unrelated = Project.builder().id(12L).companyId(1L).code("OTHER").build();
         var mine = ProjectAssignment.builder().project(member).user(manager).isActive(true).build();
         var teammate = ProjectAssignment.builder().project(managed).user(approver).isActive(true).build();
         var other = ProjectAssignment.builder().project(unrelated).user(admin).isActive(true).build();
@@ -48,7 +69,7 @@ class ProjectPermissionsTest {
     }
 
     @Test void dashboardBudgetUsesLifetimeHoursInsteadOfMonthlyHours() {
-        var project = Project.builder().id(10L).code("ATLAS").name("Atlas").totalAllocatedHours(new BigDecimal("100")).build();
+        var project = Project.builder().id(10L).companyId(1L).code("ATLAS").name("Atlas").totalAllocatedHours(new BigDecimal("100")).build();
         when(projects.findAll()).thenReturn(List.of(project));
         when(projects.totalRecordedHours(10L)).thenReturn(new BigDecimal("85"));
         var result = service.getProjectHoursDashboard(2026,9,admin).get(0);
@@ -66,7 +87,8 @@ class ProjectPermissionsTest {
 
     @Test void systemAdminCannotWriteProjectsAssignmentsOrEitherPlanVariant() {
         var date = LocalDate.of(2026, 9, 1);
-        assertThrows(AccessDeniedException.class, () -> service.saveProject(null, new SaveProjectRequest(), systemAdmin));
+        var newProject = new SaveProjectRequest(); newProject.setCompanyId(1L);
+        assertThrows(AccessDeniedException.class, () -> service.saveProject(null, newProject, systemAdmin));
         assertThrows(AccessDeniedException.class, () -> service.saveProject(10L, new SaveProjectRequest(), systemAdmin));
         assertThrows(AccessDeniedException.class, () -> service.assignEmployee(10L, 3L, date, date, BigDecimal.TEN, systemAdmin));
         assertThrows(AccessDeniedException.class, () -> service.removeEmployee(10L, 3L, systemAdmin));
@@ -77,7 +99,7 @@ class ProjectPermissionsTest {
     }
 
     @Test void adminCanCreateProjectWithoutPromotingEmployees() {
-        var request = new SaveProjectRequest();
+        var request = new SaveProjectRequest(); request.setCompanyId(1L);
         request.setCode("P1");
         request.setName("Project");
         request.setProjectManagerId(3L);
@@ -96,7 +118,7 @@ class ProjectPermissionsTest {
     }
 
     @Test void projectAdminCanCreateIncompleteDraftButCannotCreateActiveProject() {
-        var draft = SaveProjectRequest.builder().code("DRAFT").name("Draft project").build();
+        var draft = SaveProjectRequest.builder().companyId(1L).code("DRAFT").name("Draft project").build();
         when(projects.save(any())).thenAnswer(call -> { Project p = call.getArgument(0); p.setId(30L); return p; });
         assertEquals(ProjectStatus.DRAFT, service.saveProject(null, draft, admin).getStatus());
         verify(assignments, never()).save(any());
@@ -106,10 +128,10 @@ class ProjectPermissionsTest {
     }
 
     @Test void activatingDraftRequiresRoutingAndAnAssignedTeamMember() {
-        var project = Project.builder().id(30L).code("DRAFT").name("Draft project")
+        var project = Project.builder().id(30L).companyId(1L).code("DRAFT").name("Draft project")
                 .status(ProjectStatus.DRAFT).isActive(false).build();
         when(projects.findById(30L)).thenReturn(Optional.of(project));
-        var request = SaveProjectRequest.builder().code("DRAFT").name("Draft project")
+        var request = SaveProjectRequest.builder().companyId(1L).code("DRAFT").name("Draft project")
                 .status(ProjectStatus.ACTIVE).build();
         assertThrows(IllegalArgumentException.class, () -> service.saveProject(30L, request, admin));
 
@@ -126,7 +148,7 @@ class ProjectPermissionsTest {
     }
 
     @Test void projectAdminCanSetExpenseBudgetAndRecordsInitialValue() {
-        var request = new SaveProjectRequest();
+        var request = new SaveProjectRequest(); request.setCompanyId(1L);
         request.setCode("EXP"); request.setName("Expenses");
         request.setProjectManagerId(3L); request.setProjectManagerHoursApproverId(4L);
         request.setExpenseBudget(new BigDecimal("250.00"));
@@ -137,23 +159,19 @@ class ProjectPermissionsTest {
         verify(jdbc).update(startsWith("INSERT INTO project_expense_budget_history"),eq(20L),eq(2L),isNull(),eq(new BigDecimal("250.00")));
     }
 
-    @Test void adminCanUseProjectManagerAsPmHoursApprover() {
-        var request = new SaveProjectRequest();
+    @Test void projectManagerCannotApproveTheirOwnHours() {
+        var request = new SaveProjectRequest(); request.setCompanyId(1L);
         request.setCode("P1");
         request.setName("Project");
         request.setProjectManagerId(3L);
         request.setProjectManagerHoursApproverId(3L);
         when(users.findById(3L)).thenReturn(Optional.of(manager));
-        when(projects.save(any())).thenAnswer(call -> { Project p = call.getArgument(0); p.setId(10L); return p; });
-
-        var result = service.saveProject(null, request, admin);
-
-        assertEquals(3L, result.getProjectManagerId());
-        assertEquals(3L, result.getProjectManagerHoursApproverId());
+        assertThrows(IllegalArgumentException.class, () -> service.saveProject(null, request, admin));
+        verify(projects, never()).save(any());
     }
 
     @Test void employeeCannotPlanProjectHoursEvenForTheirManagedProject() {
-        var project = Project.builder().id(10L).code("P1").projectManager(manager).build();
+        var project = Project.builder().id(10L).companyId(1L).code("P1").projectManager(manager).build();
         var assignment = ProjectAssignment.builder().project(project).user(approver).isActive(true).build();
         assertThrows(AccessDeniedException.class, () -> service.updatePlannedHours(10L, 4L, BigDecimal.TEN, manager));
         assertThrows(AccessDeniedException.class, () -> service.updatePlannedHours(10L, 4L, BigDecimal.ONE, approver));
@@ -162,18 +180,20 @@ class ProjectPermissionsTest {
     }
 
     @Test void managerSeesOnlyManagedApprovedOrAssignedProjects() {
+        when(access.hasAnyProjectRole(3L, "PROJECT_MANAGER")).thenReturn(true);
+        when(access.hasProjectRole(10L, 3L, "PROJECT_MANAGER")).thenReturn(true);
         when(projects.existsByProjectManagerId(3L)).thenReturn(true);
-        var managed = Project.builder().id(10L).code("A").projectManager(manager).build();
-        var assigned = Project.builder().id(11L).code("B").build();
-        var other = Project.builder().id(12L).code("C").build();
+        var managed = Project.builder().id(10L).companyId(1L).code("A").projectManager(manager).build();
+        var assigned = Project.builder().id(11L).companyId(1L).code("B").build();
+        var other = Project.builder().id(12L).companyId(1L).code("C").build();
         when(projects.findAll()).thenReturn(List.of(managed, assigned, other));
         when(assignments.findByUserId(3L)).thenReturn(List.of(ProjectAssignment.builder().project(assigned).isActive(true).build()));
-        assertEquals(List.of(10L, 11L), service.getProjects(manager).stream().map(p -> p.getId()).toList());
-        assertEquals(List.of(10L, 11L), service.getProjectHoursDashboard(2026, 9, manager).stream().map(p -> p.getProjectId()).toList());
+        assertEquals(List.of(10L), service.getProjects(manager).stream().map(p -> p.getId()).toList());
+        assertEquals(List.of(10L), service.getProjectHoursDashboard(2026, 9, manager).stream().map(p -> p.getProjectId()).toList());
     }
 
     @Test void handoverTransfersPendingApprovalsButPreservesCompletedHistory() {
-        var project = Project.builder().id(10L).code("P1").name("Project").projectManager(manager).projectManagerHoursApprover(approver).build();
+        var project = Project.builder().id(10L).companyId(1L).code("P1").name("Project").projectManager(manager).projectManagerHoursApprover(approver).build();
         var sheet = Timesheet.builder().user(manager).build();
         var pending = TimesheetProjectSubmission.builder().id(20L).project(project).timesheet(sheet)
                 .status(TimesheetStatus.SUBMITTED).assignedApprover(approver).build();
@@ -184,7 +204,7 @@ class ProjectPermissionsTest {
         when(users.findById(2L)).thenReturn(Optional.of(admin));
         when(users.findById(4L)).thenReturn(Optional.of(approver));
         when(submissions.findByProjectId(10L)).thenReturn(List.of(pending, completed));
-        var request = SaveProjectRequest.builder().code("P1").name("Project").projectManagerId(2L).projectManagerHoursApproverId(4L).build();
+        var request = SaveProjectRequest.builder().companyId(1L).code("P1").name("Project").projectManagerId(2L).projectManagerHoursApproverId(4L).build();
         service.saveProject(10L, request, admin);
         assertEquals(admin, pending.getAssignedApprover());
         assertEquals(approver, completed.getAssignedApprover());
@@ -196,7 +216,7 @@ class ProjectPermissionsTest {
     }
 
     @Test void inactiveAndAdminCannotBeSelectedAsReviewers() {
-        var request = SaveProjectRequest.builder().code("P1").name("Project").projectManagerId(3L).projectManagerHoursApproverId(4L).build();
+        var request = SaveProjectRequest.builder().companyId(1L).code("P1").name("Project").projectManagerId(3L).projectManagerHoursApproverId(4L).build();
         when(users.findById(3L)).thenReturn(Optional.of(manager));
         when(users.findById(4L)).thenReturn(Optional.of(approver));
         approver.setIsActive(false);
@@ -208,11 +228,11 @@ class ProjectPermissionsTest {
     }
 
     @Test void designatedApproverWithoutPmAssignmentCannotReadManagementPages() {
-        when(projects.existsByProjectManagerIdOrProjectManagerHoursApproverId(4L, 4L)).thenReturn(true);
+        when(access.hasAnyModeratorGrant(4L)).thenReturn(true);
         assertTrue(service.canReviewProjects(4L));
-        assertThrows(AccessDeniedException.class, () -> service.getProjects(approver));
-        assertThrows(IllegalArgumentException.class, () -> service.getProjectHoursDashboard(2026, 9, approver));
-        verify(projects, never()).findAll();
+        when(projects.findAll()).thenReturn(List.of());
+        assertTrue(service.getProjects(approver).isEmpty());
+        assertTrue(service.getProjectHoursDashboard(2026, 9, approver).isEmpty());
     }
 
     @Test void regularEmployeeCannotReadManagementProjects() {
@@ -222,24 +242,25 @@ class ProjectPermissionsTest {
     }
 
     @Test void pendingApprovalBlocksOffboarding() {
-        var project = Project.builder().id(10L).build();
+        var project = Project.builder().id(10L).companyId(1L).build();
         var assignment = ProjectAssignment.builder().project(project).user(manager).isActive(true).build();
         when(assignments.findByProjectIdAndUserId(10L, 3L)).thenReturn(Optional.of(assignment));
-        when(submissions.findByProjectIdAndTimesheetUserId(10L, 3L)).thenReturn(List.of(
-                TimesheetProjectSubmission.builder().status(TimesheetStatus.SUBMITTED).build()));
+        when(jdbc.queryForObject(startsWith("SELECT EXISTS (SELECT 1 FROM timesheet_approval_periods"), eq(Boolean.class), eq(10L), eq(3L))).thenReturn(true);
         assertThrows(IllegalArgumentException.class, () -> service.removeEmployee(10L, 3L, admin));
         assertTrue(assignment.getIsActive());
         verify(assignments, never()).save(any());
     }
 
     @Test void offboardingFreezesApprovedHoursAndTransfersManager() {
-        var project = Project.builder().id(10L).projectManager(manager).build();
+        var project = Project.builder().id(10L).companyId(1L).projectManager(manager).build();
         var assignment = ProjectAssignment.builder().project(project).user(manager).isActive(true).plannedHours(new BigDecimal("100")).build();
         var replacementUser = User.builder().id(5L).isActive(true).build();
         when(users.findById(5L)).thenReturn(Optional.of(replacementUser));
         var replacement = ProjectAssignment.builder().project(project).user(replacementUser).isActive(true).build();
         when(assignments.findByProjectIdAndUserId(10L, 3L)).thenReturn(Optional.of(assignment));
         when(assignments.findByProjectIdAndUserId(10L, 5L)).thenReturn(Optional.of(replacement));
+        when(jdbc.queryForObject(startsWith("SELECT COALESCE(sum(e.hours),0)"), eq(BigDecimal.class), eq(10L), eq(3L)))
+                .thenReturn(new BigDecimal("35"));
         when(submissions.findByProjectIdAndTimesheetUserId(10L, 3L)).thenReturn(List.of(
                 TimesheetProjectSubmission.builder().status(TimesheetStatus.APPROVED).totalHours(new BigDecimal("20")).build(),
                 TimesheetProjectSubmission.builder().status(TimesheetStatus.LOCKED).totalHours(new BigDecimal("15")).build(),
@@ -251,25 +272,25 @@ class ProjectPermissionsTest {
         assertEquals(5L, project.getProjectManager().getId());
     }
 
-    @Test void closureBlocksUnsubmittedAndUnapprovedHours() {
+    @Test void closureBlocksUnfinalizedApprovalPeriods() {
+        when(jdbc.queryForObject(startsWith("SELECT EXISTS (SELECT 1 FROM timesheet_approval_periods"),
+                eq(Boolean.class), eq(10L), eq(10L))).thenReturn(true);
         for (ProjectStatus target : List.of(ProjectStatus.COMPLETED, ProjectStatus.ARCHIVED)) {
-            for (TimesheetStatus pending : List.of(TimesheetStatus.DRAFT, TimesheetStatus.REJECTED, TimesheetStatus.SUBMITTED, TimesheetStatus.CHANGE_REQUESTED)) {
-                Project project = Project.builder().id(10L).status(ProjectStatus.ACTIVE).build();
+                Project project = Project.builder().id(10L).companyId(1L).status(ProjectStatus.ACTIVE).build();
                 when(projects.findById(10L)).thenReturn(Optional.of(project));
-                when(submissions.findByProjectId(10L)).thenReturn(List.of(TimesheetProjectSubmission.builder().status(pending).totalHours(BigDecimal.TEN).build()));
-                SaveProjectRequest request = new SaveProjectRequest();
+                SaveProjectRequest request = new SaveProjectRequest(); request.setCompanyId(1L);
                 request.setCode("P1"); request.setName("Project"); request.setProjectManagerId(3L); request.setProjectManagerHoursApproverId(4L); request.setStatus(target);
                 assertThrows(IllegalArgumentException.class, () -> service.saveProject(10L, request, admin));
                 assertEquals(ProjectStatus.ACTIVE, project.getStatus());
-            }
         }
         verify(projects, never()).save(any());
     }
 
     @Test void closureBlocksLoggedHoursWithoutSubmission() {
-        when(projects.findById(10L)).thenReturn(Optional.of(Project.builder().id(10L).status(ProjectStatus.ACTIVE).build()));
-        when(submissions.countUnfinalizedEntries(eq(10L), anyList())).thenReturn(1L);
-        SaveProjectRequest request = new SaveProjectRequest();
+        when(projects.findById(10L)).thenReturn(Optional.of(Project.builder().id(10L).companyId(1L).status(ProjectStatus.ACTIVE).build()));
+        when(jdbc.queryForObject(startsWith("SELECT EXISTS (SELECT 1 FROM timesheet_approval_periods"),
+                eq(Boolean.class), eq(10L), eq(10L))).thenReturn(true);
+        SaveProjectRequest request = new SaveProjectRequest(); request.setCompanyId(1L);
         request.setCode("P1"); request.setName("Project"); request.setProjectManagerId(3L); request.setProjectManagerHoursApproverId(4L); request.setStatus(ProjectStatus.ARCHIVED);
         assertThrows(IllegalArgumentException.class, () -> service.saveProject(10L, request, admin));
         verify(projects, never()).save(any());

@@ -5,7 +5,7 @@ import com.maxwell.chronos.dto.UpdateProfileRequest;
 import com.maxwell.chronos.dto.UserDTO;
 import com.maxwell.chronos.enums.UserRole;
 import com.maxwell.chronos.repository.UserRepository;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,11 +14,25 @@ import java.util.stream.Collectors;
 
 @Service
 @Transactional
-@RequiredArgsConstructor
 public class UserService {
     private final UserRepository userRepository;
     private final AuditService auditService;
     private final AuthSessionService sessions;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbc;
+
+    @Autowired
+    public UserService(UserRepository userRepository, AuditService auditService, AuthSessionService sessions,
+            org.springframework.jdbc.core.JdbcTemplate jdbc) {
+        this.userRepository = userRepository;
+        this.auditService = auditService;
+        this.sessions = sessions;
+        this.jdbc = jdbc;
+    }
+
+    // Retains the constructor used by service-level fixtures.
+    UserService(UserRepository userRepository, AuditService auditService, AuthSessionService sessions) {
+        this(userRepository, auditService, sessions, null);
+    }
 
     public UserDTO findById(Long id) {
         return userRepository.findById(id)
@@ -121,6 +135,8 @@ public class UserService {
     }
 
     public void changeRole(Long userId, UserRole newRole, Long requestingUserId) {
+        if (newRole == UserRole.PROJECT_ADMIN)
+            throw new IllegalArgumentException("Appoint Project Admins within a company or project instead");
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
@@ -137,6 +153,12 @@ public class UserService {
 
         user.setRole(newRole);
         userRepository.save(user);
+        if (newRole == UserRole.ADMIN)
+            jdbc.update("INSERT INTO role_assignments(user_id,role_key,assigned_by_user_id) " +
+                    "VALUES (?,'PLATFORM_ADMIN',?) ON CONFLICT DO NOTHING", userId, requestingUserId);
+        else if (oldRole == UserRole.ADMIN)
+            jdbc.update("UPDATE role_assignments SET removed_at=now() WHERE user_id=? " +
+                    "AND role_key='PLATFORM_ADMIN' AND removed_at IS NULL", userId);
 
         auditService.logAction(requestingUserId, "ROLE_CHANGED", "User", userId,
                 "Old role: " + oldRole + ", New role: " + newRole);

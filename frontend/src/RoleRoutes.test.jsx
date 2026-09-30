@@ -15,6 +15,8 @@ beforeEach(() => {
   currentUser.role = 'ADMIN';
   currentUser.canReviewProjects = false;
   currentUser.canManageProjects = false;
+  currentUser.canViewProjects = false;
+  currentUser.canSubmitWork = false;
   notificationAPI.getUnreadCount.mockResolvedValue({ data: 0 });
   employeeReportsAPI.list.mockResolvedValue({ data: [] });
 });
@@ -45,17 +47,20 @@ it.each(['/timesheets', '/vacation'])('redirects Admin away from personal route 
   expect(screen.queryByRole('link', { name: 'Timesheets' })).toBeNull();
   expect(screen.queryByRole('link', { name: 'Time off' })).toBeNull();
   expect(screen.getByRole('link', { name: 'Projects' })).toBeTruthy();
+  expect(screen.queryByRole('link', { name: 'Project hours' })).toBeNull();
   expect(screen.getByRole('link', { name: 'Approvals' })).toBeTruthy();
 });
 
-it('shows approvals and project hours to an employee with project permissions', () => {
+it('shows approvals and projects to an employee with project permissions', () => {
   currentUser.role = 'EMPLOYEE';
   currentUser.canReviewProjects = true;
   currentUser.canManageProjects = true;
+  currentUser.canViewProjects = true;
+  currentUser.canSubmitWork = true;
   window.history.replaceState({}, '', '/dashboard');
   render(<App />);
   expect(screen.getByRole('link', { name: 'Approvals' })).toBeTruthy();
-  expect(screen.getByRole('link', { name: 'Project hours' })).toBeTruthy();
+  expect(screen.queryByRole('link', { name: 'Project hours' })).toBeNull();
   expect(screen.getByRole('link', { name: 'Timesheets' })).toBeTruthy();
   expect(screen.getByRole('link', { name: 'Projects' })).toBeTruthy();
 });

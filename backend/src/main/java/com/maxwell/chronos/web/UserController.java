@@ -19,6 +19,7 @@ import java.util.List;
 public class UserController {
     private final UserService userService;
     private final com.maxwell.chronos.service.ProjectService projectService;
+    private final com.maxwell.chronos.service.CompanyAccessService companyAccess;
     private final com.maxwell.chronos.service.LeaveBalanceService leaveBalanceService;
 
     @PatchMapping("/{id}/lock")
@@ -88,10 +89,9 @@ public class UserController {
         var requester = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
         if (requester == null) return ResponseEntity.status(403).build();
         var users = userService.getEmployeeDirectory();
-        if (!requester.isProjectAdmin() && !requester.isAdmin()) {
-            var visibleIds = projectService.visibleEmployeeIds(requester);
-            users = users.stream().filter(user -> visibleIds.contains(user.id()) || requester.getId().equals(user.id())).toList();
-        }
+        var visibleIds = companyAccess.directoryUserIds(requester.getId());
+        visibleIds.addAll(projectService.visibleEmployeeIds(requester));
+        users = users.stream().filter(user -> visibleIds.contains(user.id()) || requester.getId().equals(user.id())).toList();
         return ResponseEntity.ok(users);
     }
 

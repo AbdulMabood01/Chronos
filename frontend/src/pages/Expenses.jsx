@@ -70,6 +70,7 @@ function ExpenseDetail({ id, onClose }) {
   useEffect(() => { expenseAPI.detail(id).then(res => setRow(res.data)).catch(e => setError(message(e))); }, [id]);
   return <div className="expense-detail" role="region" aria-label="Expense details"><button type="button" className="button button-secondary button-small" onClick={onClose}>Close</button>
     {error && <p role="alert">{error}</p>}{row && <><h3>{row.project_code} · {label(row.category)} · {money(row.amount)}</h3><p>{row.description}</p>
+      {row.over_budget_at_submission && <p role="status">This claim exceeded the project budget when submitted.</p>}
       {row.receipt_name && <button type="button" className="button button-secondary button-small" onClick={() => downloadReceipt(id, row.receipt_name).catch(e => setError(message(e)))}>Download receipt: {row.receipt_name}</button>}
       <h4>Status history</h4><ol>{(row.history || []).map((item, index) => <li key={index}>{label(item.status)} · {item.actor_name} · {date(item.created_at)}{item.comment && <p>{item.comment}</p>}</li>)}</ol></>}
   </div>;
@@ -86,6 +87,7 @@ export default function Expenses() {
   const [selected, setSelected] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [budgetWarning, setBudgetWarning] = useState(false);
   const [formVersion, setFormVersion] = useState(0);
   const load = async () => {
     const [myRes, projectRes] = await Promise.all([expenseAPI.mine(), projectAPI.getAssignedProjects()]);
@@ -94,6 +96,14 @@ export default function Expenses() {
     setProjectsLoaded(true);
   };
   useEffect(() => { load().catch(e => setError(message(e))); }, [user?.id]);
+  useEffect(() => {
+    if (!form.projectId || !Number(form.amount)) { setBudgetWarning(false); return; }
+    let cancelled = false;
+    const timer = setTimeout(() => expenseAPI.budgetCheck(form.projectId, form.amount, editing?.id)
+      .then(({ data }) => { if (!cancelled) setBudgetWarning(Boolean(data.overBudget)); })
+      .catch(() => { if (!cancelled) setBudgetWarning(false); }), 300);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [form.projectId, form.amount, editing?.id]);
   const submit = async event => {
     event.preventDefault(); setBusy(true); setError('');
     try {
@@ -118,6 +128,7 @@ export default function Expenses() {
         <label>Project<select required value={form.projectId} disabled={!!editing} onChange={e => setForm({ ...form, projectId: e.target.value })}><option value="">Select assigned project</option>{projects.map(p => <option key={p.id} value={p.id}>{p.code} · {p.name}</option>)}</select></label>
         <label>Category<select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>{categories.map(item => <option key={item} value={item}>{label(item)}</option>)}</select></label>
         <label>Amount<input type="number" min="0.01" step="0.01" required value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} /></label>
+        {budgetWarning && <p className="expense-wide" role="status">This expense would exceed the project budget. You can still submit it for review.</p>}
         <label>Expense date<input type="date" required value={form.expenseDate} onChange={e => setForm({ ...form, expenseDate: e.target.value })} /></label>
         <label className="expense-wide">Description<textarea required minLength={form.category === 'OTHER' ? 10 : 1} maxLength="2000" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></label>
         <label className="expense-wide">Receipt or document (PDF, PNG, JPG, WebP; 10 MB max)<input key={formVersion} type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" required={!editing} onChange={e => setReceipt(e.target.files[0] || null)} /></label>

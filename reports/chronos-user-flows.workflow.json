@@ -1,0 +1,40 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Chronos User Flows",
+    "locale": "en",
+    "quality_profile": "showcase"
+  },
+  "lanes": [
+    { "id": "entry", "label": "Get started" },
+    { "id": "timesheet", "label": "Employee · timesheet" },
+    { "id": "leave", "label": "Employee · time off" },
+    { "id": "review", "label": "Reviewer" }
+  ],
+  "mainPath": ["sign_in", "dashboard", "hours", "submit_hours", "approval_queue", "decision"],
+  "nodes": [
+    { "id": "sign_in", "lane": "entry", "col": 0, "type": "security", "label": "Sign in" },
+    { "id": "dashboard", "lane": "entry", "col": 1, "type": "frontend", "label": "Dashboard" },
+    { "id": "hours", "lane": "timesheet", "col": 2, "type": "frontend", "label": "Enter hours", "sublabel": "Timesheets" },
+    { "id": "submit_hours", "lane": "timesheet", "col": 3, "type": "frontend", "label": "Submit timesheet", "width": 128 },
+    { "id": "time_off", "lane": "leave", "col": 2, "type": "frontend", "label": "Choose dates", "sublabel": "Time off" },
+    { "id": "submit_leave", "lane": "leave", "col": 3, "type": "frontend", "label": "Submit request" },
+    { "id": "approval_queue", "lane": "review", "col": 4, "type": "frontend", "label": "Approval queue" },
+    { "id": "decision", "lane": "review", "col": 5, "type": "security", "label": "Approve or reject", "width": 136 }
+  ],
+  "edges": [
+    { "from": "sign_in", "to": "dashboard" },
+    { "from": "dashboard", "to": "hours" },
+    { "from": "hours", "to": "submit_hours" },
+    { "from": "submit_hours", "to": "approval_queue" },
+    { "from": "dashboard", "to": "time_off", "role": "branch" },
+    { "from": "time_off", "to": "submit_leave" },
+    { "from": "submit_leave", "to": "approval_queue" },
+    { "from": "approval_queue", "to": "decision" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Employee", "items": ["Timesheets: enter hours → submit", "Time off: choose dates → submit"] },
+    { "dot": "emerald", "title": "Reviewer", "items": ["Submitted work appears in Approvals", "Approve or reject with a reason when rejected"] }
+  ]
+}

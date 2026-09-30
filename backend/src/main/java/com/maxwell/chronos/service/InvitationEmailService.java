@@ -25,6 +25,28 @@ public class InvitationEmailService {
     public void sendPasswordReset(User user, String token, Instant expires) {
         send(user, token, expires, true);
     }
+    public void sendCompanyInvitation(String address, String companyName, String token, Instant expires) {
+        JavaMailSender mail = sender.getIfAvailable();
+        URI uri = URI.create(frontend);
+        if (mail == null || from.isBlank() || uri.getHost() == null
+                || !("https".equals(uri.getScheme()) || ("http".equals(uri.getScheme())
+                    && ("localhost".equals(uri.getHost()) || "127.0.0.1".equals(uri.getHost()))))
+                || uri.getQuery() != null || uri.getFragment() != null)
+            throw new IllegalStateException("Configure SMTP, MAIL_FROM and an HTTPS FRONTEND_URL before sending invitations");
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(from);
+        message.setTo(address);
+        message.setSubject("Invitation to " + companyName + " on Chronos");
+        message.setText("You have been invited to " + companyName + " on Chronos.\n\n"
+                + "Sign in or create an account using this email address, then open:\n"
+                + frontend.replaceAll("/+$", "") + "/company-invite#token=" + token
+                + "\n\nThis invitation expires at " + expires + " (UTC).\n"
+                + "If you did not expect this invitation, you may ignore it.");
+        try { mail.send(message); }
+        catch (org.springframework.mail.MailException ex) {
+            throw new IllegalStateException("Company invitation email could not be sent. Check SMTP configuration and retry.");
+        }
+    }
     private void send(User user, String token, Instant expires, boolean reset) {
         JavaMailSender mail = sender.getIfAvailable();
         URI uri = URI.create(frontend);

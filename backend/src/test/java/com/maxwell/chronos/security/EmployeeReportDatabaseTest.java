@@ -24,12 +24,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @Transactional
 class EmployeeReportDatabaseTest {
+    @org.springframework.test.context.bean.override.mockito.MockitoBean com.maxwell.chronos.service.AuthSessionService sessions;
     @Autowired MockMvc mvc;
     @Autowired JdbcTemplate db;
     @Autowired ObjectMapper json;
     @Autowired UserRepository users;
     User employee, admin;
-    @BeforeEach void setup() {
+    @BeforeEach void setup() { org.mockito.Mockito.when(sessions.valid(org.mockito.ArgumentMatchers.nullable(String.class), org.mockito.ArgumentMatchers.anyLong())).thenReturn(true);
         employee = createUser("EMPLOYEE"); admin = createUser("ADMIN");
     }
     private User createUser(String role) {

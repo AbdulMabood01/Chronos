@@ -15,7 +15,7 @@ import java.util.Set;
 
 @Entity
 @Table(name = "timesheets", uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"user_id", "year", "month"})
+        @UniqueConstraint(columnNames = {"user_id", "company_id", "year", "month"})
 })
 @Getter
 @Setter
@@ -30,6 +30,9 @@ public class Timesheet {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
+
+    @Column(name = "company_id", nullable = false)
+    private Long companyId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "primary_project_id")
@@ -63,6 +66,9 @@ public class Timesheet {
 
     @Column(name = "approved_at")
     private LocalDateTime approvedAt;
+
+    @Column(name = "approval_frozen", nullable = false)
+    private boolean approvalFrozen;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "approved_by_id")

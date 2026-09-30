@@ -71,6 +71,12 @@ public class TimesheetProjectSubmission {
     @Column(name = "rejection_reason", length = 500)
     private String rejectionReason;
 
+    @Column(name = "correction_until")
+    private LocalDateTime correctionUntil;
+
+    @Column(name = "correction_planned_hours")
+    private BigDecimal correctionPlannedHours;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;

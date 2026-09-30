@@ -65,6 +65,19 @@ it('shows leave validation details without exposing other request errors', async
   })).rejects.toMatchObject({ userMessage: 'Please check your entries and try again.' });
 });
 
+it('explains a closed timesheet month without exposing arbitrary backend errors', async () => {
+  const rejectWithMessage = message => config => Promise.reject(new axios.AxiosError(
+    'request failed', 'ERR_BAD_REQUEST', config, null,
+    { status: 400, data: { message }, config, headers: {} }
+  ));
+  await expect(apiClient.post('/timesheets/4/time-entries', {}, {
+    adapter: rejectWithMessage('This timesheet month is closed; request an opening from your Project Admin')
+  })).rejects.toMatchObject({ userMessage: 'This timesheet month is closed. Request an opening from your Project Admin.' });
+  await expect(apiClient.post('/timesheets/4/time-entries', {}, {
+    adapter: rejectWithMessage('database column name')
+  })).rejects.toMatchObject({ userMessage: 'Please check your entries and try again.' });
+});
+
 it('shows actionable password errors while hiding unexpected server details', async () => {
   const rejectWithMessage = message => config => Promise.reject(new axios.AxiosError(
     'request failed', 'ERR_BAD_REQUEST', config, null,

@@ -21,7 +21,8 @@ export default function Login() {
 
     try {
       await login(email, password);
-      navigate('/dashboard');
+      const companyInvite = sessionStorage.getItem('chronos:company-invite');
+      navigate(companyInvite ? `/company-invite#token=${companyInvite}` : '/dashboard');
     } catch (err) {
       setError(err.response?.status === 401 || err.response?.status === 429
         ? 'Unable to sign in. Check your credentials or try again later.' : err.userMessage || 'Unable to sign in. Check your credentials or try again later.');

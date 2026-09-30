@@ -18,6 +18,7 @@ public class AuthController {
     private final UserService userService;
     private final com.maxwell.chronos.service.ProjectService projectService;
     private final com.maxwell.chronos.service.AuthSessionService sessions;
+    private final com.maxwell.chronos.service.CompanyAccessService companyAccess;
 
     @PostMapping("/activity")
     public ResponseEntity<Map<String, Object>> activity(@AuthenticationPrincipal Jwt jwt) {
@@ -57,8 +58,12 @@ public class AuthController {
                 .emergencyContactEmail(user.getEmergencyContactEmail())
                 .profileCompleted(Boolean.TRUE.equals(user.getProfileCompleted()))
                 .role(user.getRole().toString())
+                .roles(companyAccess.roleKeys(user.getId()))
                 .canReviewProjects(projectService.canReviewProjects(user.getId()))
+                .canViewProjects(projectService.canViewProjects(user.getId()))
                 .canManageProjects(projectService.canManageProjects(user.getId()))
+                .canCreateProjects(companyAccess.hasAnyCompanyRole(user.getId(), "PROJECT_ADMIN"))
+                .canSubmitWork(companyAccess.hasSubmittableProject(user.getId()))
                 .isActive(user.getIsActive())
                 .build();
     }

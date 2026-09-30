@@ -18,11 +18,11 @@ import Notifications from './pages/Notifications';
 import AuditLog from './pages/AuditLog';
 import UserManagement from './pages/UserManagement';
 import ProjectManagement from './pages/ProjectManagement';
-import ProjectHoursDashboard from './pages/ProjectHoursDashboard';
 import Settings from './pages/Settings';
 import Reports from './pages/Reports';
 import EmployeeReports from './pages/EmployeeReports';
 import Expenses from './pages/Expenses';
+import Companies, { CompanyInvitation } from './pages/Companies';
 import { FeedbackPage, PerformanceReviewsPage } from './pages/FeedbackReviews';
 import Profile from './pages/Profile';
 import { MissingTimesheetsPage, TeamLeaveCalendarPage } from './pages/TeamManagement';
@@ -48,10 +48,10 @@ function ProtectedRoute({ children }) {
 
   const operations = ['PROJECT_ADMIN', 'ADMIN'].includes(user.role);
   const reviewer = operations || user.canReviewProjects;
-  const projectManager = operations || user.canManageProjects;
+  const projectManager = operations || user.canManageProjects || user.canViewProjects;
   const path = location.pathname;
   if ((path === '/admin' || path.startsWith('/admin/')) && !reviewer
-      || (['/projects', '/project-hours', '/missing-timesheets', '/team-leave-calendar'].some(p => path === p || path.startsWith(p + '/')) && !projectManager)
+      || (['/projects', '/missing-timesheets', '/team-leave-calendar'].some(p => path === p || path.startsWith(p + '/')) && !projectManager)
       || (path === '/time-reports' && !operations)
       || (['/settings', '/users', '/audit', '/employee-reports', '/reports'].some(p => path === p || path.startsWith(p + '/')) && user.role !== 'ADMIN')) {
     return <Navigate to="/dashboard" replace />;
@@ -76,6 +76,7 @@ function AppContent({ darkBackground, onToggleBackground }) {
       <Route path="/reports" element={<ProtectedRoute><Layout darkBackground={darkBackground} onToggleBackground={onToggleBackground}><EmployeeReports management /></Layout></ProtectedRoute>} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/company-invite" element={<CompanyInvitation />} />
       <Route path="/activate" element={<Activate />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
@@ -100,17 +101,9 @@ function AppContent({ darkBackground, onToggleBackground }) {
           </ProtectedRoute>
         }
       />
-      <Route
-        path="/project-hours"
-        element={
-          <ProtectedRoute>
-            <Layout darkBackground={darkBackground} onToggleBackground={onToggleBackground}>
-              <ProjectHoursDashboard />
-            </Layout>
-          </ProtectedRoute>
-        }
-      />
       <Route path="/expenses" element={<ProtectedRoute><Layout darkBackground={darkBackground} onToggleBackground={onToggleBackground}><Expenses /></Layout></ProtectedRoute>} />
+      <Route path="/companies" element={<ProtectedRoute><Layout darkBackground={darkBackground} onToggleBackground={onToggleBackground}><Companies /></Layout></ProtectedRoute>} />
+      <Route path="/project-hours" element={<Navigate to="/projects" replace />} />
       <Route
         path="/timesheets"
         element={

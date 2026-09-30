@@ -32,6 +32,12 @@ public class GlobalExceptionHandler {
                 .message(ex.getMessage()).status(400).build());
     }
 
+    @ExceptionHandler(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidParameter(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException ex) {
+        return ResponseEntity.badRequest().body(ErrorResponse.builder().error("Invalid Request")
+                .message("Invalid value for " + ex.getName()).status(400).build());
+    }
+
     @ExceptionHandler({org.springframework.dao.ConcurrencyFailureException.class, org.springframework.dao.DataIntegrityViolationException.class})
     public ResponseEntity<ErrorResponse> handleConflict(RuntimeException ex) {
         return ResponseEntity.status(409).body(ErrorResponse.builder().error("Conflict")

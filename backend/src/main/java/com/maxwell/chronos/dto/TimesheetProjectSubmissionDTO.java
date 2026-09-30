@@ -18,6 +18,7 @@ public class TimesheetProjectSubmissionDTO {
     private Long id;
     private Long timesheetId;
     private Long projectId;
+    private Long companyId;
     private String projectCode;
     private String projectName;
     private Long projectManagerId;
@@ -25,6 +26,8 @@ public class TimesheetProjectSubmissionDTO {
     private String projectManagerHoursApproverName;
     private String routedApproverName;
     private Long routedApproverId;
+    private Boolean reviewAllowed;
+    private Boolean fallbackRequired;
     private Long userId;
     private String userName;
     private String userJobTitle;
@@ -42,6 +45,8 @@ public class TimesheetProjectSubmissionDTO {
     private LocalDateTime rejectedAt;
     private String rejectedByName;
     private String rejectionReason;
+    private LocalDateTime correctionUntil;
+    private Boolean openingActive;
     private Boolean editable;
     private Boolean pdfExportEligible;
     private List<TimeEntryDTO> timeEntries;

@@ -76,7 +76,7 @@ export default function Dashboard() {
     </header>
     <section className="day-welcome" aria-label="Welcome">
       <div className="day-welcome-copy"><p className="day-greeting">Good to see you, {user?.firstName || 'there'}.</p><h1>{systemAdmin ? 'See the bigger picture.' : 'Great teams.'}<br /><em>{systemAdmin ? 'Make the next move.' : 'Good momentum.'}</em></h1><p className="day-intro">{systemAdmin ? 'A clear view of your people, projects, and the decisions that move them forward.' : 'Clear the little blockers. Give your team room to do their best work.'}</p>
-        <div className="day-welcome-actions"><Link className="button day-primary" to={systemAdmin ? '/projects' : '/admin'}>{systemAdmin ? 'Explore projects' : 'Review approvals'}<Icon name="arrow" size={16} /></Link><Link className="day-secondary" to={systemAdmin ? '/users' : '/project-hours'}>{systemAdmin ? 'Your people' : 'Plan with your team'}<Icon name="arrow" size={15} /></Link></div>
+        <div className="day-welcome-actions"><Link className="button day-primary" to={systemAdmin ? '/projects' : '/admin'}>{systemAdmin ? 'Explore projects' : 'Review approvals'}<Icon name="arrow" size={16} /></Link><Link className="day-secondary" to={systemAdmin ? '/users' : '/projects'}>{systemAdmin ? 'Your people' : 'Plan with your team'}<Icon name="arrow" size={15} /></Link></div>
       </div><TimeSculpture variant={systemAdmin ? 'compass' : 'team'} />
     </section>
     <section className="day-pulse management-pulse" aria-label="Workspace summary" aria-busy={state.loading}>
@@ -96,9 +96,9 @@ export default function Dashboard() {
     */}
     <div className="management-lower-grid">
     {!state.loading && manager && !systemAdmin && model.capacity.length > 0 && <section className="dashboard-section" aria-labelledby="dashboard-capacity-title">
-      <div className="dashboard-section-heading"><div><h2 id="dashboard-capacity-title">Team Capacity</h2><p>Estimated allocation today · 8-hour weekdays, excluding leave and holidays.</p></div><Link to="/project-hours" className="text-action">Review capacity <Icon name="arrow" size={16} /></Link></div>
+      <div className="dashboard-section-heading"><div><h2 id="dashboard-capacity-title">Team Capacity</h2><p>Estimated allocation today · 8-hour weekdays, excluding leave and holidays.</p></div><Link to="/projects" className="text-action">Review projects <Icon name="arrow" size={16} /></Link></div>
       <ul className="dashboard-rows">{model.capacity.slice(0, 3).map(item => <ActionRow key={item.id} item={item} />)}</ul>
-      {model.capacity.length > 3 && <Link className="management-more-projects" to="/project-hours">Review {model.capacity.length - 3} more employees <Icon name="arrow" size={14} /></Link>}
+      {model.capacity.length > 3 && <Link className="management-more-projects" to="/projects">Review {model.capacity.length - 3} more employees <Icon name="arrow" size={14} /></Link>}
     </section>}
     {!state.loading && news.length > 0 && <section className="dashboard-section day-news" aria-label="Company announcements">
       <div className="dashboard-section-heading"><div><h2>Announcements</h2><p>{systemAdmin ? 'Recent company updates.' : 'Important and unread updates.'}</p></div><Link className="text-action" to={systemAdmin ? '/announcements?manage=true' : '/announcements'}>{systemAdmin ? 'Manage announcements' : 'All announcements'} <Icon name="arrow" size={16} /></Link></div>
