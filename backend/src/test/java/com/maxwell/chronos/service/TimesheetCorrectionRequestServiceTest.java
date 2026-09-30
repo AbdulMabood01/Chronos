@@ -126,8 +126,10 @@ class TimesheetCorrectionRequestServiceTest {
                 () -> service.request(4L, 3L, "Edit current hours", employee)).getMessage()
                 .contains("still open"));
         admin.setRole(UserRole.ADMIN);
-        assertThrows(org.springframework.security.access.AccessDeniedException.class,
-                () -> service.pending(admin));
+        assertTrue(service.pending(admin).isEmpty());
+        when(requests.findById(5L)).thenReturn(Optional.of(TimesheetCorrectionRequest.builder()
+                .id(5L).project(project).timesheet(sheet).user(employee)
+                .status(TimesheetCorrectionStatus.PENDING).build()));
         assertThrows(org.springframework.security.access.AccessDeniedException.class,
                 () -> service.decide(5L, true, "Approved", admin));
     }

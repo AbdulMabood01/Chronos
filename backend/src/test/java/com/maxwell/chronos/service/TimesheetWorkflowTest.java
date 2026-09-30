@@ -43,9 +43,9 @@ class TimesheetWorkflowTest {
         lenient().when(access.companyIds(anyLong())).thenReturn(List.of(1L));
         lenient().when(access.maySubmit(anyLong(), anyLong())).thenReturn(true);
         lenient().when(access.mayReview(anyLong(), anyLong(), anyLong(), anyBoolean(), nullable(String.class)))
-                .thenAnswer(call -> canReview(call.getArgument(1), call.getArgument(2)));
+                .thenAnswer(call -> canReview(call.getArgument(0), call.getArgument(1), call.getArgument(2)));
         lenient().doAnswer(call -> {
-            if (!canReview(call.getArgument(1), call.getArgument(2)))
+            if (!canReview(call.getArgument(0), call.getArgument(1), call.getArgument(2)))
                 throw new org.springframework.security.access.AccessDeniedException("A separate project reviewer is required");
             return null;
         }).when(access).requireMayReview(anyLong(), anyLong(), anyLong(), anyBoolean(), nullable(String.class));
@@ -62,7 +62,7 @@ class TimesheetWorkflowTest {
                 .status(TimesheetStatus.DRAFT).totalHours(BigDecimal.ZERO).build();
         lenient().doAnswer(call -> {
             Long projectId = call.getArgument(1);
-            var current = projectId.equals(3L) ? submission : null;
+            var current = submissions.findByTimesheetIdAndProjectId(4L, projectId).orElse(null);
             boolean open = current != null && current.getCorrectionUntil() != null
                     && current.getCorrectionUntil().isAfter(LocalDateTime.now()) && current.isEditable();
             if (!open && (sheet.isApprovalFrozen() || sheet.getStatus() == TimesheetStatus.APPROVED
@@ -89,7 +89,8 @@ class TimesheetWorkflowTest {
         when(entries.save(any())).thenAnswer(i -> { TimeEntry e = i.getArgument(0); e.setId(9L); return e; });
     }
 
-    private boolean canReview(Long reviewerId, Long employeeId) {
+    private boolean canReview(Long projectId, Long reviewerId, Long employeeId) {
+        if (!projectId.equals(3L)) return false;
         if (reviewerId.equals(employeeId) || reviewerId.equals(2L) && admin.getRole() == UserRole.ADMIN) return false;
         return reviewerId.equals(2L) && admin.getRole() == UserRole.PROJECT_ADMIN
                 || project.getProjectManager() != null && reviewerId.equals(project.getProjectManager().getId())

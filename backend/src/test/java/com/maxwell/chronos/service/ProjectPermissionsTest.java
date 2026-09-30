@@ -47,6 +47,8 @@ class ProjectPermissionsTest {
         when(jdbc.queryForObject(eq("SELECT id FROM companies WHERE id=? FOR UPDATE"), eq(Long.class), anyLong())).thenReturn(1L);
         when(jdbc.queryForObject(eq("SELECT project_limit FROM companies WHERE id=?"), eq(Integer.class), anyLong())).thenReturn(100);
         when(jdbc.queryForObject(eq("SELECT count(*) FROM projects WHERE company_id=?"), eq(Integer.class), anyLong())).thenReturn(0);
+        when(jdbc.queryForObject(eq("SELECT count(*) FROM timesheet_approval_periods WHERE project_id=? AND status='SUBMITTED'"),
+                eq(Long.class), anyLong())).thenReturn(0L);
     }
 
     @Test void managerVisibilityExcludesUnrelatedProjectsAndEmployees() {
@@ -270,24 +272,24 @@ class ProjectPermissionsTest {
         assertEquals(5L, project.getProjectManager().getId());
     }
 
-    @Test void closureBlocksUnsubmittedAndUnapprovedHours() {
+    @Test void closureBlocksUnfinalizedApprovalPeriods() {
+        when(jdbc.queryForObject(startsWith("SELECT EXISTS (SELECT 1 FROM timesheet_approval_periods"),
+                eq(Boolean.class), eq(10L), eq(10L))).thenReturn(true);
         for (ProjectStatus target : List.of(ProjectStatus.COMPLETED, ProjectStatus.ARCHIVED)) {
-            for (TimesheetStatus pending : List.of(TimesheetStatus.DRAFT, TimesheetStatus.REJECTED, TimesheetStatus.SUBMITTED, TimesheetStatus.CHANGE_REQUESTED)) {
                 Project project = Project.builder().id(10L).companyId(1L).status(ProjectStatus.ACTIVE).build();
                 when(projects.findById(10L)).thenReturn(Optional.of(project));
-                when(submissions.findByProjectId(10L)).thenReturn(List.of(TimesheetProjectSubmission.builder().status(pending).totalHours(BigDecimal.TEN).build()));
                 SaveProjectRequest request = new SaveProjectRequest(); request.setCompanyId(1L);
                 request.setCode("P1"); request.setName("Project"); request.setProjectManagerId(3L); request.setProjectManagerHoursApproverId(4L); request.setStatus(target);
                 assertThrows(IllegalArgumentException.class, () -> service.saveProject(10L, request, admin));
                 assertEquals(ProjectStatus.ACTIVE, project.getStatus());
-            }
         }
         verify(projects, never()).save(any());
     }
 
     @Test void closureBlocksLoggedHoursWithoutSubmission() {
         when(projects.findById(10L)).thenReturn(Optional.of(Project.builder().id(10L).companyId(1L).status(ProjectStatus.ACTIVE).build()));
-        when(submissions.countUnfinalizedEntries(eq(10L), anyList())).thenReturn(1L);
+        when(jdbc.queryForObject(startsWith("SELECT EXISTS (SELECT 1 FROM timesheet_approval_periods"),
+                eq(Boolean.class), eq(10L), eq(10L))).thenReturn(true);
         SaveProjectRequest request = new SaveProjectRequest(); request.setCompanyId(1L);
         request.setCode("P1"); request.setName("Project"); request.setProjectManagerId(3L); request.setProjectManagerHoursApproverId(4L); request.setStatus(ProjectStatus.ARCHIVED);
         assertThrows(IllegalArgumentException.class, () -> service.saveProject(10L, request, admin));
