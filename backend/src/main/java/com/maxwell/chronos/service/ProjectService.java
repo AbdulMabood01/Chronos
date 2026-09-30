@@ -481,6 +481,10 @@ public class ProjectService {
                 || access.hasAnyModeratorGrant(userId);
     }
 
+    public boolean canViewProjects(Long userId) {
+        return access.hasAnyProjectRole(userId, "PROJECT_MANAGER") || access.hasAnyProjectRole(userId, "PROJECT_ADMIN");
+    }
+
     public boolean canManageProjects(Long userId) {
         return access.hasAnyProjectRole(userId, "PROJECT_ADMIN") || Boolean.TRUE.equals(jdbc.queryForObject(
                 "SELECT EXISTS (SELECT 1 FROM role_assignments r JOIN company_memberships m " +

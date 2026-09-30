@@ -15,6 +15,8 @@ beforeEach(() => {
   currentUser.role = 'ADMIN';
   currentUser.canReviewProjects = false;
   currentUser.canManageProjects = false;
+  currentUser.canViewProjects = false;
+  currentUser.canSubmitWork = false;
   notificationAPI.getUnreadCount.mockResolvedValue({ data: 0 });
   employeeReportsAPI.list.mockResolvedValue({ data: [] });
 });
@@ -53,6 +55,8 @@ it('shows approvals and projects to an employee with project permissions', () =>
   currentUser.role = 'EMPLOYEE';
   currentUser.canReviewProjects = true;
   currentUser.canManageProjects = true;
+  currentUser.canViewProjects = true;
+  currentUser.canSubmitWork = true;
   window.history.replaceState({}, '', '/dashboard');
   render(<App />);
   expect(screen.getByRole('link', { name: 'Approvals' })).toBeTruthy();

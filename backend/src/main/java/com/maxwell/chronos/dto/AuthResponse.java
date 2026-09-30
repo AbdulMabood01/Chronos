@@ -52,6 +52,7 @@ public class AuthResponse {
     private String role;
     private List<String> roles;
     private boolean canReviewProjects;
+    private boolean canViewProjects;
     private boolean canManageProjects;
     private boolean canCreateProjects;
     private boolean canSubmitWork;

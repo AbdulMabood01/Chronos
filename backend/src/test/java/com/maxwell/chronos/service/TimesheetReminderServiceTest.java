@@ -1,130 +1,74 @@
 package com.maxwell.chronos.service;
 
-import com.maxwell.chronos.domain.*;
-import com.maxwell.chronos.enums.*;
-import com.maxwell.chronos.repository.*;
+import com.maxwell.chronos.domain.SystemSetting;
+import com.maxwell.chronos.domain.User;
+import com.maxwell.chronos.repository.SystemSettingRepository;
+import com.maxwell.chronos.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
-import java.time.*;
-import java.util.*;
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
 import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 class TimesheetReminderServiceTest {
-    final UserRepository users = mock(UserRepository.class);
-    final TimesheetRepository sheets = mock(TimesheetRepository.class);
-    final SystemSettingRepository settings = mock(SystemSettingRepository.class);
-    final NotificationService notifications = mock(NotificationService.class);
-    final TimesheetReminderEmailService email = mock(TimesheetReminderEmailService.class);
-    final TransactionTemplate transactions = mock(TransactionTemplate.class);
-    final TimesheetReminderService service = new TimesheetReminderService(users, sheets, settings,
-            notifications, mock(AuditService.class), email, transactions);
-    User employee;
-    Timesheet sheet;
+    private final UserRepository users = mock(UserRepository.class);
+    private final SystemSettingRepository settings = mock(SystemSettingRepository.class);
+    private final JdbcTemplate db = mock(JdbcTemplate.class);
+    private final TimesheetPeriodService periods = mock(TimesheetPeriodService.class);
+    private final TimesheetReminderEmailService email = mock(TimesheetReminderEmailService.class);
+    private final NotificationService notifications = mock(NotificationService.class);
+    private final TransactionTemplate transactions = mock(TransactionTemplate.class);
+    private final TimesheetReminderService service = new TimesheetReminderService(users, settings, db, periods,
+            email, notifications, transactions);
+    private final User employee = User.builder().id(1L).email("employee@example.com").timezone("UTC").build();
 
     @BeforeEach void setup() {
-        employee = User.builder().id(1L).email("employee@example.com").role(UserRole.EMPLOYEE)
-                .isActive(true).build();
-        sheet = Timesheet.builder().id(10L).user(employee).status(TimesheetStatus.DRAFT).build();
-        when(users.findByIsActiveTrue()).thenReturn(List.of(employee));
+        when(db.queryForList(anyString())).thenReturn(List.of(Map.of("user_id", 1L, "project_id", 4L, "code", "ATLAS")));
         when(users.findForUpdate(1L)).thenReturn(Optional.of(employee));
-        when(sheets.findPeriodForUpdate(eq(1L), anyInt(), anyInt())).thenReturn(Optional.of(sheet));
-        when(sheets.save(any())).thenAnswer(i -> i.getArgument(0));
-        doAnswer(i -> {
-            java.util.function.Consumer<org.springframework.transaction.TransactionStatus> action = i.getArgument(0);
+        when(periods.period(eq(4L), any(LocalDate.class))).thenAnswer(call -> {
+            LocalDate day = call.getArgument(1);
+            return new TimesheetPeriodService.Period(day, day, "DAILY");
+        });
+        doAnswer(call -> {
+            java.util.function.Consumer<org.springframework.transaction.TransactionStatus> action = call.getArgument(0);
             action.accept(mock(org.springframework.transaction.TransactionStatus.class));
             return null;
         }).when(transactions).executeWithoutResult(any());
     }
 
-    void run(String local) {
-        service.sendTimesheetReminders(LocalDateTime.parse(local).atZone(ZoneId.of(employee.getTimezone())).toInstant());
-    }
-
-    @Test void fridayAtEightAndOnlyOncePerDate() {
-        run("2026-09-18T19:55:00");
+    @Test void sendsFivePmReminderOnceForTheClosingPeriod() {
+        LocalDate day = LocalDate.of(2026, 9, 18);
+        when(periods.markReminder(1L, 4L, new TimesheetPeriodService.Period(day, day, "DAILY"), false))
+                .thenReturn(true, false);
+        service.sendTimesheetReminders(Instant.parse("2026-09-18T16:59:00Z"));
         verifyNoInteractions(email);
-        run("2026-09-18T20:00:00");
-        run("2026-09-18T20:05:00");
-        verify(email).sendReminder(employee, YearMonth.of(2026, 9));
-        assertEquals(LocalDateTime.parse("2026-09-18T20:00:00"), sheet.getLastReminderSentAt());
+        service.sendTimesheetReminders(Instant.parse("2026-09-18T17:00:00Z"));
+        service.sendTimesheetReminders(Instant.parse("2026-09-18T17:05:00Z"));
+        verify(email, times(1)).sendPeriodEmail(employee, "ATLAS", day, day, false);
     }
 
-    @Test void noReminderOnOrdinaryWeekday() {
-        run("2026-09-17T20:00:00");
+    @Test void sendsLateEmailJustAfterMidnightForTheMissedPeriod() {
+        LocalDate yesterday = LocalDate.of(2026, 9, 18);
+        when(periods.markReminder(1L, 4L, new TimesheetPeriodService.Period(yesterday, yesterday, "DAILY"), true))
+                .thenReturn(true);
+        service.sendTimesheetReminders(Instant.parse("2026-09-19T00:00:00Z"));
         verifyNoInteractions(email);
+        service.sendTimesheetReminders(Instant.parse("2026-09-19T00:01:00Z"));
+        verify(email).sendPeriodEmail(employee, "ATLAS", yesterday, yesterday, true);
     }
 
-    @Test void weekendMonthEndAndLeapDayAreIncluded() {
-        run("2026-05-31T20:00:00");
-        verify(email).sendReminder(employee, YearMonth.of(2026, 5));
-        run("2028-02-29T20:00:00");
-        verify(email).sendReminder(employee, YearMonth.of(2028, 2));
-    }
-
-    @Test void fridayMonthEndSendsOneReminder() {
-        run("2026-07-31T20:00:00");
-        run("2026-07-31T21:00:00");
-        verify(email).sendReminder(employee, YearMonth.of(2026, 7));
-    }
-
-    @Test void usesEmployeeDateAcrossUtcMonthBoundaryAndDst() {
-        service.sendTimesheetReminders(Instant.parse("2026-08-01T01:00:00Z"));
-        verify(email).sendReminder(employee, YearMonth.of(2026, 7));
-        employee.setTimezone("Asia/Kolkata");
-        service.sendTimesheetReminders(Instant.parse("2026-09-18T14:30:00Z"));
-        verify(email).sendReminder(employee, YearMonth.of(2026, 9));
-        employee.setTimezone("America/Chicago");
-        service.sendTimesheetReminders(Instant.parse("2026-12-05T02:00:00Z"));
-        verify(email).sendReminder(employee, YearMonth.of(2026, 12));
-    }
-
-    @Test void skipsSubmittedApprovedLockedAndChangeRequested() {
-        for (TimesheetStatus status : List.of(TimesheetStatus.SUBMITTED, TimesheetStatus.APPROVED,
-                TimesheetStatus.LOCKED, TimesheetStatus.CHANGE_REQUESTED)) {
-            sheet.setStatus(status);
-            run("2026-09-18T20:00:00");
-        }
-        verifyNoInteractions(email);
-    }
-
-    @Test void remindsRejectedAndMissingTimesheets() {
-        sheet.setStatus(TimesheetStatus.REJECTED);
-        run("2026-09-18T20:00:00");
-        when(sheets.findPeriodForUpdate(1L, 2026, 9)).thenReturn(Optional.empty());
-        run("2026-09-25T20:00:00");
-        verify(email, times(2)).sendReminder(employee, YearMonth.of(2026, 9));
-        verify(sheets, atLeastOnce()).save(argThat(t -> t.getUser() == employee && t.getStatus() == TimesheetStatus.DRAFT));
-    }
-
-    @Test void disabledOrInactiveOrAdminAreSkipped() {
-        employee.setIsActive(false);
-        run("2026-09-18T20:00:00");
-        employee.setIsActive(true);
-        employee.setRole(UserRole.ADMIN);
-        run("2026-09-18T20:00:00");
-        employee.setRole(UserRole.EMPLOYEE);
-        when(settings.findBySettingKey("timesheet.reminders.enabled")).thenReturn(Optional.of(
-                SystemSetting.builder().settingValue("false").build()));
-        run("2026-09-18T20:00:00");
-        verifyNoInteractions(email);
-    }
-
-    @Test void failedEmailIsNotMarkedSentAndOtherUsersStillReceiveReminders() {
-        User second = User.builder().id(2L).isActive(true).role(UserRole.PROJECT_ADMIN).build();
-        when(users.findByIsActiveTrue()).thenReturn(List.of(employee, second));
-        when(users.findForUpdate(2L)).thenReturn(Optional.of(second));
-        when(sheets.findPeriodForUpdate(2L, 2026, 9)).thenReturn(Optional.of(
-                Timesheet.builder().id(11L).status(TimesheetStatus.DRAFT).build()));
-        doThrow(new IllegalStateException("SMTP unavailable")).when(email).sendReminder(eq(employee), any());
-        run("2026-09-18T20:00:00");
-        assertNull(sheet.getLastReminderSentAt());
-        verify(email).sendReminder(second, YearMonth.of(2026, 9));
-        verify(notifications, never()).createNotification(eq(1L), any(), any(), any(), any(), any());
-        doNothing().when(email).sendReminder(eq(employee), any());
-        run("2026-09-18T20:05:00");
-        assertNotNull(sheet.getLastReminderSentAt());
+    @Test void disabledRemindersDoNotQueryAssignmentsOrSendEmail() {
+        when(settings.findBySettingKey("timesheet.reminders.enabled"))
+                .thenReturn(Optional.of(SystemSetting.builder().settingValue("false").build()));
+        service.sendTimesheetReminders(Instant.parse("2026-09-18T17:00:00Z"));
+        verifyNoInteractions(db, email, periods);
     }
 }

@@ -3,7 +3,7 @@ import React from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ProjectManagement from './ProjectManagement';
-import { projectAPI, userAPI, expenseAPI } from '../api';
+import { projectAPI, userAPI, expenseAPI, companyAPI } from '../api';
 vi.mock('../api');
 vi.mock('../AuthContext', () => ({ useAuth: () => ({ user: currentUser }) }));
 const currentUser = { id: 1, role: 'ADMIN' };
@@ -23,6 +23,8 @@ beforeEach(() => {
   projectAPI.getHoursDashboard.mockResolvedValue({ data: [{ projectId: 10, employees: [{ userId: 3, userName: 'Employee', plannedHours: 40, timesheetId: 20 }] }] });
   expenseAPI.totals.mockResolvedValue({ data: { budget: 100, approved: 20, pending: 10, remaining: 80 } });
   expenseAPI.project.mockResolvedValue({ data: [] });
+  companyAPI.mine.mockResolvedValue({ data: [] });
+  companyAPI.members.mockResolvedValue({ data: [] });
 });
 afterEach(cleanup);
 

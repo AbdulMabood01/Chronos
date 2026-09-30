@@ -16,7 +16,7 @@ class VacationRoutingTest {
     private final NotificationService notifications = mock(NotificationService.class);
     private final VacationService service = new VacationService(vacations, users, mock(TimesheetRepository.class),
             mock(TimesheetProjectSubmissionRepository.class), assignments, mock(AuditService.class), notifications,
-            mock(LeaveBalanceService.class));
+            mock(LeaveBalanceService.class), mock(TimesheetPeriodService.class));
     private final User employee = User.builder().id(1L).role(UserRole.EMPLOYEE).build();
     private final User admin = User.builder().id(2L).role(UserRole.ADMIN).build();
     private final User manager = User.builder().id(3L).role(UserRole.EMPLOYEE).isActive(true).build();

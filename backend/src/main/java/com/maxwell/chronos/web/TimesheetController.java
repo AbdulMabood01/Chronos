@@ -39,22 +39,6 @@ public class TimesheetController {
         return ResponseEntity.ok(timesheetService.getMissingTimesheets(year, month, user));
     }
 
-    @GetMapping("/{year}/{month}")
-    public ResponseEntity<TimesheetDTO> getTimesheet(@PathVariable int year, @PathVariable int month,
-                                                     @RequestParam(required = false) Long companyId,
-                                                     @AuthenticationPrincipal Jwt jwt) {
-        String email = jwt.getClaimAsString("preferred_username");
-        var user = userService.findUserEntityByEmail(email);
-
-        if (user == null) {
-            return ResponseEntity.status(403).build();
-        }
-
-        TimesheetDTO timesheet = companyId == null ? timesheetService.getOrCreateTimesheet(user.getId(), year, month)
-                : timesheetService.getOrCreateTimesheet(user.getId(), companyId, year, month);
-        return ResponseEntity.ok(timesheet);
-    }
-
     @PostMapping
     public ResponseEntity<TimesheetDTO> getOrCreateTimesheet(@RequestParam int year, @RequestParam int month,
                                                             @RequestParam(required = false) Long companyId,

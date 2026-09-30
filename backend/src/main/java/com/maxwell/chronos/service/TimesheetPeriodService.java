@@ -64,6 +64,15 @@ public class TimesheetPeriodService {
                 userId, projectId, period.start(), period.end());
     }
 
+    private Map<String,Object> existingOrDraft(long userId, long projectId, Period period) {
+        List<Map<String,Object>> rows = db.queryForList("SELECT * FROM timesheet_approval_periods WHERE user_id=? AND project_id=? AND period_start=? AND period_end=?",
+                userId, projectId, period.start(), period.end());
+        if (!rows.isEmpty()) return rows.getFirst();
+        return new java.util.HashMap<>(Map.of("user_id", userId, "project_id", projectId,
+                "company_id", project(projectId).getCompanyId(), "period_start", period.start(),
+                "period_end", period.end(), "frequency", period.frequency(), "status", "DRAFT"));
+    }
+
     private Map<String,Object> row(long id) {
         return db.query("SELECT * FROM timesheet_approval_periods WHERE id=? FOR UPDATE", (rs,i) -> {
             var m = new java.util.HashMap<String,Object>();
@@ -105,7 +114,7 @@ public class TimesheetPeriodService {
         if (requesterId!=userId && !access.mayReview(projectId,requesterId,userId,false,"Queue preview")
                 && !access.mayManageProject(projectId,requesterId)) throw new AccessDeniedException("Approval period access denied");
         Period period=period(projectId,day);
-        Map<String,Object> row=ensure(userId,projectId,period);
+        Map<String,Object> row=existingOrDraft(userId,projectId,period);
         User employee=user(userId);
         Instant now=Instant.now();
         String status=(String)row.get("status");

@@ -48,7 +48,7 @@ function ProtectedRoute({ children }) {
 
   const operations = ['PROJECT_ADMIN', 'ADMIN'].includes(user.role);
   const reviewer = operations || user.canReviewProjects;
-  const projectManager = operations || user.canManageProjects || user.canReviewProjects;
+  const projectManager = operations || user.canManageProjects || user.canViewProjects;
   const path = location.pathname;
   if ((path === '/admin' || path.startsWith('/admin/')) && !reviewer
       || (['/projects', '/missing-timesheets', '/team-leave-calendar'].some(p => path === p || path.startsWith(p + '/')) && !projectManager)

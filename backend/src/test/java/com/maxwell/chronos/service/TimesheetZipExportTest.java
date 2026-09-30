@@ -19,7 +19,9 @@ class TimesheetZipExportTest {
         var sheets = mock(TimesheetRepository.class);
         var submissions = mock(TimesheetProjectSubmissionRepository.class);
         var assignments = mock(ProjectAssignmentRepository.class);
-        var service = new ReportService(sheets, submissions, assignments, mock(VacationRequestRepository.class));
+        var service = new ReportService(sheets, submissions, assignments, mock(VacationRequestRepository.class),
+                mock(TimeEntryRepository.class), mock(UserRepository.class), mock(ProjectRepository.class),
+                mock(CompanyAccessService.class), mock(org.springframework.jdbc.core.JdbcTemplate.class));
         var oldSheet = Timesheet.builder().id(1L).year(2026).month(9).status(TimesheetStatus.APPROVED)
                 .user(User.builder().id(10L).role(UserRole.EMPLOYEE).firstName("Old").lastName("Record").build()).build();
         var zeroSheet = Timesheet.builder().id(2L).year(2026).month(9).status(TimesheetStatus.APPROVED)
@@ -85,7 +87,9 @@ class TimesheetZipExportTest {
         var sheets = mock(TimesheetRepository.class);
         var submissions = mock(TimesheetProjectSubmissionRepository.class);
         var assignments = mock(ProjectAssignmentRepository.class);
-        var service = new ReportService(sheets, submissions, assignments, mock(VacationRequestRepository.class));
+        var service = new ReportService(sheets, submissions, assignments, mock(VacationRequestRepository.class),
+                mock(TimeEntryRepository.class), mock(UserRepository.class), mock(ProjectRepository.class),
+                mock(CompanyAccessService.class), mock(org.springframework.jdbc.core.JdbcTemplate.class));
         var user = User.builder().id(10L).role(UserRole.EMPLOYEE).firstName("Project").lastName("Member").build();
         var sheet = Timesheet.builder().id(1L).year(2026).month(9).status(TimesheetStatus.SUBMITTED).user(user).build();
         var approvedProject = Project.builder().id(100L).code("GOOD").name("Approved").build();

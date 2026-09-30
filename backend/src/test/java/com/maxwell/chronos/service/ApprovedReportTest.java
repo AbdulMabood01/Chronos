@@ -20,7 +20,9 @@ class ApprovedReportTest {
     private final TimesheetRepository sheets = mock(TimesheetRepository.class);
     private final TimesheetProjectSubmissionRepository submissions = mock(TimesheetProjectSubmissionRepository.class);
     private final ProjectAssignmentRepository assignments = mock(ProjectAssignmentRepository.class);
-    private final ReportService service = new ReportService(sheets, submissions, assignments, mock(VacationRequestRepository.class));
+    private final ReportService service = new ReportService(sheets, submissions, assignments, mock(VacationRequestRepository.class),
+            mock(TimeEntryRepository.class), mock(UserRepository.class), mock(ProjectRepository.class),
+            mock(CompanyAccessService.class), mock(org.springframework.jdbc.core.JdbcTemplate.class));
     private final User employee = User.builder().id(1L).employeeId("MW-0104").firstName("Jordan").lastName("Rivera")
             .jobTitle("Senior Software Engineer").build();
     private final Project project = Project.builder().id(4L).code("ATLAS").name("Enterprise Platform Modernization").build();

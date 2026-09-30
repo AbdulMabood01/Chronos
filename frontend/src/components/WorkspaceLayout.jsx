@@ -13,7 +13,7 @@ export default function WorkspaceLayout({ children, darkBackground, onToggleBack
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButton = useRef(null);
   const reviewer = user?.canReviewProjects || ['PROJECT_ADMIN', 'ADMIN'].includes(user?.role);
-  const projectManager = user?.canManageProjects || user?.canReviewProjects || ['PROJECT_ADMIN', 'ADMIN'].includes(user?.role);
+  const projectManager = user?.canManageProjects || user?.canViewProjects || ['PROJECT_ADMIN', 'ADMIN'].includes(user?.role);
   const operations = ['PROJECT_ADMIN', 'ADMIN'].includes(user?.role);
   const systemAdmin = user?.role === 'ADMIN';
   const primary = [

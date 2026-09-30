@@ -13,6 +13,7 @@ afterEach(cleanup);
 it.each([false, true])('hides Management from a non-PM employee (approver: %s)', (approver) => {
   currentUser.canReviewProjects = approver;
   currentUser.canManageProjects = false;
+  currentUser.canViewProjects = false;
   render(<MemoryRouter><WorkspaceLayout><p>Content</p></WorkspaceLayout></MemoryRouter>);
   expect(screen.queryByText('Management')).toBeNull();
   expect(screen.queryByRole('link', { name: 'Projects' })).toBeNull();
@@ -26,6 +27,7 @@ it.each([false, true])('hides Management from a non-PM employee (approver: %s)',
 it('keeps Management and Approvals available to a PM', () => {
   currentUser.canReviewProjects = true;
   currentUser.canManageProjects = true;
+  currentUser.canViewProjects = true;
   render(<MemoryRouter><WorkspaceLayout><p>Content</p></WorkspaceLayout></MemoryRouter>);
   expect(screen.getByText('Management')).toBeTruthy();
   expect(screen.getByRole('link', { name: 'Approvals' })).toBeTruthy();
