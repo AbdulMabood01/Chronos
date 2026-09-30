@@ -91,6 +91,8 @@ public class ProjectService {
 
     public ProjectDTO saveProject(Long projectId, SaveProjectRequest request, User requester) {
         if (requester == null) throw new org.springframework.security.access.AccessDeniedException("Sign in required");
+        if (access.hasPlatformRole(requester.getId(), "PLATFORM_ADMIN"))
+            throw new org.springframework.security.access.AccessDeniedException("Platform Admin cannot edit projects");
         Project project = projectId == null ? Project.builder().isActive(false).status(ProjectStatus.DRAFT).build()
                 : projectRepository.findById(projectId).orElseThrow(() -> new IllegalArgumentException("Project not found"));
         if (projectId == null) {

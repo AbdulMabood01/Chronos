@@ -92,8 +92,8 @@ test('leave request shows balance preview before saving on mobile', async ({ pag
   await page.getByRole('button', { name: /New request/ }).click();
   await page.getByLabel('Start Date').fill('2026-09-14');
   await page.getByLabel('End Date').fill('2026-09-15');
-  await expect(page.getByRole('region', { name: 'Leave balance preview' })).toContainText('Paid days remaining');
-  await expect(page.getByText('Paid days remaining', { exact: true }).locator('..')).toContainText('6');
+  await expect(page.getByRole('region', { name: 'Leave balance preview' })).toContainText('Balance after request');
+  await expect(page.getByText('Balance after request', { exact: true }).locator('..')).toContainText('6');
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: path.join(output, 'leave-preview-mobile.png'), fullPage: true });

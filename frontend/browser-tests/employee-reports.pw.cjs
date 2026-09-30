@@ -23,8 +23,9 @@ test('Admin Reports opens incident cases, filters, and saves the private tracker
   });
   await page.goto('/reports');
   await expect(page.getByRole('link', { name: 'Reports', exact: true })).toHaveAttribute('href', '/reports');
-  await expect(page.getByRole('columnheader', { name: 'Submitted by', exact: true })).toBeVisible();
-  await expect(page.getByRole('columnheader', { name: 'Last updated', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Workplace safety concern' })).toBeVisible();
+  await expect(page.locator('.report-case-meta')).toContainText('Updated');
+  await page.getByRole('button', { name: 'Show filters' }).click();
   await page.getByLabel('Search Report ID').fill('abcdef');
   await page.getByRole('combobox', { name: 'Submitted by', exact: true }).selectOption('true');
   await expect.poll(() => queries.some(query => query.includes('reportId=abcdef') && query.includes('anonymous=true'))).toBe(true);

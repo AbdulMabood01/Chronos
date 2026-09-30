@@ -37,7 +37,7 @@ class TimesheetCorrectionRequestServiceTest {
     Timesheet sheet;
 
     @BeforeEach void setup() {
-        lenient().when(access.mayManageProject(3L, 2L)).thenReturn(true);
+        lenient().when(access.mayManageProject(3L, 2L)).thenAnswer(call -> admin.getRole() == UserRole.PROJECT_ADMIN);
         employee = User.builder().id(1L).firstName("Test").lastName("Employee").role(UserRole.EMPLOYEE).build();
         admin = User.builder().id(2L).role(UserRole.PROJECT_ADMIN).isActive(true).build();
         project = Project.builder().id(3L).code("P1").build();

@@ -59,6 +59,7 @@ class AccountAccessTest {
         mvc.perform(get("/users").with(token())).andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].id").value(2));
         employee.setRole(UserRole.PROJECT_ADMIN);
+        when(access.directoryUserIds(1L)).thenReturn(new java.util.HashSet<>(java.util.Set.of(2L, 3L)));
         mvc.perform(get("/users").with(token())).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(2));
     }
 

@@ -70,6 +70,7 @@ class ExpenseServiceTest {
 
     @Test void rejectionRequiresAReviewerComment() {
         when(users.findByEmailIgnoreCase("manager@test.com")).thenReturn(Optional.of(manager));
+        when(access.hasProjectRole(3L, 8L, "PROJECT_MANAGER")).thenReturn(true);
         Map<String,Object> row = new HashMap<>();
         row.put("id", 12L); row.put("project_id", 3L); row.put("employee_id", 7L); row.put("status", "PENDING_APPROVAL");
         when(db.queryForList(startsWith("SELECT e.*"),eq(12L))).thenReturn(List.of(row));

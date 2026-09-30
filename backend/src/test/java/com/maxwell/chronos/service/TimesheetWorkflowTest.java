@@ -42,8 +42,17 @@ class TimesheetWorkflowTest {
     @BeforeEach void setup() {
         lenient().when(access.companyIds(anyLong())).thenReturn(List.of(1L));
         lenient().when(access.maySubmit(anyLong(), anyLong())).thenReturn(true);
-        lenient().when(access.mayReview(anyLong(), anyLong(), anyLong(), anyBoolean(), anyString())).thenReturn(true);
-        lenient().when(access.mayManageProject(anyLong(), anyLong())).thenReturn(true);
+        lenient().when(access.mayReview(anyLong(), anyLong(), anyLong(), anyBoolean(), nullable(String.class)))
+                .thenAnswer(call -> canReview(call.getArgument(1), call.getArgument(2)));
+        lenient().doAnswer(call -> {
+            if (!canReview(call.getArgument(1), call.getArgument(2)))
+                throw new org.springframework.security.access.AccessDeniedException("A separate project reviewer is required");
+            return null;
+        }).when(access).requireMayReview(anyLong(), anyLong(), anyLong(), anyBoolean(), nullable(String.class));
+        lenient().when(access.hasPlatformRole(2L, "PLATFORM_ADMIN"))
+                .thenAnswer(call -> admin.getRole() == UserRole.ADMIN);
+        lenient().when(access.mayManageProject(anyLong(), anyLong())).thenAnswer(call ->
+                ((Long) call.getArgument(1)).equals(2L) && admin.getRole() == UserRole.PROJECT_ADMIN);
         employee = User.builder().id(1L).firstName("Test").lastName("Employee").role(UserRole.EMPLOYEE)
                 .isActive(true).build();
         admin = User.builder().id(2L).role(UserRole.ADMIN).isActive(true).build();
@@ -51,6 +60,19 @@ class TimesheetWorkflowTest {
         sheet = Timesheet.builder().id(4L).companyId(1L).user(employee).year(2026).month(9).status(TimesheetStatus.DRAFT).build();
         submission = TimesheetProjectSubmission.builder().id(5L).timesheet(sheet).project(project)
                 .status(TimesheetStatus.DRAFT).totalHours(BigDecimal.ZERO).build();
+        lenient().doAnswer(call -> {
+            Long projectId = call.getArgument(1);
+            var current = projectId.equals(3L) ? submission : null;
+            boolean open = current != null && current.getCorrectionUntil() != null
+                    && current.getCorrectionUntil().isAfter(LocalDateTime.now()) && current.isEditable();
+            if (!open && (sheet.isApprovalFrozen() || sheet.getStatus() == TimesheetStatus.APPROVED
+                    || sheet.isLocked() || current != null && (current.getStatus() == TimesheetStatus.APPROVED
+                    || current.getStatus() == TimesheetStatus.LOCKED())))
+                throw new IllegalArgumentException("This timesheet was approved; request an opening from your Project Admin");
+            if (!open && !TimesheetService.standardEditingOpen(sheet, LocalDate.now()))
+                throw new IllegalArgumentException("This timesheet month is closed; request an opening from your Project Admin");
+            return null;
+        }).when(periods).requireEditable(anyLong(), anyLong(), any(LocalDate.class));
         when(timesheets.findForUpdate(4L)).thenReturn(Optional.of(sheet));
         when(timesheets.save(any())).thenAnswer(i -> i.getArgument(0));
         when(submissions.findTimesheetId(5L)).thenReturn(Optional.of(4L));
@@ -65,6 +87,13 @@ class TimesheetWorkflowTest {
                 .project(project).user(employee).plannedHours(new BigDecimal("160")).billRate(new BigDecimal("75"))
                 .startDate(LocalDate.of(2026,9,5)).endDate(LocalDate.of(2026,9,25)).isActive(true).build()));
         when(entries.save(any())).thenAnswer(i -> { TimeEntry e = i.getArgument(0); e.setId(9L); return e; });
+    }
+
+    private boolean canReview(Long reviewerId, Long employeeId) {
+        if (reviewerId.equals(employeeId) || reviewerId.equals(2L) && admin.getRole() == UserRole.ADMIN) return false;
+        return reviewerId.equals(2L) && admin.getRole() == UserRole.PROJECT_ADMIN
+                || project.getProjectManager() != null && reviewerId.equals(project.getProjectManager().getId())
+                || project.getProjectManagerHoursApprover() != null && reviewerId.equals(project.getProjectManagerHoursApprover().getId());
     }
 
     @Test void cumulativeHoursCombineOutstandingEntriesAndApprovedTotals() {
@@ -84,6 +113,20 @@ class TimesheetWorkflowTest {
         project.setIsActive(true);
         var manager = User.builder().id(6L).role(UserRole.EMPLOYEE).build();
         project.setProjectManager(manager);
+        when(periods.period(eq(3L), any(LocalDate.class))).thenAnswer(call -> {
+            LocalDate day = call.getArgument(1);
+            YearMonth month = YearMonth.from(day);
+            return new TimesheetPeriodService.Period(month.atDay(1), month.atEndOfMonth(), "MONTHLY");
+        });
+        when(periods.view(eq(1L), eq(1L), eq(3L), any(LocalDate.class))).thenAnswer(call -> {
+            var state = new HashMap<String, Object>();
+            state.put("requiresSubmission", true);
+            state.put("status", submission.getStatus().name());
+            state.put("totalHours", BigDecimal.ZERO);
+            state.put("late", true);
+            state.put("timesheetId", null);
+            return state;
+        });
         when(projectService.canManageProjects(6L)).thenReturn(true);
         when(projectService.visibleProjectIds(manager)).thenReturn(Set.of(3L));
         when(projectService.visibleProjectIds(admin)).thenReturn(Set.of(3L));
@@ -188,16 +231,17 @@ class TimesheetWorkflowTest {
         submission.setStatus(TimesheetStatus.SUBMITTED);
         var stranger = User.builder().id(7L).role(UserRole.EMPLOYEE).build();
         when(users.findById(7L)).thenReturn(Optional.of(stranger));
-        assertThrows(IllegalArgumentException.class, () -> service.approveProjectSubmission(5L, 7L));
+        assertThrows(org.springframework.security.access.AccessDeniedException.class, () -> service.approveProjectSubmission(5L, 7L));
         assertEquals(TimesheetStatus.APPROVED, service.approveProjectSubmission(5L, 6L).getStatus());
     }
 
     @Test void projectDetailExcludesOtherProjectsAndRejectsUnrelatedProjectIds() {
         add(LocalDate.of(2026,9,10), "8", List.of());
         var manager = User.builder().id(6L).role(UserRole.EMPLOYEE).build();
+        project.setProjectManager(manager);
         when(projectService.canReviewProjects(6L)).thenReturn(true);
         when(projectService.visibleProjectIds(manager)).thenReturn(Set.of(3L));
-        var other = Project.builder().id(30L).code("PRIVATE").build();
+        var other = Project.builder().id(30L).companyId(1L).code("PRIVATE").build();
         when(projects.findById(30L)).thenReturn(Optional.of(other));
         sheet.getTimeEntries().add(TimeEntry.builder().id(31L).timesheet(sheet).project(other).hours(new BigDecimal("20")).build());
         var detail = service.getProjectTimesheet(4L, 3L, manager);
@@ -205,7 +249,8 @@ class TimesheetWorkflowTest {
         assertEquals(new BigDecimal("8"), detail.getTotalHours());
         assertEquals(3L, detail.getPrimaryProjectId());
         assertTrue(detail.getVacationDays().isEmpty());
-        assertThrows(IllegalArgumentException.class, () -> service.getProjectTimesheet(4L, 30L, manager));
+        assertThrows(org.springframework.security.access.AccessDeniedException.class,
+                () -> service.getProjectTimesheet(4L, 30L, manager));
     }
 
     @Test void managersOwnHoursRouteToDesignatedApprover() {
@@ -219,7 +264,7 @@ class TimesheetWorkflowTest {
         assertEquals(TimesheetStatus.APPROVED, service.approveProjectSubmission(5L, 6L).getStatus());
     }
 
-    @Test void managerCanApproveOwnHoursWhenDesignatedAndSeeThemInQueue() {
+    @Test void managerCannotApproveOwnHoursEvenWhenDesignated() {
         project.setProjectManager(employee);
         project.setProjectManagerHoursApprover(employee);
         submission.setAssignedApprover(employee);
@@ -227,12 +272,12 @@ class TimesheetWorkflowTest {
         when(users.findById(1L)).thenReturn(Optional.of(employee));
         when(projectService.canReviewProjects(1L)).thenReturn(true);
         when(submissions.findByStatus(TimesheetStatus.SUBMITTED)).thenReturn(List.of(submission));
-        assertEquals(1, service.getPendingProjectSubmissions(employee).size());
-        assertEquals(TimesheetStatus.APPROVED, service.approveProjectSubmission(5L, 1L).getStatus());
-        assertEquals(employee, submission.getApprovedBy());
+        assertTrue(service.getPendingProjectSubmissions(employee).isEmpty());
+        assertThrows(org.springframework.security.access.AccessDeniedException.class,
+                () -> service.approveProjectSubmission(5L, 1L));
     }
 
-    @Test void pmOwnHoursAppearInQueueEvenWhenAssignedToAnotherApprover() {
+    @Test void pmOwnHoursStayOutOfTheirReviewQueue() {
         project.setProjectManager(employee);
         project.setProjectManagerHoursApprover(admin);
         submission.setAssignedApprover(admin);
@@ -240,10 +285,9 @@ class TimesheetWorkflowTest {
         when(users.findById(1L)).thenReturn(Optional.of(employee));
         when(projectService.canReviewProjects(1L)).thenReturn(true);
         when(submissions.findByStatus(TimesheetStatus.SUBMITTED)).thenReturn(List.of(submission));
-        assertEquals(1, service.getPendingProjectSubmissions(employee).size());
-        assertEquals(1L, service.getPendingProjectSubmissions(employee).get(0).getProjectManagerId());
-        assertEquals(TimesheetStatus.APPROVED, service.approveProjectSubmission(5L, 1L).getStatus());
-        assertEquals(employee, submission.getApprovedBy());
+        assertTrue(service.getPendingProjectSubmissions(employee).isEmpty());
+        assertThrows(org.springframework.security.access.AccessDeniedException.class,
+                () -> service.approveProjectSubmission(5L, 1L));
     }
 
     @Test void approverWithoutPmAssignmentCannotAccessMissingTimesheets() {
@@ -251,7 +295,7 @@ class TimesheetWorkflowTest {
                 () -> service.getMissingTimesheets(2026, 9, employee));
     }
 
-    @Test void storedApproverControlsReviewUntilExplicitTransfer() {
+    @Test void currentManagerControlsReviewAfterHandover() {
         var original = User.builder().id(6L).role(UserRole.EMPLOYEE).build();
         var replacement = User.builder().id(7L).role(UserRole.EMPLOYEE).build();
         project.setProjectManager(replacement);
@@ -259,8 +303,9 @@ class TimesheetWorkflowTest {
         submission.setStatus(TimesheetStatus.SUBMITTED);
         when(users.findById(6L)).thenReturn(Optional.of(original));
         when(users.findById(7L)).thenReturn(Optional.of(replacement));
-        assertThrows(IllegalArgumentException.class, () -> service.approveProjectSubmission(5L, 7L));
-        assertEquals(TimesheetStatus.APPROVED, service.approveProjectSubmission(5L, 6L).getStatus());
+        assertThrows(org.springframework.security.access.AccessDeniedException.class,
+                () -> service.approveProjectSubmission(5L, 6L));
+        assertEquals(TimesheetStatus.APPROVED, service.approveProjectSubmission(5L, 7L).getStatus());
     }
 
     @Test void rejectsWrongMonthAndDatesOutsideAssignment() {
@@ -312,10 +357,10 @@ class TimesheetWorkflowTest {
         submission.setStatus(TimesheetStatus.SUBMITTED);
         project.setProjectManager(admin);
         when(projectService.managesProject(3L, 2L)).thenReturn(true);
-        assertThrows(IllegalArgumentException.class, () -> service.approveProjectSubmission(5L, 2L));
-        assertThrows(IllegalArgumentException.class, () -> service.approveTimesheet(4L, 2L));
-        assertThrows(IllegalArgumentException.class, () -> service.rejectProjectSubmission(5L, "Correction", 2L));
-        assertThrows(IllegalArgumentException.class, () -> service.rejectTimesheet(4L, "Correction", 2L));
+        assertThrows(org.springframework.security.access.AccessDeniedException.class, () -> service.approveProjectSubmission(5L, 2L));
+        assertThrows(org.springframework.security.access.AccessDeniedException.class, () -> service.approveTimesheet(4L, 2L));
+        assertThrows(org.springframework.security.access.AccessDeniedException.class, () -> service.rejectProjectSubmission(5L, "Correction", 2L));
+        assertThrows(org.springframework.security.access.AccessDeniedException.class, () -> service.rejectTimesheet(4L, "Correction", 2L));
         verify(submissions, never()).save(any());
         assertEquals(TimesheetStatus.SUBMITTED, submission.getStatus());
     }
@@ -431,7 +476,7 @@ class TimesheetWorkflowTest {
         sheet.setStatus(TimesheetStatus.APPROVED);
         sheet.setApprovalFrozen(true);
         submission.setStatus(TimesheetStatus.APPROVED);
-        var otherProject = Project.builder().id(30L).code("P2").name("Other project")
+        var otherProject = Project.builder().id(30L).companyId(1L).code("P2").name("Other project")
                 .status(ProjectStatus.ACTIVE).build();
         var otherSubmission = TimesheetProjectSubmission.builder().id(31L).timesheet(sheet)
                 .project(otherProject).status(TimesheetStatus.DRAFT).totalHours(BigDecimal.ZERO).build();
