@@ -250,7 +250,7 @@ class TimesheetWorkflowTest {
         assertEquals(new BigDecimal("8"), detail.getTotalHours());
         assertEquals(3L, detail.getPrimaryProjectId());
         assertTrue(detail.getVacationDays().isEmpty());
-        assertThrows(org.springframework.security.access.AccessDeniedException.class,
+        assertThrows(IllegalArgumentException.class,
                 () -> service.getProjectTimesheet(4L, 30L, manager));
     }
 
