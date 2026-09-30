@@ -237,3 +237,11 @@ body.theme-dark .timesheet-page .summary-tile > .status-rejected { color: var(--
 @media (prefers-reduced-motion: reduce) {
   .timesheet-page button { transition: none; }
 }
+.timesheet-page .timesheet-calendar-grid .calendar-day-late {
+  outline: 2px solid #b45309;
+  outline-offset: -2px;
+}
+.timesheet-page .timesheet-calendar-grid .calendar-day-late .day-status-pill {
+  color: #92400e;
+  background: #fef3c7;
+}

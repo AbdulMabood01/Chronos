@@ -26,6 +26,9 @@ public class ProjectDTO {
     private ProjectStatus status;
     private BigDecimal totalAllocatedHours;
     private BigDecimal expenseBudget;
+    private String approvalFrequency;
+    private String pendingApprovalFrequency;
+    private java.time.LocalDate approvalFrequencyEffectiveOn;
     private Long projectManagerId;
     private String projectManagerName;
     private Long projectManagerHoursApproverId;

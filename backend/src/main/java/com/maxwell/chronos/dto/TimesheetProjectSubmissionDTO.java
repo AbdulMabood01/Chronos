@@ -18,6 +18,7 @@ public class TimesheetProjectSubmissionDTO {
     private Long id;
     private Long timesheetId;
     private Long projectId;
+    private Long companyId;
     private String projectCode;
     private String projectName;
     private Long projectManagerId;

@@ -135,6 +135,7 @@ export const expenseAPI = {
   pending: () => apiClient.get('/expenses/pending'),
   project: id => apiClient.get(`/expenses/projects/${id}`),
   totals: id => apiClient.get(`/expenses/projects/${id}/totals`),
+  budgetCheck: (id, amount, excludeExpenseId) => apiClient.get(`/expenses/projects/${id}/budget-check`, { params: { amount, excludeExpenseId } }),
   detail: id => apiClient.get(`/expenses/${id}`),
   save: (id, expense, receipt) => {
     const data = new FormData();
@@ -173,9 +174,17 @@ export const userAPI = {
 };
 
 export const timesheetAPI = {
+  getApprovalPeriod: (projectId, date, userId) => apiClient.get('/timesheet-periods', { params: { projectId, date, userId } }),
+  submitApprovalPeriod: (projectId, date) => apiClient.post('/timesheet-periods/submit', null, { params: { projectId, date } }),
+  decideApprovalPeriod: (id, approve, comment, fallbackReason) => apiClient.post(`/timesheet-periods/${id}/decision`, { approve, comment, fallbackReason }),
+  requestPeriodOpening: (projectId, date, reason) => apiClient.post('/timesheet-periods/opening', { reason }, { params: { projectId, date } }),
+  decidePeriodOpening: (id, approve, comment) => apiClient.post(`/timesheet-periods/${id}/opening-decision`, { approve, comment }),
+  getPendingApprovalPeriods: () => apiClient.get('/timesheet-periods/pending'),
+  getApprovalPeriodHistory: id => apiClient.get(`/timesheet-periods/${id}/history`),
+  getPendingPeriodOpenings: () => apiClient.get('/timesheet-periods/openings/pending'),
   getApprovalHistory: (id, projectId) => apiClient.get('/timesheets/' + id + '/projects/' + projectId + '/history'),
   getMissingTimesheets: (year, month) => apiClient.get('/timesheets/missing', { params: { year, month } }),
-  getTimesheet: (year, month) => apiClient.get(`/timesheets/${year}/${month}`),
+  getTimesheet: (year, month, companyId) => apiClient.get(`/timesheets/${year}/${month}`, { params: { companyId } }),
   getTimesheetById: (timesheetId, projectId) => apiClient.get(`/timesheets/id/${timesheetId}`, projectId ? { params: { projectId } } : undefined),
   createTimesheet: (year, month) => apiClient.post('/timesheets', null, { params: { year, month } }),
   addTimeEntry: (timesheetId, data) => apiClient.post(`/timesheets/${timesheetId}/time-entries`, data),
@@ -281,6 +290,8 @@ export const settingsAPI = {
 };
 
 export const reportsAPI = {
+  approvalPeriods: (year, month) => apiClient.get('/reports/timesheet-periods', { params: { year, month } }),
+  exportApprovalPeriods: ids => apiClient.get('/reports/timesheet-periods/export', { params: { ids: ids.join(',') }, responseType: 'blob' }),
   exportTimesheets: (year, month, userIds = []) => apiClient.get('/reports/timesheets/export', {
     params: { year, month, ...(userIds.length ? { userIds: userIds.join(',') } : {}) },
     responseType: 'blob',
@@ -294,6 +305,7 @@ export const reportsAPI = {
   }),
   exportSingleTimesheetPdf: (timesheetId) => apiClient.get(`/reports/timesheets/${timesheetId}/pdf`, { responseType: 'blob' }),
   exportProjectTimesheetPdf: (submissionId) => apiClient.get(`/reports/timesheet-projects/${submissionId}/pdf`, { responseType: 'blob' }),
+  exportApprovalPeriodPdf: id => apiClient.get(`/reports/timesheet-periods/${id}/pdf`, { responseType: 'blob' }),
   exportVacationRequests: (year) => apiClient.get('/reports/vacation/export', { params: { year }, responseType: 'blob' }),
   getMonthlySummary: (year, month) => apiClient.get('/reports/summary', { params: { year, month } }),
 };

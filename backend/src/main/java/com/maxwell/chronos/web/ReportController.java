@@ -28,7 +28,7 @@ public class ReportController {
                                                     @RequestParam(required = false) String userIds,
                                                     @AuthenticationPrincipal Jwt jwt) {
         var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        if (user == null || (!user.isAdmin() && !user.isProjectAdmin())) {
+        if (user == null || !user.isAdmin()) {
             return ResponseEntity.status(403).build();
         }
 
@@ -44,7 +44,7 @@ public class ReportController {
     public ResponseEntity<byte[]> exportProjectTimesheets(@RequestParam String submissionIds,
                                                           @AuthenticationPrincipal Jwt jwt) {
         var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        if (user == null || (!user.isAdmin() && !user.isProjectAdmin())) {
+        if (user == null || !user.isAdmin()) {
             return ResponseEntity.status(403).build();
         }
 
@@ -59,7 +59,7 @@ public class ReportController {
     @GetMapping("/vacation/export")
     public ResponseEntity<byte[]> exportVacationRequests(@RequestParam int year, @AuthenticationPrincipal Jwt jwt) {
         var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        if (user == null || (!user.isAdmin() && !user.isProjectAdmin())) {
+        if (user == null || !user.isAdmin()) {
             return ResponseEntity.status(403).build();
         }
 
@@ -80,7 +80,7 @@ public class ReportController {
         }
 
         try {
-            byte[] excel = reportService.exportTimesheetById(timesheetId, user.getId(), user.isAdmin() || user.isProjectAdmin());
+            byte[] excel = reportService.exportTimesheetById(timesheetId, user.getId(), user.isAdmin());
             String filename = "timesheet-" + timesheetId + ".xlsx";
             return ResponseEntity.ok()
                     .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
@@ -95,7 +95,7 @@ public class ReportController {
     public ResponseEntity<List<Map<String, Object>>> getMonthlySummary(@RequestParam int year, @RequestParam int month,
                                                                         @AuthenticationPrincipal Jwt jwt) {
         var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        if (user == null || (!user.isAdmin() && !user.isProjectAdmin())) {
+        if (user == null || !user.isAdmin()) {
             return ResponseEntity.status(403).build();
         }
 
@@ -111,7 +111,7 @@ public class ReportController {
         }
 
         try {
-            byte[] pdf = reportService.exportTimesheetPdfById(timesheetId, user.getId(), user.isAdmin() || user.isProjectAdmin());
+            byte[] pdf = reportService.exportTimesheetPdfById(timesheetId, user.getId(), user.isAdmin());
             String filename = "timesheet-" + timesheetId + ".pdf";
             return ResponseEntity.ok()
                     .contentType(MediaType.APPLICATION_PDF)
@@ -131,7 +131,7 @@ public class ReportController {
         }
 
         try {
-            byte[] pdf = reportService.exportProjectTimesheetPdfById(submissionId, user.getId(), user.isAdmin() || user.isProjectAdmin());
+            byte[] pdf = reportService.exportProjectTimesheetPdfById(submissionId, user.getId(), user.isAdmin());
             String filename = "project-timesheet-" + submissionId + ".pdf";
             return ResponseEntity.ok()
                     .contentType(MediaType.APPLICATION_PDF)
@@ -140,6 +140,28 @@ public class ReportController {
         } catch (IllegalArgumentException e) {
             throw e;
         }
+    }
+
+    @GetMapping("/timesheet-periods/{periodId}/pdf")
+    public ResponseEntity<byte[]> exportApprovalPeriodPdf(@PathVariable Long periodId,@AuthenticationPrincipal Jwt jwt) {
+        var user=userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
+        byte[] pdf=reportService.exportApprovalPeriodPdf(periodId,user.getId());
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION,ContentDisposition.attachment().filename("timesheet-period-"+periodId+".pdf").build().toString()).body(pdf);
+    }
+
+    @GetMapping("/timesheet-periods")
+    public ResponseEntity<List<Map<String,Object>>> approvalPeriods(@RequestParam int year,@RequestParam int month,@AuthenticationPrincipal Jwt jwt) {
+        var user=userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
+        return ResponseEntity.ok(reportService.approvalPeriods(year,month,user.getId()));
+    }
+
+    @GetMapping("/timesheet-periods/export")
+    public ResponseEntity<byte[]> exportApprovalPeriods(@RequestParam String ids,@AuthenticationPrincipal Jwt jwt) {
+        var user=userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
+        byte[] archive=reportService.exportApprovalPeriods(parseUserIds(ids),user.getId());
+        return ResponseEntity.ok().contentType(MediaType.parseMediaType("application/zip"))
+                .header(HttpHeaders.CONTENT_DISPOSITION,ContentDisposition.attachment().filename("approved-timesheet-periods.zip").build().toString()).body(archive);
     }
 
     private List<Long> parseUserIds(String userIds) {

@@ -17,6 +17,7 @@ import java.util.Set;
 public class TimesheetDTO {
     private Long id;
     private Long userId;
+    private Long companyId;
     private String userName;
     private String userJobTitle;
     private Long primaryProjectId;

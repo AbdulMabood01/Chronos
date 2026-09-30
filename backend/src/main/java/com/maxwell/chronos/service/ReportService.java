@@ -11,6 +11,10 @@ import com.maxwell.chronos.enums.UserRole;
 import com.maxwell.chronos.enums.VacationStatus;
 import com.maxwell.chronos.repository.TimesheetProjectSubmissionRepository;
 import com.maxwell.chronos.repository.TimesheetRepository;
+import com.maxwell.chronos.repository.TimeEntryRepository;
+import com.maxwell.chronos.repository.UserRepository;
+import com.maxwell.chronos.repository.ProjectRepository;
+import org.springframework.jdbc.core.JdbcTemplate;
 import com.maxwell.chronos.repository.VacationRequestRepository;
 import org.apache.poi.ss.usermodel.BorderStyle;
 import org.apache.poi.ss.usermodel.Cell;
@@ -60,6 +64,86 @@ public class ReportService {
     private final TimesheetProjectSubmissionRepository projectSubmissionRepository;
     private final ProjectAssignmentRepository projectAssignmentRepository;
     private final VacationRequestRepository vacationRequestRepository;
+    private final TimeEntryRepository timeEntryRepository;
+    private final UserRepository userRepository;
+    private final ProjectRepository projectRepository;
+    private final CompanyAccessService companyAccess;
+    private final JdbcTemplate db;
+
+    public List<Map<String,Object>> approvalPeriods(int year,int month,long requesterId) {
+        YearMonth selected=YearMonth.of(year,month);
+        return db.queryForList("SELECT a.id,a.user_id,a.project_id,a.period_start,a.period_end,a.frequency,a.status,a.is_late," +
+                "p.code AS project_code,p.name AS project_name,u.employee_id,concat_ws(' ',u.first_name,u.last_name) AS user_name," +
+                "COALESCE((SELECT sum(e.hours) FROM time_entries e JOIN timesheets t ON t.id=e.timesheet_id " +
+                "WHERE t.user_id=a.user_id AND e.project_id=a.project_id AND e.entry_date BETWEEN a.period_start AND a.period_end " +
+                "AND e.entry_date BETWEEN ? AND ?),0) AS total_hours " +
+                "FROM timesheet_approval_periods a JOIN projects p ON p.id=a.project_id JOIN users u ON u.id=a.user_id " +
+                "WHERE a.period_start<=? AND a.period_end>=? ORDER BY p.code,u.last_name,a.period_start",
+                selected.atDay(1),selected.atEndOfMonth(),selected.atEndOfMonth(),selected.atDay(1)).stream()
+                .filter(row->companyAccess.hasPlatformRole(requesterId,"PLATFORM_ADMIN")
+                        || companyAccess.mayManageProject(((Number)row.get("project_id")).longValue(),requesterId))
+                .map(row->{
+                    var result=new LinkedHashMap<String,Object>();
+                    result.put("id",row.get("id")); result.put("projectId",row.get("project_id"));
+                    result.put("projectCode",row.get("project_code")); result.put("projectName",row.get("project_name"));
+                    result.put("userId",row.get("user_id")); result.put("userName",row.get("user_name"));
+                    result.put("employeeId",row.get("employee_id")); result.put("periodStart",row.get("period_start"));
+                    result.put("periodEnd",row.get("period_end")); result.put("frequency",row.get("frequency"));
+                    result.put("status",row.get("status")); result.put("late",row.get("is_late"));
+                    result.put("totalHours",row.get("total_hours"));
+                    return (Map<String,Object>)result;
+                }).toList();
+    }
+
+    public byte[] exportApprovalPeriods(List<Long> periodIds,long requesterId) {
+        if(periodIds==null || periodIds.isEmpty()) throw new IllegalArgumentException("Select approved periods to export");
+        try(ByteArrayOutputStream out=new ByteArrayOutputStream(); ZipOutputStream zip=new ZipOutputStream(out)) {
+            for(Long id:periodIds.stream().distinct().toList()) {
+                zip.putNextEntry(new ZipEntry("timesheet-period-"+id+".pdf"));
+                zip.write(exportApprovalPeriodPdf(id,requesterId));
+                zip.closeEntry();
+            }
+            zip.finish(); return out.toByteArray();
+        } catch(IOException ex) { throw new UncheckedIOException(ex); }
+    }
+
+    public byte[] exportApprovalPeriodPdf(long periodId, long requesterId) {
+        Map<String,Object> row=db.queryForMap("SELECT * FROM timesheet_approval_periods WHERE id=?",periodId);
+        long userId=((Number)row.get("user_id")).longValue();
+        long projectId=((Number)row.get("project_id")).longValue();
+        if(requesterId!=userId && !companyAccess.mayReview(projectId,requesterId,userId,false,"PDF preview")
+                && !companyAccess.mayManageProject(projectId,requesterId))
+            throw new org.springframework.security.access.AccessDeniedException("Timesheet access denied");
+        Object correction=row.get("correction_until");
+        java.time.Instant correctionUntil=correction instanceof java.sql.Timestamp stamp ? stamp.toInstant()
+                : correction instanceof java.time.OffsetDateTime offset ? offset.toInstant() : null;
+        if(!"APPROVED".equals(row.get("status")) || correctionUntil!=null && correctionUntil.isAfter(java.time.Instant.now()))
+            throw new IllegalArgumentException("Approval period must be finalized before PDF export");
+        LocalDate start=row.get("period_start") instanceof LocalDate d ? d : ((java.sql.Date)row.get("period_start")).toLocalDate();
+        LocalDate end=row.get("period_end") instanceof LocalDate d ? d : ((java.sql.Date)row.get("period_end")).toLocalDate();
+        var employee=userRepository.findById(userId).orElseThrow();
+        var project=projectRepository.findById(projectId).orElseThrow();
+        var entries=timeEntryRepository.findPeriodEntries(userId,projectId,start,end);
+        try(TimesheetPdf pdf=new TimesheetPdf("PERIOD-"+periodId,start+" to "+end)) {
+            pdf.section("Employee & reporting period");
+            pdf.field("Employee",employee.getFullName());
+            pdf.field("Employee ID",employee.getEmployeeId());
+            pdf.field("Designation",employee.getJobTitle());
+            pdf.field("Project",project.getCode()+" - "+project.getName());
+            pdf.field("Status","APPROVED");
+            pdf.section("Approval record");
+            Long reviewerId=row.get("reviewed_by_id")==null?null:((Number)row.get("reviewed_by_id")).longValue();
+            pdf.field("Approver",reviewerId==null?null:userRepository.findById(reviewerId).map(com.maxwell.chronos.domain.User::getFullName).orElse(null));
+            pdf.field("Approval date",row.get("reviewed_at")==null?null:row.get("reviewed_at").toString());
+            pdf.field("Approved bill rate",rateLabel((BigDecimal)row.get("approved_bill_rate")));
+            pdf.beginEntries();
+            if(entries.isEmpty()) pdf.entry("","","","No time entries recorded.");
+            else for(TimeEntry entry:entries) writePdfEntry(pdf,entry);
+            pdf.total(entries.stream().map(TimeEntry::getHours).reduce(BigDecimal.ZERO,BigDecimal::add)
+                    .setScale(2,RoundingMode.HALF_UP).toPlainString());
+            return pdf.finish();
+        } catch(IOException ex) { throw new UncheckedIOException(ex); }
+    }
 
     public byte[] exportTimesheets(int year, int month, List<Long> userIds) {
         List<Timesheet> timesheets = filterTimesheets(timesheetRepository.findByYearAndMonth(year, month), userIds)

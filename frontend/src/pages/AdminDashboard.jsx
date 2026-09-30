@@ -60,11 +60,11 @@ export default function AdminDashboard() {
   const loadPendingItems = async () => {
     try {
       const requests = [
-        user?.role !== 'ADMIN' ? timesheetAPI.getPendingProjectSubmissions() : Promise.resolve({ data: [] }),
+        user?.role !== 'ADMIN' ? timesheetAPI.getPendingApprovalPeriods() : Promise.resolve({ data: [] }),
         user?.role === 'ADMIN' ? vacationAPI.getPendingRequests() : Promise.resolve({ data: [] }),
         canReviewLetters ? letterRequestAPI.getPendingRequests() : Promise.resolve({ data: [] }),
         expenseAPI.pending(),
-        user?.role === 'PROJECT_ADMIN' ? timesheetAPI.getPendingOpeningRequests() : Promise.resolve({ data: [] }),
+        user?.canManageProjects ? timesheetAPI.getPendingPeriodOpenings() : Promise.resolve({ data: [] }),
       ];
       const [timesheetRes, vacationRes, letterRes, expenseRes, openingRes] = await Promise.allSettled(requests);
       if (timesheetRes.status === 'fulfilled') setPendingTimesheets(timesheetRes.value.data || []);
@@ -89,14 +89,15 @@ export default function AdminDashboard() {
       entityId: task.id,
       timesheetId: task.timesheetId,
       projectId: task.projectId,
+      periodStart: task.periodStart,
       type: 'Timesheet Opening',
       employee: task.userName,
       project: task.projectCode,
-      period: `${task.month}/${task.year}`,
+      period: task.periodStart ? `${task.periodStart} to ${task.periodEnd}` : `${task.month}/${task.year}`,
       detail: 'Opening requested',
-      timeDetail: task.employeeComment,
-      submittedAt: task.createdAt,
-      status: task.status,
+      timeDetail: task.openingReason || task.employeeComment,
+      submittedAt: task.openingRequestedAt || task.createdAt,
+      status: task.openingStatus || task.status,
       kind: 'opening',
       opening: task,
     })),
@@ -105,11 +106,12 @@ export default function AdminDashboard() {
       entityId: task.id,
       timesheetId: task.timesheetId,
       projectId: task.projectId,
+      periodStart: task.periodStart,
       type: task.status === 'CHANGE_REQUESTED' ? 'Timesheet Change' : 'Timesheet Approval',
       employee: task.userName,
       designation: task.userJobTitle || '-',
       project: `${task.projectCode}${task.projectName ? ` - ${task.projectName}` : ''}`,
-      period: `${task.month}/${task.year}`,
+      period: task.periodStart ? `${task.periodStart} to ${task.periodEnd}${task.late ? ' · Late' : ''}` : `${task.month}/${task.year}`,
       detail: `${Number(task.totalHours || 0).toFixed(2)} hours`,
       timeDetail: (task.timeEntries || [])
         .flatMap((entry) => (entry.sessions || []).map((session) => `${entry.entryDate}: ${session.loginTime}-${session.logoutTime}`))
@@ -119,6 +121,7 @@ export default function AdminDashboard() {
       kind: 'timesheet',
       isOwn: task.userId === user?.id,
       fallbackRequired: task.fallbackRequired,
+      periodBased: Boolean(task.periodStart),
     })),
     ...pendingVacations.map((task) => ({
       id: `vacation-${task.id}`,
@@ -166,7 +169,7 @@ export default function AdminDashboard() {
     setOpeningBusy(true);
     setError('');
     try {
-      await timesheetAPI.decideOpeningRequest(reviewingOpening.id, approve, openingComment.trim());
+      await timesheetAPI.decidePeriodOpening(reviewingOpening.id, approve, openingComment.trim());
       setReviewingOpening(null);
       setOpeningComment('');
       await loadPendingItems();
@@ -196,7 +199,7 @@ export default function AdminDashboard() {
   const approveTask = async (task, accountingType = null) => {
     try {
       if (task.kind === 'timesheet') {
-        await timesheetAPI.approveProjectSubmission(task.entityId);
+        await timesheetAPI.decideApprovalPeriod(task.entityId, true, null, null);
       } else if (task.kind === 'vacation') {
         await vacationAPI.approveVacation(task.entityId, accountingType);
       } else {
@@ -224,7 +227,7 @@ export default function AdminDashboard() {
 
     try {
       if (rejectingTask.kind === 'timesheet') {
-        await timesheetAPI.rejectProjectSubmission(rejectingTask.entityId, reason);
+        await timesheetAPI.decideApprovalPeriod(rejectingTask.entityId, false, reason, null);
       } else if (rejectingTask.kind === 'vacation') {
         await vacationAPI.rejectVacation(rejectingTask.entityId, reason);
       } else {
@@ -313,7 +316,7 @@ export default function AdminDashboard() {
                   {task.kind === 'opening' ? (
                     <button className="button button-small button-secondary" onClick={() => { setReviewingOpening(task.opening); setOpeningComment(''); setError(''); }} type="button">Review</button>
                   ) : task.kind === 'timesheet' ? (
-                    <button className="button button-small button-secondary" onClick={() => navigate(`/timesheet/${task.timesheetId}?projectId=${task.projectId}`)}>
+                    <button className="button button-small button-secondary" onClick={() => navigate(`/timesheet/${task.timesheetId}?projectId=${task.projectId}${task.periodStart ? `&date=${task.periodStart}` : ''}`)}>
                       Review
                     </button>
                   ) : task.kind === 'letter' ? (
@@ -345,9 +348,9 @@ export default function AdminDashboard() {
       {reviewingOpening && <div className="modal-backdrop" role="presentation">
         <div className="modal-card expense-review-modal opening-review-modal" role="dialog" aria-modal="true" aria-labelledby="opening-review-title">
           <div className="modal-header"><h2 id="opening-review-title">Review timesheet opening</h2><button type="button" className="modal-close" aria-label="Close" onClick={() => setReviewingOpening(null)}>&times;</button></div>
-          <p><strong>{reviewingOpening.userName}</strong> / {reviewingOpening.projectCode} / {reviewingOpening.month}/{reviewingOpening.year}</p>
-          <p className="opening-review-reason"><span>Employee comment</span>{reviewingOpening.employeeComment}</p>
-          <button type="button" className="button button-secondary button-small" onClick={() => navigate(`/timesheet/${reviewingOpening.timesheetId}?projectId=${reviewingOpening.projectId}`)}>View timesheet</button>
+          <p><strong>{reviewingOpening.userName}</strong> / {reviewingOpening.projectCode} / {reviewingOpening.periodStart} to {reviewingOpening.periodEnd}</p>
+          <p className="opening-review-reason"><span>Employee comment</span>{reviewingOpening.openingReason}</p>
+          <button type="button" className="button button-secondary button-small" onClick={() => navigate(`/timesheet/${reviewingOpening.timesheetId}?projectId=${reviewingOpening.projectId}${reviewingOpening.periodStart ? `&date=${reviewingOpening.periodStart}` : ''}`)}>View timesheet</button>
           {error && <p role="alert" className="error-message">{error}</p>}
           <label className="expense-review-comment">Project Admin comment<textarea value={openingComment} maxLength={500} rows={3} onChange={event => setOpeningComment(event.target.value)} placeholder="Optional for approval, required to decline" /></label>
           <div className="expense-actions"><button type="button" disabled={openingBusy} className="button button-primary" onClick={() => decideOpening(true)}>Approve for 7 days</button><button type="button" disabled={openingBusy || !openingComment.trim()} className="button button-secondary" onClick={() => decideOpening(false)}>Decline</button></div>
@@ -358,6 +361,7 @@ export default function AdminDashboard() {
         <div className="modal-card expense-review-modal" role="dialog" aria-modal="true" aria-labelledby="expense-review-title">
           <div className="modal-header"><h2 id="expense-review-title">Review expense</h2><button type="button" className="modal-close" aria-label="Close" onClick={() => setReviewingExpense(null)}>×</button></div>
           <p><strong>{reviewingExpense.employee_name}</strong> · {reviewingExpense.project_code} · {expenseLabel(reviewingExpense.category)} · {money(reviewingExpense.amount)}</p>
+          {reviewingExpense.over_budget_at_submission && <p role="status">This claim exceeded the project budget when submitted.</p>}
           <p>{reviewingExpense.description}</p>
           {error && <p role="alert" className="error-message">{error}</p>}
           {reviewingExpense.receipt_name && <button type="button" className="button button-secondary button-small" onClick={() => downloadReceipt(reviewingExpense.id, reviewingExpense.receipt_name).catch(err => setError(apiErrorMessage(err, 'Unable to download receipt')))}>Download receipt</button>}

@@ -27,6 +27,7 @@ const emptyForm = {
   name: '',
   description: '',
   status: 'DRAFT',
+  approvalFrequency: 'MONTHLY',
   projectManagerId: '',
   projectManagerHoursApproverId: '',
   isActive: false,
@@ -284,6 +285,7 @@ export default function ProjectManagement() {
       name: project?.name || '',
       description: project?.description || '',
       status: project?.status || (project?.isActive ? 'ACTIVE' : 'ARCHIVED'),
+      approvalFrequency: project?.pendingApprovalFrequency || project?.approvalFrequency || 'MONTHLY',
       projectManagerId: project?.projectManagerId || '',
       projectManagerHoursApproverId: project?.projectManagerHoursApproverId || '',
       isActive: project?.isActive ?? true,
@@ -1036,11 +1038,24 @@ export default function ProjectManagement() {
                     <textarea id="projectmanagement-field-7" maxLength={500} placeholder="What is this project for?" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
                     <small className="pc-field-hint">A short purpose helps the team identify the right project.</small>
                   </div>
+                  {isCreatingProject && <div className="form-group">
+                    <label htmlFor="new-project-frequency">Timesheet approval frequency</label>
+                    <select id="new-project-frequency" value={form.approvalFrequency} onChange={event => setForm({ ...form, approvalFrequency: event.target.value })}>
+                      <option value="DAILY">Daily</option><option value="WEEKLY">Weekly (Monday–Sunday)</option><option value="MONTHLY">Monthly</option>
+                    </select>
+                  </div>}
                 </div>
               </section>
               {!isCreatingProject && <section className="pc-detail-card pc-routing-card" aria-labelledby="pc-routing-title">
                 <div className="pc-detail-card-heading"><span className="pc-detail-icon"><Icon name="users" size={19} /></span><div><h4 id="pc-routing-title">Ownership & approvals</h4><p>Who leads the project and reviews the PM's hours.</p></div></div>
                 <div className="pc-detail-fields">
+                  <div className="form-group">
+                    <label htmlFor="project-approval-frequency">Timesheet approval frequency</label>
+                    <select id="project-approval-frequency" value={form.approvalFrequency} onChange={(event) => setForm({ ...form, approvalFrequency: event.target.value })}>
+                      <option value="DAILY">Daily</option><option value="WEEKLY">Weekly (Monday–Sunday)</option><option value="MONTHLY">Monthly</option>
+                    </select>
+                    <small className="pc-field-hint">The calendar stays daily. Frequency changes take effect next approval period.{selectedProject?.approvalFrequencyEffectiveOn ? ` Scheduled for ${dateText(selectedProject.approvalFrequencyEffectiveOn)}.` : ''}</small>
+                  </div>
                   <div className="form-group">
                     <label htmlFor="projectmanagement-field-5">Primary Project Manager</label>
                     <select id="projectmanagement-field-5" required={form.status !== 'DRAFT'} value={form.projectManagerId} onChange={(event) => setForm({ ...form, projectManagerId: event.target.value, projectManagerHoursApproverId: String(form.projectManagerHoursApproverId) === String(event.target.value) ? '' : form.projectManagerHoursApproverId })}>

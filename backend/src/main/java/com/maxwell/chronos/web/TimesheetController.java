@@ -41,6 +41,7 @@ public class TimesheetController {
 
     @GetMapping("/{year}/{month}")
     public ResponseEntity<TimesheetDTO> getTimesheet(@PathVariable int year, @PathVariable int month,
+                                                     @RequestParam(required = false) Long companyId,
                                                      @AuthenticationPrincipal Jwt jwt) {
         String email = jwt.getClaimAsString("preferred_username");
         var user = userService.findUserEntityByEmail(email);
@@ -49,12 +50,14 @@ public class TimesheetController {
             return ResponseEntity.status(403).build();
         }
 
-        TimesheetDTO timesheet = timesheetService.getOrCreateTimesheet(user.getId(), year, month);
+        TimesheetDTO timesheet = companyId == null ? timesheetService.getOrCreateTimesheet(user.getId(), year, month)
+                : timesheetService.getOrCreateTimesheet(user.getId(), companyId, year, month);
         return ResponseEntity.ok(timesheet);
     }
 
     @PostMapping
     public ResponseEntity<TimesheetDTO> getOrCreateTimesheet(@RequestParam int year, @RequestParam int month,
+                                                            @RequestParam(required = false) Long companyId,
                                                             @AuthenticationPrincipal Jwt jwt) {
         String email = jwt.getClaimAsString("preferred_username");
         var user = userService.findUserEntityByEmail(email);
@@ -63,7 +66,8 @@ public class TimesheetController {
             return ResponseEntity.status(403).build();
         }
 
-        TimesheetDTO timesheet = timesheetService.getOrCreateTimesheet(user.getId(), year, month);
+        TimesheetDTO timesheet = companyId == null ? timesheetService.getOrCreateTimesheet(user.getId(), year, month)
+                : timesheetService.getOrCreateTimesheet(user.getId(), companyId, year, month);
         return ResponseEntity.ok(timesheet);
     }
 
@@ -80,7 +84,7 @@ public class TimesheetController {
 
         try {
             TimesheetDTO timesheet = projectId == null
-                    ? timesheetService.getTimesheetById(timesheetId, user.getId(), user.isAdmin() || user.isProjectAdmin())
+                    ? timesheetService.getTimesheetById(timesheetId, user.getId(), user.isAdmin())
                     : timesheetService.getProjectTimesheet(timesheetId, projectId, user);
             return ResponseEntity.ok(timesheet);
         } catch (IllegalArgumentException e) {

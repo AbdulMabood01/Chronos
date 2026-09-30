@@ -37,6 +37,7 @@ public class VacationService {
     private final AuditService auditService;
     private final NotificationService notificationService;
     private final LeaveBalanceService leaveBalanceService;
+    private final TimesheetPeriodService approvalPeriods;
 
     public VacationRequestDTO createVacationRequest(Long userId, LocalDate startDate, LocalDate endDate, 
                                                    VacationType vacationType, String notes) {
@@ -324,8 +325,8 @@ public class VacationService {
                 .collect(Collectors.toSet());
 
         for (YearMonth month : affectedMonths) {
-            timesheetRepository.findPeriodForUpdate(vacation.getUser().getId(), month.getYear(), month.getMonthValue())
-                    .ifPresent(timesheet -> zeroMatchingEntries(timesheet, vacationDates));
+            timesheetRepository.findAllPeriodsForUpdate(vacation.getUser().getId(), month.getYear(), month.getMonthValue())
+                    .forEach(timesheet -> zeroMatchingEntries(timesheet, vacationDates));
         }
     }
 
@@ -341,6 +342,8 @@ public class VacationService {
                     if (!timesheet.isEditable() || (submission != null && !submission.isEditable())) {
                         throw new IllegalArgumentException("Vacation conflicts with submitted or finalized hours; reopen the timesheet first");
                     }
+                    if (entry.getProject() != null)
+                        approvalPeriods.requireEditable(timesheet.getUser().getId(),entry.getProject().getId(),entry.getEntryDate());
                     entry.setHours(BigDecimal.ZERO);
                     entry.getSessions().clear();
                     changed = true;

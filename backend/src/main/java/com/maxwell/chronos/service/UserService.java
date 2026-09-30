@@ -5,7 +5,7 @@ import com.maxwell.chronos.dto.UpdateProfileRequest;
 import com.maxwell.chronos.dto.UserDTO;
 import com.maxwell.chronos.enums.UserRole;
 import com.maxwell.chronos.repository.UserRepository;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,16 +14,24 @@ import java.util.stream.Collectors;
 
 @Service
 @Transactional
-@RequiredArgsConstructor
 public class UserService {
     private final UserRepository userRepository;
     private final AuditService auditService;
     private final AuthSessionService sessions;
     private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
+    @Autowired
+    public UserService(UserRepository userRepository, AuditService auditService, AuthSessionService sessions,
+            org.springframework.jdbc.core.JdbcTemplate jdbc) {
+        this.userRepository = userRepository;
+        this.auditService = auditService;
+        this.sessions = sessions;
+        this.jdbc = jdbc;
+    }
+
     // Retains the constructor used by service-level fixtures.
-    UserService(UserRepository users, AuditService audit, AuthSessionService sessions) {
-        this(users, audit, sessions, null);
+    UserService(UserRepository userRepository, AuditService auditService, AuthSessionService sessions) {
+        this(userRepository, auditService, sessions, null);
     }
 
     public UserDTO findById(Long id) {

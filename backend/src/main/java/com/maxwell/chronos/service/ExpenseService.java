@@ -82,12 +82,12 @@ public class ExpenseService {
             throw new AccessDeniedException("Expense access denied");
     }
     public List<Map<String,Object>> mine(String email) {
-        return db.queryForList("SELECT e.id,e.project_id,e.employee_id,e.category,e.amount,e.expense_date,e.description,e.receipt_name,e.status,e.submitted_at,e.reviewer_id,e.reviewed_at,e.reviewer_comments,p.code AS project_code,p.name AS project_name FROM project_expenses e JOIN projects p ON p.id=e.project_id WHERE e.employee_id=? ORDER BY e.submitted_at DESC,e.id DESC", user(email).getId());
+        return db.queryForList("SELECT e.id,e.project_id,e.employee_id,e.category,e.amount,e.expense_date,e.description,e.receipt_name,e.status,e.over_budget_at_submission,e.submitted_at,e.reviewer_id,e.reviewed_at,e.reviewer_comments,p.code AS project_code,p.name AS project_name FROM project_expenses e JOIN projects p ON p.id=e.project_id WHERE e.employee_id=? ORDER BY e.submitted_at DESC,e.id DESC", user(email).getId());
     }
     public List<Map<String,Object>> projectExpenses(String email, Long projectId) {
         User actor = user(email);
         requireReviewer(actor, project(projectId));
-        return db.queryForList("SELECT e.id,e.project_id,e.employee_id,e.category,e.amount,e.expense_date,e.description,e.receipt_name,e.status,e.submitted_at,e.reviewer_id,e.reviewed_at,e.reviewer_comments,p.code AS project_code,p.name AS project_name,concat_ws(' ',u.first_name,u.last_name) AS employee_name FROM project_expenses e JOIN projects p ON p.id=e.project_id JOIN users u ON u.id=e.employee_id WHERE e.project_id=? ORDER BY e.submitted_at DESC,e.id DESC", projectId);
+        return db.queryForList("SELECT e.id,e.project_id,e.employee_id,e.category,e.amount,e.expense_date,e.description,e.receipt_name,e.status,e.over_budget_at_submission,e.submitted_at,e.reviewer_id,e.reviewed_at,e.reviewer_comments,p.code AS project_code,p.name AS project_name,concat_ws(' ',u.first_name,u.last_name) AS employee_name FROM project_expenses e JOIN projects p ON p.id=e.project_id JOIN users u ON u.id=e.employee_id WHERE e.project_id=? ORDER BY e.submitted_at DESC,e.id DESC", projectId);
     }
     public List<Map<String,Object>> pending(String email) {
         User actor = user(email);
@@ -107,6 +107,18 @@ public class ExpenseService {
         requireReviewer(user(email), project(projectId));
         return db.queryForMap("SELECT p.expense_budget AS budget, COALESCE(sum(e.amount) FILTER (WHERE e.status='APPROVED'),0) AS approved, COALESCE(sum(e.amount) FILTER (WHERE e.status='PENDING_APPROVAL'),0) AS pending, p.expense_budget-COALESCE(sum(e.amount) FILTER (WHERE e.status='APPROVED'),0) AS remaining FROM projects p LEFT JOIN project_expenses e ON e.project_id=p.id WHERE p.id=? GROUP BY p.id", projectId);
     }
+    public Map<String,Object> budgetCheck(String email, Long projectId, BigDecimal amount, Long excludeExpenseId) {
+        User actor = user(email);
+        access.requireMaySubmit(projectId, actor.getId(), "expenses");
+        if (!assignments.existsByProjectIdAndUserIdAndIsActiveTrue(projectId, actor.getId()))
+            throw new AccessDeniedException("An active project assignment is required");
+        if (amount == null || amount.signum() < 0) throw new IllegalArgumentException("Amount must be nonnegative");
+        BigDecimal budget = project(projectId).getExpenseBudget();
+        BigDecimal committed = db.queryForObject("SELECT COALESCE(sum(amount),0) FROM project_expenses WHERE project_id=? AND status IN ('APPROVED','PENDING_APPROVAL') AND (? IS NULL OR id<>?)", BigDecimal.class, projectId, excludeExpenseId, excludeExpenseId);
+        BigDecimal projected = committed.add(amount);
+        return Map.of("committed", committed, "projected", projected, "overBudget", budget != null && projected.compareTo(budget) > 0,
+                "budget", budget == null ? "" : budget);
+    }
     public Map<String,Object> detail(String email, Long id) {
         User actor = user(email);
         Map<String,Object> expense = row(id);
@@ -125,8 +137,9 @@ public class ExpenseService {
         FileData receipt = file == null ? null : saveFile(file);
         if (receipt != null) deleteAfterTransaction(receipt.key(), false);
         try {
-            Long id = db.queryForObject("INSERT INTO project_expenses(project_id,employee_id,category,amount,expense_date,description,receipt_key,receipt_name,receipt_type,receipt_size,status) VALUES (?,?,?,?,?,?,?,?,?,?,'PENDING_APPROVAL') RETURNING id", Long.class,
-                    project.getId(), actor.getId(), input.category(), input.amount(), input.expenseDate(), input.description().trim(), receipt == null ? null : receipt.key(), receipt == null ? null : receipt.name(), receipt == null ? null : receipt.type(), receipt == null ? null : receipt.size());
+            boolean overBudget = (boolean) budgetCheck(email, project.getId(), input.amount(), null).get("overBudget");
+            Long id = db.queryForObject("INSERT INTO project_expenses(project_id,employee_id,category,amount,expense_date,description,receipt_key,receipt_name,receipt_type,receipt_size,status,over_budget_at_submission) VALUES (?,?,?,?,?,?,?,?,?,?,'PENDING_APPROVAL',?) RETURNING id", Long.class,
+                    project.getId(), actor.getId(), input.category(), input.amount(), input.expenseDate(), input.description().trim(), receipt == null ? null : receipt.key(), receipt == null ? null : receipt.name(), receipt == null ? null : receipt.type(), receipt == null ? null : receipt.size(), overBudget);
             history(id, actor.getId(), "PENDING_APPROVAL", null);
             Long reviewerId = access.hasProjectRole(project.getId(), actor.getId(), "PROJECT_MANAGER")
                     ? project.getProjectManagerHoursApprover() == null ? null : project.getProjectManagerHoursApprover().getId()
@@ -153,7 +166,8 @@ public class ExpenseService {
             if (old.get("receipt_key") instanceof UUID previous) deleteAfterTransaction(previous, true);
         }
         try {
-            int changed = db.update("UPDATE project_expenses SET category=?,amount=?,expense_date=?,description=?,receipt_key=COALESCE(?,receipt_key),receipt_name=COALESCE(?,receipt_name),receipt_type=COALESCE(?,receipt_type),receipt_size=COALESCE(?,receipt_size),status='PENDING_APPROVAL',submitted_at=now(),reviewer_id=NULL,reviewed_at=NULL,reviewer_comments=NULL,updated_at=now() WHERE id=? AND status='CHANGES_REQUESTED'", input.category(),input.amount(),input.expenseDate(),input.description().trim(),receipt == null ? null : receipt.key(),receipt == null ? null : receipt.name(),receipt == null ? null : receipt.type(),receipt == null ? null : receipt.size(),id);
+            boolean overBudget = (boolean) budgetCheck(email, input.projectId(), input.amount(), id).get("overBudget");
+            int changed = db.update("UPDATE project_expenses SET category=?,amount=?,expense_date=?,description=?,receipt_key=COALESCE(?,receipt_key),receipt_name=COALESCE(?,receipt_name),receipt_type=COALESCE(?,receipt_type),receipt_size=COALESCE(?,receipt_size),status='PENDING_APPROVAL',over_budget_at_submission=?,submitted_at=now(),reviewer_id=NULL,reviewed_at=NULL,reviewer_comments=NULL,updated_at=now() WHERE id=? AND status='CHANGES_REQUESTED'", input.category(),input.amount(),input.expenseDate(),input.description().trim(),receipt == null ? null : receipt.key(),receipt == null ? null : receipt.name(),receipt == null ? null : receipt.type(),receipt == null ? null : receipt.size(),overBudget,id);
             if (changed != 1) throw new IllegalArgumentException("Expense status changed; reload and try again");
             history(id,actor.getId(),"PENDING_APPROVAL","Resubmitted");
             Project project = project(input.projectId());

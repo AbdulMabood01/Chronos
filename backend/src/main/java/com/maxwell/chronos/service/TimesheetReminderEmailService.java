@@ -8,6 +8,7 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
 import java.time.YearMonth;
+import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 
@@ -41,6 +42,21 @@ public class TimesheetReminderEmailService {
         message.setText("Please review and submit your " + month + " timesheet in Chronos.\n\n"
                 + "Open Chronos: " + appUrl.replaceAll("/+$", "") + "/timesheets\n\n"
                 + "Thank you.");
+        sender.send(message);
+    }
+
+    public void sendPeriodEmail(User user, String projectCode, LocalDate start, LocalDate end, boolean late) {
+        if (!alerts.preferences(user.getId()).allows(EmailAlertService.Category.TIMESHEETS)) return;
+        JavaMailSender sender = senderProvider.getIfAvailable();
+        if (sender == null || from.isBlank()) throw new IllegalStateException("Configure mail to send timesheet reminders");
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(from);
+        message.setTo(user.getEmail());
+        message.setSubject(late ? "Chronos: late timesheet submission" : "Chronos: timesheet submission due today");
+        message.setText("Your " + projectCode + " timesheet for " + start + (start.equals(end) ? "" : " through " + end)
+                + (late ? " was not submitted by the deadline. Please submit it as soon as possible."
+                : " is due by 11:59pm in your timezone. Please submit it, including zero hours if you have no time to report.")
+                + "\n\nOpen Chronos: " + appUrl.replaceAll("/+$", "") + "/timesheets");
         sender.send(message);
     }
 }

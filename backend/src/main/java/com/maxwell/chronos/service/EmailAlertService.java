@@ -58,7 +58,7 @@ public class EmailAlertService {
 
     public void notification(Long userId, String type) {
         // Reminders already have their own sender and must not be mailed twice.
-        if (type.equals("TIMESHEET_REMINDER")) return;
+        if (type.equals("TIMESHEET_REMINDER") || type.equals("TIMESHEET_LATE")) return;
         Category category;
         if (type.startsWith("TIMESHEET_")) category=Category.TIMESHEETS;
         else if (type.startsWith("VACATION_")) category=Category.VACATION;

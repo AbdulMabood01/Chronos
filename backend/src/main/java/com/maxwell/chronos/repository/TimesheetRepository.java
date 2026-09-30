@@ -15,8 +15,14 @@ public interface TimesheetRepository extends JpaRepository<Timesheet, Long> {
     Optional<Timesheet> findForUpdate(@org.springframework.data.repository.query.Param("id") Long id);
 
     @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
-    @org.springframework.data.jpa.repository.Query("select t from Timesheet t where t.user.id = :userId and t.year = :year and t.month = :month")
+    @org.springframework.data.jpa.repository.Query("select t from Timesheet t where t.user.id = :userId and t.companyId = :companyId and t.year = :year and t.month = :month")
     Optional<Timesheet> findPeriodForUpdate(@org.springframework.data.repository.query.Param("userId") Long userId,
+            @org.springframework.data.repository.query.Param("companyId") Long companyId,
+            @org.springframework.data.repository.query.Param("year") Integer year,
+            @org.springframework.data.repository.query.Param("month") Integer month);
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("select t from Timesheet t where t.user.id = :userId and t.year = :year and t.month = :month")
+    List<Timesheet> findAllPeriodsForUpdate(@org.springframework.data.repository.query.Param("userId") Long userId,
             @org.springframework.data.repository.query.Param("year") Integer year,
             @org.springframework.data.repository.query.Param("month") Integer month);
     Optional<Timesheet> findByUserIdAndYearAndMonth(Long userId, Integer year, Integer month);

@@ -1,7 +1,7 @@
 import ScreenTitle from '../components/ScreenTitle';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../AuthContext';
-import { projectAPI, reportsAPI } from '../api';
+import { reportsAPI } from '../api';
 import { LoadingIndicator } from '../components/Hourglass';
 import '../styles.css';
 import './Reports.css';
@@ -33,7 +33,7 @@ export default function Reports() {
   const [selectedSubmissionIds, setSelectedSubmissionIds] = useState([]);
   const [loadingSummary, setLoadingSummary] = useState(true);
   const [error, setError] = useState('');
-  const canViewReports = ['PROJECT_ADMIN', 'ADMIN'].includes(user?.role);
+  const canViewReports = user?.canManageProjects || user?.role === 'ADMIN';
 
   useEffect(() => {
     let cancelled = false;
@@ -47,12 +47,21 @@ export default function Reports() {
     }
     setLoadingSummary(true);
     setError('');
-    projectAPI.getHoursDashboard(year, month).then((response) => {
+    reportsAPI.approvalPeriods(year, month).then((response) => {
       if (cancelled) return;
-      const projects = (response.data || []).map((project) => ({
-        ...project,
-        employees: (project.employees || []).filter((row) => row.submissionId || Number(row.totalLoggedHours) > 0),
-      })).filter((project) => project.employees.length > 0);
+      const grouped = new Map();
+      (response.data || []).forEach((period) => {
+        if (!grouped.has(period.projectId)) grouped.set(period.projectId, {
+          projectId: period.projectId, projectCode: period.projectCode, projectName: period.projectName, employees: [],
+        });
+        grouped.get(period.projectId).employees.push({
+          submissionId: period.id, userId: period.userId, userName: period.userName,
+          employeeId: period.employeeId, periodStart: period.periodStart, periodEnd: period.periodEnd,
+          totalLoggedHours: period.totalHours, approvedHours: period.status === 'APPROVED' ? period.totalHours : 0,
+          status: period.status, late: period.late,
+        });
+      });
+      const projects = [...grouped.values()];
       setProjectSummaries(projects);
       setSelectedProjectId((current) => projects.some((project) => String(project.projectId) === String(current))
         ? current : (projects[0]?.projectId || ''));
@@ -103,7 +112,7 @@ export default function Reports() {
     }
 
     try {
-      const response = await reportsAPI.exportProjectTimesheets(selectedSubmissionIds);
+      const response = await reportsAPI.exportApprovalPeriods(selectedSubmissionIds);
       downloadBlob(response.data, `project-timesheets-${year}-${month}.zip`);
       setError('');
     } catch (err) {
@@ -146,9 +155,9 @@ export default function Reports() {
             <h2>Reporting period</h2>
             <p>Choose a period and project, then find the employees you need.</p>
           </div>
-          <button className="button button-secondary" onClick={handleExportVacation} disabled={!Number.isInteger(year) || year < 1 || year > 9999}>
+          {user?.role === 'ADMIN' && <button className="button button-secondary" onClick={handleExportVacation} disabled={!Number.isInteger(year) || year < 1 || year > 9999}>
             Export vacations
-          </button>
+          </button>}
         </div>
         <div className="form-row">
           <div className="form-group">
@@ -190,7 +199,7 @@ export default function Reports() {
         <div className="panel-heading">
           <div>
             <h2>{selectedProject ? `${selectedProject.projectCode} - ${selectedProject.projectName}` : 'Project Timesheets'} - {monthNames[month - 1]} {year}</h2>
-            <p>Select approved or locked timesheets to download as a ZIP.</p>
+            <p>Select approved timesheet periods to download as a ZIP.</p>
           </div>
           <div className="report-export-actions"><span aria-live="polite">{selectedCount} selected</span><button className="button button-primary report-download-button" onClick={handleExportTimesheets} disabled={selectedCount === 0}>
             Download selected
@@ -219,6 +228,7 @@ export default function Reports() {
                   </th>
                   <th>Employee</th>
                   <th>Employee ID</th>
+                  <th>Approval period</th>
                   <th>Logged</th>
                   <th>Approved</th>
                   <th>Status</th>
@@ -228,7 +238,7 @@ export default function Reports() {
                 {filteredRows.map((row) => {
                   const canExport = ['APPROVED', 'LOCKED'].includes(row.status) && row.submissionId;
                   return (
-                  <tr key={row.userId}>
+                  <tr key={row.submissionId}>
                     <td>
                       <input
                         type="checkbox"
@@ -240,6 +250,7 @@ export default function Reports() {
                     </td>
                     <td>{row.userName}</td>
                     <td>{row.employeeId || 'Not recorded'}</td>
+                    <td>{row.periodStart} to {row.periodEnd}{row.late ? ' · Late' : ''}</td>
                     <td>{Number(row.totalLoggedHours || 0).toFixed(2)}</td>
                     <td>{Number(row.approvedHours || 0).toFixed(2)}</td>
                     <td><span className={`status-badge status-${String(row.status).toLowerCase()}`}>{String(row.status).replace('_', ' ')}</span></td>

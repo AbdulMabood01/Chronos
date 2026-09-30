@@ -22,6 +22,7 @@ public class SaveProjectRequest {
     private ProjectStatus status;
     private BigDecimal totalAllocatedHours;
     private BigDecimal expenseBudget;
+    private String approvalFrequency;
     private Long projectManagerId;
     private Long projectManagerHoursApproverId;
     private LocalDate projectManagerStartDate;

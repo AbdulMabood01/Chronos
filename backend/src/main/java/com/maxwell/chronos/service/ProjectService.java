@@ -154,10 +154,7 @@ public class ProjectService {
             }
         }
         if (projectId != null && (status == ProjectStatus.COMPLETED || status == ProjectStatus.ARCHIVED)
-                && (projectSubmissionRepository.findByProjectId(projectId).stream().anyMatch(submission ->
-                        pendingApproval(submission) || (!submission.isPdfExportEligible()
-                                && submission.getTotalHours() != null && submission.getTotalHours().signum() > 0))
-                    || projectSubmissionRepository.countUnfinalizedEntries(projectId, List.of(TimesheetStatus.APPROVED, TimesheetStatus.LOCKED)) > 0)) {
+                && Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS (SELECT 1 FROM timesheet_approval_periods WHERE project_id=? AND status='SUBMITTED') OR EXISTS (SELECT 1 FROM time_entries e JOIN timesheets t ON t.id=e.timesheet_id WHERE e.project_id=? AND e.hours>0 AND NOT EXISTS (SELECT 1 FROM timesheet_approval_periods a WHERE a.project_id=e.project_id AND a.user_id=t.user_id AND e.entry_date BETWEEN a.period_start AND a.period_end AND a.status='APPROVED'))", Boolean.class, projectId, projectId))) {
             throw new IllegalArgumentException("This project has unfinalized hours. Submit draft hours, correct and resubmit rejected hours, and approve pending timesheets before completing or archiving. Remove logged hours only if they were entered in error.");
         }
         project.setStatus(status);
@@ -165,6 +162,31 @@ public class ProjectService {
         project.setTotalAllocatedHours(request.getTotalAllocatedHours());
         BigDecimal previousBudget = project.getExpenseBudget();
         project.setExpenseBudget(request.getExpenseBudget());
+        if (request.getApprovalFrequency() != null) {
+            String frequency = request.getApprovalFrequency().trim().toUpperCase(java.util.Locale.ROOT);
+            if (!java.util.Set.of("DAILY", "WEEKLY", "MONTHLY").contains(frequency))
+                throw new IllegalArgumentException("Approval frequency must be daily, weekly, or monthly");
+            if (projectId == null) {
+                project.setApprovalFrequency(frequency);
+            } else if (!frequency.equals(project.getPendingApprovalFrequency())
+                    && !frequency.equals(activeApprovalFrequency(project))) {
+                java.time.LocalDate today = java.time.LocalDate.now();
+                java.time.LocalDate next = switch (activeApprovalFrequency(project)) {
+                    case "DAILY" -> today.plusDays(1);
+                    case "WEEKLY" -> today.with(java.time.temporal.TemporalAdjusters.next(java.time.DayOfWeek.MONDAY));
+                    default -> today.withDayOfMonth(1).plusMonths(1);
+                };
+                project.setPendingApprovalFrequency(frequency);
+                project.setApprovalFrequencyEffectiveOn(next);
+                jdbc.update("DELETE FROM project_approval_frequency_changes WHERE project_id=? AND effective_on>?", projectId, today);
+                jdbc.update("INSERT INTO project_approval_frequency_changes(project_id,effective_on,frequency) VALUES (?,?,?) ON CONFLICT (project_id,effective_on) DO UPDATE SET frequency=excluded.frequency", projectId, next, frequency);
+            } else if (frequency.equals(activeApprovalFrequency(project)) && project.getApprovalFrequencyEffectiveOn() != null
+                    && project.getApprovalFrequencyEffectiveOn().isAfter(java.time.LocalDate.now())) {
+                jdbc.update("DELETE FROM project_approval_frequency_changes WHERE project_id=? AND effective_on=?", projectId, project.getApprovalFrequencyEffectiveOn());
+                project.setPendingApprovalFrequency(null);
+                project.setApprovalFrequencyEffectiveOn(null);
+            }
+        }
 
         if (request.getProjectManagerId() != null) {
             User manager = userRepository.findById(request.getProjectManagerId())
@@ -324,12 +346,11 @@ public class ProjectService {
         List<Project> projects = visibleProjects(requester).stream()
                 .filter(project -> canViewManagementProject(project, requester.getId())).toList();
         List<Timesheet> timesheets = timesheetRepository.findByYearAndMonth(year, month);
-        Map<Long, Timesheet> timesheetsByUser = timesheets.stream()
-                .collect(Collectors.toMap(timesheet -> timesheet.getUser().getId(), Function.identity(), (left, right) -> left));
-
         return projects.stream()
                 .sorted(Comparator.comparing(Project::getCode, String.CASE_INSENSITIVE_ORDER))
-                .map(project -> toProjectHoursDTO(project, year, month, timesheetsByUser))
+                .map(project -> toProjectHoursDTO(project, year, month, timesheets.stream()
+                        .filter(sheet -> project.getCompanyId().equals(sheet.getCompanyId()))
+                        .collect(Collectors.toMap(sheet -> sheet.getUser().getId(), Function.identity()))))
                 .toList();
     }
 
@@ -344,10 +365,7 @@ public class ProjectService {
     }
 
     private BigDecimal approvedHoursToDate(Long projectId, Long userId) {
-        return projectSubmissionRepository.findByProjectIdAndTimesheetUserId(projectId, userId).stream()
-                .filter(s -> s.getStatus() == TimesheetStatus.APPROVED || s.getStatus() == TimesheetStatus.LOCKED)
-                .map(s -> s.getTotalHours() != null ? s.getTotalHours() : BigDecimal.ZERO)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return jdbc.queryForObject("SELECT COALESCE(sum(e.hours),0) FROM time_entries e JOIN timesheets t ON t.id=e.timesheet_id JOIN timesheet_approval_periods a ON a.user_id=t.user_id AND a.project_id=e.project_id AND e.entry_date BETWEEN a.period_start AND a.period_end WHERE e.project_id=? AND t.user_id=? AND a.status='APPROVED'", BigDecimal.class, projectId, userId);
     }
 
     public ProjectDTO removeEmployee(Long projectId, Long userId, User requester) {
@@ -359,7 +377,7 @@ public class ProjectService {
         ProjectAssignment assignment = assignmentRepository.findByProjectIdAndUserId(projectId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Assignment not found"));
         requireActiveAssignment(assignment);
-        if (projectSubmissionRepository.findByProjectIdAndTimesheetUserId(projectId, userId).stream().anyMatch(this::pendingApproval)) {
+        if (Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS (SELECT 1 FROM timesheet_approval_periods WHERE project_id=? AND user_id=? AND status='SUBMITTED')", Boolean.class, projectId, userId))) {
             throw new IllegalArgumentException("Please approve or reject pending hours before offboarding this employee");
         }
         Project project = assignment.getProject();
@@ -535,7 +553,12 @@ public class ProjectService {
                 .status(project.getStatus())
                 .totalAllocatedHours(project.getTotalAllocatedHours())
                 .expenseBudget(project.getExpenseBudget())
-                .pendingApprovalCount(projectSubmissionRepository.findByProjectId(project.getId()).stream().filter(this::pendingApproval).count())
+                .approvalFrequency(activeApprovalFrequency(project))
+                .pendingApprovalFrequency(project.getApprovalFrequencyEffectiveOn() != null
+                        && project.getApprovalFrequencyEffectiveOn().isAfter(LocalDate.now()) ? project.getPendingApprovalFrequency() : null)
+                .approvalFrequencyEffectiveOn(project.getApprovalFrequencyEffectiveOn() != null
+                        && project.getApprovalFrequencyEffectiveOn().isAfter(LocalDate.now()) ? project.getApprovalFrequencyEffectiveOn() : null)
+                .pendingApprovalCount(jdbc.queryForObject("SELECT count(*) FROM timesheet_approval_periods WHERE project_id=? AND status='SUBMITTED'", Long.class, project.getId()))
                 .projectManagerId(project.getProjectManager() != null ? project.getProjectManager().getId() : null)
                 .projectManagerName(project.getProjectManager() != null ? project.getProjectManager().getFullName() : null)
                 .projectManagerHoursApproverId(project.getProjectManagerHoursApprover() != null ? project.getProjectManagerHoursApprover().getId() : null)
@@ -544,6 +567,13 @@ public class ProjectService {
                 .createdAt(project.getCreatedAt())
                 .updatedAt(project.getUpdatedAt())
                 .build();
+    }
+
+    private String activeApprovalFrequency(Project project) {
+        if (project.getId() == null) return project.getApprovalFrequency();
+        return jdbc.query("SELECT frequency FROM project_approval_frequency_changes WHERE project_id=? AND effective_on<=? ORDER BY effective_on DESC LIMIT 1",
+                (rs, row) -> rs.getString(1), project.getId(), java.time.LocalDate.now()).stream()
+                .findFirst().orElse(project.getApprovalFrequency());
     }
 
     private ProjectAssignmentDTO toAssignmentDTO(ProjectAssignment assignment) {
@@ -635,7 +665,18 @@ public class ProjectService {
             submission = projectSubmissionRepository.findByTimesheetIdAndProjectId(timesheet.getId(), project.getId()).orElse(null);
         }
 
-        TimesheetStatus status = submission != null ? submission.getStatus() : TimesheetStatus.DRAFT;
+        Map<String, BigDecimal> periodHours = new HashMap<>();
+        if (timesheet != null) jdbc.query("SELECT COALESCE(a.status,'DRAFT') AS status, COALESCE(sum(e.hours),0) AS hours " +
+                        "FROM time_entries e LEFT JOIN timesheet_approval_periods a ON a.project_id=e.project_id " +
+                        "AND a.user_id=? AND e.entry_date BETWEEN a.period_start AND a.period_end " +
+                        "WHERE e.timesheet_id=? AND e.project_id=? GROUP BY COALESCE(a.status,'DRAFT')",
+                (org.springframework.jdbc.core.RowCallbackHandler) rs ->
+                        periodHours.put(rs.getString("status"), rs.getBigDecimal("hours")),
+                user.getId(), timesheet.getId(), project.getId());
+        TimesheetStatus status = periodHours.containsKey("SUBMITTED") ? TimesheetStatus.SUBMITTED
+                : periodHours.containsKey("REJECTED") ? TimesheetStatus.REJECTED
+                : periodHours.containsKey("DRAFT") ? TimesheetStatus.DRAFT
+                : periodHours.containsKey("APPROVED") ? TimesheetStatus.APPROVED : TimesheetStatus.DRAFT;
         return ProjectHoursEmployeeDTO.builder()
                 .userId(user.getId())
                 .employeeId(user.getEmployeeId())
@@ -643,10 +684,10 @@ public class ProjectService {
                 .email(user.getEmail())
                 .jobTitle(user.getJobTitle())
                 .plannedHours(plannedHoursFor(assignment, plan))
-                .draftHours(TimesheetStatus.DRAFT.equals(status) ? logged : BigDecimal.ZERO)
-                .submittedHours(TimesheetStatus.SUBMITTED.equals(status) || TimesheetStatus.CHANGE_REQUESTED.equals(status) ? logged : BigDecimal.ZERO)
-                .approvedHours(TimesheetStatus.APPROVED.equals(status) || TimesheetStatus.LOCKED.equals(status) ? logged : BigDecimal.ZERO)
-                .rejectedHours(TimesheetStatus.REJECTED.equals(status) ? logged : BigDecimal.ZERO)
+                .draftHours(periodHours.getOrDefault("DRAFT", BigDecimal.ZERO))
+                .submittedHours(periodHours.getOrDefault("SUBMITTED", BigDecimal.ZERO))
+                .approvedHours(periodHours.getOrDefault("APPROVED", BigDecimal.ZERO))
+                .rejectedHours(periodHours.getOrDefault("REJECTED", BigDecimal.ZERO))
                 .totalLoggedHours(logged)
                 .status(status)
                 .assignmentActive(assignment != null && Boolean.TRUE.equals(assignment.getIsActive()))

@@ -10,6 +10,11 @@ import java.util.Optional;
 
 @Repository
 public interface TimeEntryRepository extends JpaRepository<TimeEntry, Long> {
+    @org.springframework.data.jpa.repository.Query("select e from TimeEntry e where e.timesheet.user.id=:userId and e.project.id=:projectId and e.entryDate between :start and :end order by e.entryDate")
+    List<TimeEntry> findPeriodEntries(@org.springframework.data.repository.query.Param("userId") Long userId,
+            @org.springframework.data.repository.query.Param("projectId") Long projectId,
+            @org.springframework.data.repository.query.Param("start") LocalDate start,
+            @org.springframework.data.repository.query.Param("end") LocalDate end);
     @org.springframework.data.jpa.repository.Query("select e from TimeEntry e join fetch e.project join fetch e.timesheet t join fetch t.user where e.project.id in :ids and e.entryDate <= :today")
     List<TimeEntry> findForHealth(@org.springframework.data.repository.query.Param("ids") java.util.Set<Long> ids,
             @org.springframework.data.repository.query.Param("today") LocalDate today);

@@ -8,6 +8,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -50,6 +51,16 @@ public class Project {
 
     @Column(name = "expense_budget", precision = 14, scale = 2)
     private BigDecimal expenseBudget;
+
+    @Column(name = "approval_frequency", nullable = false, length = 10)
+    @Builder.Default
+    private String approvalFrequency = "MONTHLY";
+
+    @Column(name = "pending_approval_frequency", length = 10)
+    private String pendingApprovalFrequency;
+
+    @Column(name = "approval_frequency_effective_on")
+    private LocalDate approvalFrequencyEffectiveOn;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "project_manager_id")
