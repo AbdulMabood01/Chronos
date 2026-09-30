@@ -10,10 +10,11 @@ test('calendar, budget, checklist and history work on desktop and mobile', async
     const url = new URL(route.request().url()); let data = [];
     if(url.pathname.endsWith('/auth/me')) data = { id: 1, firstName: 'Alice', lastName: 'Smith', role: 'PROJECT_ADMIN', jobTitle: 'Engineer', dateOfBirth: '1990-01-01', profileCompleted: true };
     else if(url.pathname.endsWith('/team-calendar')) data = [{ id: 5, userId: 8, userName: 'Sam Jones', startDate: prefix+'-01', endDate: prefix+'-03' }];
+    else if(url.pathname === '/api/projects' || url.pathname === '/api/projects/assigned') data = [{ id:4, code:'ATLAS', name:'Atlas platform', status:'ACTIVE', isActive:true, assignments:[{ userId:1, isActive:true, plannedHours:100 }] }];
     else if(url.pathname.endsWith('/hours-dashboard')) data = [{ projectId:4, projectCode:'ATLAS', projectName:'Atlas platform', budgetHours:100, lifetimeLoggedHours:85, totalLoggedHours:8, plannedHours:40, employees:[] }];
     else if(url.pathname.includes('/timesheets/id/')) data = { id:2,userId:1,year,month,status:'APPROVED',timeEntries:[{id:10,projectId:4,projectCode:'ATLAS',entryDate:prefix+'-01',hours:8}],vacationDays:[] };
-    else if(url.pathname.endsWith('/submission')) data = { id:3,timesheetId:2,projectId:4,status:'APPROVED',totalHours:8 };
-    else if(url.pathname.endsWith('/history')) data = [{id:9,action:'TIMESHEET_APPROVED',userName:'Taylor Manager',createdAt:prefix+'-10T10:00:00'},{id:8,action:'TIMESHEET_REJECTED',userName:'Taylor Manager',createdAt:prefix+'-09T10:00:00',details:{message:'Reason: Correct Monday hours'}}];
+    else if(url.pathname.endsWith('/timesheet-periods')) data = { id:3,timesheetId:2,userId:1,projectId:4,periodStart:prefix+'-01',periodEnd:prefix+'-'+new Date(year,month,0).getDate(),frequency:'MONTHLY',status:'APPROVED',totalHours:8,plannedHours:100,pdfExportEligible:true };
+    else if(url.pathname.endsWith('/history')) data = [{event:'APPROVED',actor_name:'Taylor Manager',created_at:prefix+'-10T10:00:00',comment:'Correct Monday hours'}];
     else if(url.pathname.endsWith('/leave-balance')) { const bucket={allowanceDays:10,extraDays:0,usedDays:0,remainingDays:10,unpaidDays:0}; data={configured:true,vacation:bucket,sick:bucket,bereavement:bucket}; }
     else if(url.pathname.includes('unread-count')) data=0;
     await route.fulfill({json:data});
@@ -27,9 +28,9 @@ test('calendar, budget, checklist and history work on desktop and mobile', async
   await page.setViewportSize({width:390,height:844});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.screenshot({path:path.join(output,'team-calendar-mobile.png'),fullPage:true});
-  await page.goto('/project-hours');
-  await expect(page.getByText('Approaching budget')).toBeVisible();
-  await expect(page.getByRole('progressbar',{name:'Project hours budget used'})).toHaveAttribute('value','85');
+  await page.goto('/projects');
+  await page.getByRole('button', { name: /Atlas platform/ }).click();
+  await expect(page.getByRole('img', { name: /Total project hours: 100/ })).toBeVisible();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.goto('/profile');
   await expect(page.getByRole('region', { name: 'Leave balances' })).toHaveCount(0);
@@ -38,8 +39,6 @@ test('calendar, budget, checklist and history work on desktop and mobile', async
   await page.getByLabel('Phone number',{exact:true}).fill('555-0101');
   await expect(page.getByRole('progressbar',{name:'Profile completeness'})).toHaveAttribute('value','2');
   await page.goto('/timesheet/2');
-  await page.getByRole('button',{name:'View approval history'}).click();
-  await expect(page.getByText('Reason: Correct Monday hours')).toBeVisible();
-  await expect(page.getByRole('region',{name:'Approval history'}).getByText('Approved',{exact:true})).toBeVisible();
+  await expect(page.getByText(/Correct Monday hours/)).toBeVisible();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });

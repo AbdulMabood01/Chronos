@@ -32,6 +32,7 @@ class ExpenseServiceTest {
     @Mock ProjectAssignmentRepository assignments;
     @Mock UserRepository users;
     @Mock NotificationService notifications;
+    @Mock CompanyAccessService access;
     @InjectMocks ExpenseService service;
 
     private final User employee = User.builder().id(7L).role(UserRole.EMPLOYEE).build();

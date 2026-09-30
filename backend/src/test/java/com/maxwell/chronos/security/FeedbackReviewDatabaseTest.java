@@ -22,12 +22,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @Transactional
 class FeedbackReviewDatabaseTest {
+    @org.springframework.test.context.bean.override.mockito.MockitoBean com.maxwell.chronos.service.AuthSessionService sessions;
     @Autowired MockMvc mvc;
     @Autowired JdbcTemplate db;
     @Autowired ObjectMapper json;
     @Autowired UserRepository users;
     User sender, recipient, admin;
-    @BeforeEach void setup() { sender=createUser("EMPLOYEE"); recipient=createUser("EMPLOYEE"); admin=createUser("ADMIN"); }
+    @BeforeEach void setup() { org.mockito.Mockito.when(sessions.valid(org.mockito.ArgumentMatchers.nullable(String.class), org.mockito.ArgumentMatchers.anyLong())).thenReturn(true); sender=createUser("EMPLOYEE"); recipient=createUser("EMPLOYEE"); admin=createUser("ADMIN"); }
     private User createUser(String role) {
         String unique=UUID.randomUUID().toString();
         db.update("INSERT INTO users(employee_id,first_name,last_name,email,role,is_active,entra_id,password_hash,profile_completed) VALUES (?,?,?,?,?::user_role_enum,true,?,?,true)", unique,"Person",unique,unique+"@example.invalid",role,unique,"hash");

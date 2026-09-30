@@ -29,6 +29,7 @@ class AccountAccessTest {
     @Autowired MockMvc mvc;
     @MockitoBean JwtDecoder decoder;
     @MockitoBean com.maxwell.chronos.service.AuthSessionService sessions;
+    @MockitoBean com.maxwell.chronos.service.CompanyAccessService access;
     @MockitoBean UserRepository users;
     @MockitoBean UserService service;
     @MockitoBean com.maxwell.chronos.service.ProjectService projects;

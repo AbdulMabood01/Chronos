@@ -28,6 +28,8 @@ class RolePermissionsApiTest {
     @MockitoBean JwtDecoder decoder;
     @MockitoBean org.springframework.jdbc.core.JdbcTemplate db;
     @MockitoBean com.maxwell.chronos.service.AuthSessionService sessions;
+    @MockitoBean CompanyAccessService access;
+    @MockitoBean TimesheetPeriodService periods;
     @MockitoBean UserService userService;
     @MockitoBean UserRepository users;
     @MockitoBean ProjectRepository projects;

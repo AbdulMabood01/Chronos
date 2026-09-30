@@ -44,7 +44,7 @@ it('reviews a pending expense from Approvals', async () => {
   fireEvent.click(within(expenseTask).getByRole('button', { name: 'Review' }));
   const dialog = screen.getByRole('dialog', { name: 'Review expense' });
   fireEvent.click(within(dialog).getByRole('button', { name: 'Approve' }));
-  await waitFor(() => expect(expenseAPI.decide).toHaveBeenCalledWith(42, 'APPROVED', ''));
+  await waitFor(() => expect(expenseAPI.decide).toHaveBeenCalledWith(42, 'APPROVED', '', null));
   await waitFor(() => expect(screen.queryByText('Sam Lee')).toBeNull());
   expect(document.querySelectorAll('.admin-pending-section .task-row')).toHaveLength(1);
 });

@@ -8,6 +8,8 @@ import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.security.access.AccessDeniedException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -16,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class ProjectPermissionsTest {
     @Mock ProjectRepository projects;
     @Mock ProjectAssignmentRepository assignments;
@@ -26,11 +29,22 @@ class ProjectPermissionsTest {
     @Mock AuditService audit;
     @Mock NotificationService notifications;
     @Mock org.springframework.jdbc.core.JdbcTemplate jdbc;
+    @Mock CompanyAccessService access;
     @InjectMocks ProjectService service;
     User systemAdmin = User.builder().id(1L).role(UserRole.ADMIN).build();
     User admin = User.builder().id(2L).role(UserRole.PROJECT_ADMIN).isActive(true).build();
     User manager = User.builder().id(3L).role(UserRole.EMPLOYEE).isActive(true).build();
     User approver = User.builder().id(4L).role(UserRole.EMPLOYEE).isActive(true).build();
+
+    @BeforeEach void accessSetup() {
+        when(access.hasPlatformRole(1L, "PLATFORM_ADMIN")).thenReturn(true);
+        when(access.companyIds(anyLong())).thenReturn(Set.of(1L));
+        when(access.mayCreateProject(1L, 2L)).thenReturn(true);
+        when(access.mayManageProject(anyLong(), eq(2L))).thenReturn(true);
+        when(access.hasCompanyRole(1L, 4L, "PROJECT_ADMIN")).thenReturn(true);
+        when(jdbc.queryForObject(eq("SELECT project_limit FROM companies WHERE id=?"), eq(Integer.class), anyLong())).thenReturn(100);
+        when(jdbc.queryForObject(eq("SELECT count(*) FROM projects WHERE company_id=?"), eq(Integer.class), anyLong())).thenReturn(0);
+    }
 
     @Test void managerVisibilityExcludesUnrelatedProjectsAndEmployees() {
         var managed = Project.builder().id(10L).code("MANAGED").projectManager(manager).build();
@@ -66,7 +80,8 @@ class ProjectPermissionsTest {
 
     @Test void systemAdminCannotWriteProjectsAssignmentsOrEitherPlanVariant() {
         var date = LocalDate.of(2026, 9, 1);
-        assertThrows(AccessDeniedException.class, () -> service.saveProject(null, new SaveProjectRequest(), systemAdmin));
+        var newProject = new SaveProjectRequest(); newProject.setCompanyId(1L);
+        assertThrows(AccessDeniedException.class, () -> service.saveProject(null, newProject, systemAdmin));
         assertThrows(AccessDeniedException.class, () -> service.saveProject(10L, new SaveProjectRequest(), systemAdmin));
         assertThrows(AccessDeniedException.class, () -> service.assignEmployee(10L, 3L, date, date, BigDecimal.TEN, systemAdmin));
         assertThrows(AccessDeniedException.class, () -> service.removeEmployee(10L, 3L, systemAdmin));
@@ -77,7 +92,7 @@ class ProjectPermissionsTest {
     }
 
     @Test void adminCanCreateProjectWithoutPromotingEmployees() {
-        var request = new SaveProjectRequest();
+        var request = new SaveProjectRequest(); request.setCompanyId(1L);
         request.setCode("P1");
         request.setName("Project");
         request.setProjectManagerId(3L);
@@ -96,7 +111,7 @@ class ProjectPermissionsTest {
     }
 
     @Test void projectAdminCanCreateIncompleteDraftButCannotCreateActiveProject() {
-        var draft = SaveProjectRequest.builder().code("DRAFT").name("Draft project").build();
+        var draft = SaveProjectRequest.builder().companyId(1L).code("DRAFT").name("Draft project").build();
         when(projects.save(any())).thenAnswer(call -> { Project p = call.getArgument(0); p.setId(30L); return p; });
         assertEquals(ProjectStatus.DRAFT, service.saveProject(null, draft, admin).getStatus());
         verify(assignments, never()).save(any());
@@ -109,7 +124,7 @@ class ProjectPermissionsTest {
         var project = Project.builder().id(30L).code("DRAFT").name("Draft project")
                 .status(ProjectStatus.DRAFT).isActive(false).build();
         when(projects.findById(30L)).thenReturn(Optional.of(project));
-        var request = SaveProjectRequest.builder().code("DRAFT").name("Draft project")
+        var request = SaveProjectRequest.builder().companyId(1L).code("DRAFT").name("Draft project")
                 .status(ProjectStatus.ACTIVE).build();
         assertThrows(IllegalArgumentException.class, () -> service.saveProject(30L, request, admin));
 
@@ -126,7 +141,7 @@ class ProjectPermissionsTest {
     }
 
     @Test void projectAdminCanSetExpenseBudgetAndRecordsInitialValue() {
-        var request = new SaveProjectRequest();
+        var request = new SaveProjectRequest(); request.setCompanyId(1L);
         request.setCode("EXP"); request.setName("Expenses");
         request.setProjectManagerId(3L); request.setProjectManagerHoursApproverId(4L);
         request.setExpenseBudget(new BigDecimal("250.00"));
@@ -138,7 +153,7 @@ class ProjectPermissionsTest {
     }
 
     @Test void adminCanUseProjectManagerAsPmHoursApprover() {
-        var request = new SaveProjectRequest();
+        var request = new SaveProjectRequest(); request.setCompanyId(1L);
         request.setCode("P1");
         request.setName("Project");
         request.setProjectManagerId(3L);
@@ -184,7 +199,7 @@ class ProjectPermissionsTest {
         when(users.findById(2L)).thenReturn(Optional.of(admin));
         when(users.findById(4L)).thenReturn(Optional.of(approver));
         when(submissions.findByProjectId(10L)).thenReturn(List.of(pending, completed));
-        var request = SaveProjectRequest.builder().code("P1").name("Project").projectManagerId(2L).projectManagerHoursApproverId(4L).build();
+        var request = SaveProjectRequest.builder().companyId(1L).code("P1").name("Project").projectManagerId(2L).projectManagerHoursApproverId(4L).build();
         service.saveProject(10L, request, admin);
         assertEquals(admin, pending.getAssignedApprover());
         assertEquals(approver, completed.getAssignedApprover());
@@ -196,7 +211,7 @@ class ProjectPermissionsTest {
     }
 
     @Test void inactiveAndAdminCannotBeSelectedAsReviewers() {
-        var request = SaveProjectRequest.builder().code("P1").name("Project").projectManagerId(3L).projectManagerHoursApproverId(4L).build();
+        var request = SaveProjectRequest.builder().companyId(1L).code("P1").name("Project").projectManagerId(3L).projectManagerHoursApproverId(4L).build();
         when(users.findById(3L)).thenReturn(Optional.of(manager));
         when(users.findById(4L)).thenReturn(Optional.of(approver));
         approver.setIsActive(false);
@@ -257,7 +272,7 @@ class ProjectPermissionsTest {
                 Project project = Project.builder().id(10L).status(ProjectStatus.ACTIVE).build();
                 when(projects.findById(10L)).thenReturn(Optional.of(project));
                 when(submissions.findByProjectId(10L)).thenReturn(List.of(TimesheetProjectSubmission.builder().status(pending).totalHours(BigDecimal.TEN).build()));
-                SaveProjectRequest request = new SaveProjectRequest();
+                SaveProjectRequest request = new SaveProjectRequest(); request.setCompanyId(1L);
                 request.setCode("P1"); request.setName("Project"); request.setProjectManagerId(3L); request.setProjectManagerHoursApproverId(4L); request.setStatus(target);
                 assertThrows(IllegalArgumentException.class, () -> service.saveProject(10L, request, admin));
                 assertEquals(ProjectStatus.ACTIVE, project.getStatus());
@@ -269,7 +284,7 @@ class ProjectPermissionsTest {
     @Test void closureBlocksLoggedHoursWithoutSubmission() {
         when(projects.findById(10L)).thenReturn(Optional.of(Project.builder().id(10L).status(ProjectStatus.ACTIVE).build()));
         when(submissions.countUnfinalizedEntries(eq(10L), anyList())).thenReturn(1L);
-        SaveProjectRequest request = new SaveProjectRequest();
+        SaveProjectRequest request = new SaveProjectRequest(); request.setCompanyId(1L);
         request.setCode("P1"); request.setName("Project"); request.setProjectManagerId(3L); request.setProjectManagerHoursApproverId(4L); request.setStatus(ProjectStatus.ARCHIVED);
         assertThrows(IllegalArgumentException.class, () -> service.saveProject(10L, request, admin));
         verify(projects, never()).save(any());

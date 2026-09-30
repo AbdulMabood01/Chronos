@@ -346,7 +346,7 @@ it('refreshes an approved opening and lets the employee resubmit instead of show
   } }));
   timesheetAPI.getProjectSubmission.mockImplementation(() => Promise.resolve({ data: opened
     ? { ...approval, status: 'DRAFT', plannedHours: 160, openingActive: true, correctionUntil: '2099-01-01T00:00:00' }
-    : { ...approval, status: 'APPROVED', plannedHours: 160, openingActive: false } }));
+    : { ...approval, status: 'APPROVED', plannedHours: 160, openingActive: false, openingStatus: requestStatus } }));
   timesheetAPI.getOpeningRequests.mockImplementation(() => Promise.resolve({ data: [{ id: 9, status: requestStatus }] }));
   timesheetAPI.submitApprovalPeriod.mockResolvedValue({ data: {} });
   open();

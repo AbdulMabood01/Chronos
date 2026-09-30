@@ -13,12 +13,19 @@ async function setup(page, role = 'EMPLOYEE') {
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url()), method = route.request().method();
     let data = [];
-    if (url.pathname.endsWith('/auth/me')) data = { id: 1, firstName: 'Alice', lastName: 'Smith', role, canReviewProjects: role === 'ADMIN', profileCompleted: true };
+    if (url.pathname.endsWith('/auth/me')) data = { id: 1, firstName: 'Alice', lastName: 'Smith', role, canReviewProjects: role === 'ADMIN', canSubmitWork: role !== 'ADMIN', profileCompleted: true };
     else if (url.pathname.endsWith('/projects/assigned') || url.pathname === '/api/projects') data = [{ id: 4, code: 'ATLAS', name: 'Atlas platform', status: 'ACTIVE', assignments: [{ userId: 1, isActive: true, startDate: prefix + '-01', endDate: prefix + '-' + new Date(year, month, 0).getDate() }] }];
     else if (url.pathname.endsWith('/timesheets/missing')) data = [{ userId: 8, userName: 'Sam Jones', projectId: 4, projectCode: 'ATLAS', status: 'NOT_STARTED', hours: 0 }];
-    else if (url.pathname.endsWith('/projects/4/submit')) { status = 'SUBMITTED'; data = {}; }
+    else if (url.pathname.endsWith('/timesheet-periods/submit')) { status = 'SUBMITTED'; data = {}; }
+    else if (url.pathname.endsWith('/timesheet-periods')) data = {
+      id: 3, timesheetId: 2, userId: 1, projectId: 4, periodStart: prefix + '-01',
+      periodEnd: prefix + '-' + new Date(year, month, 0).getDate(), frequency: 'MONTHLY',
+      status, editable: status === 'REJECTED', totalHours: 8, plannedHours: 160,
+      rejectionReason: status === 'REJECTED' ? 'Please verify Monday hours.' : null,
+      rejectedByName: 'Taylor Manager', correctionUntil: '2026-09-30T00:00:00Z',
+    };
     else if (url.pathname.endsWith('/submission')) data = { id: 3, timesheetId: 2, projectId: 4, status, totalHours: 8, plannedHours: 160, rejectionReason: status === 'REJECTED' ? 'Please verify Monday hours.' : null, rejectedByName: 'Taylor Manager' };
-    else if (url.pathname.includes('/timesheets/id/') || /\/timesheets\/\d{4}\/\d+$/.test(url.pathname)) data = sheet;
+    else if (url.pathname === '/api/timesheets' || url.pathname.includes('/timesheets/id/') || /\/timesheets\/\d{4}\/\d+$/.test(url.pathname)) data = sheet;
     else if (url.pathname.endsWith('/leave-balance')) { const bucket = { allowanceDays: 10, extraDays: 0, usedDays: 2, remainingDays: 8, unpaidDays: 0 }; data = { configured: true, vacation: bucket, sick: bucket, bereavement: bucket }; }
     else if (url.pathname.endsWith('/email-preferences')) {
       if (method === 'PUT') preferences = route.request().postDataJSON();
@@ -82,6 +89,7 @@ test('manager favorites a project and keeps the selection after reloading', asyn
 test('leave request shows balance preview before saving on mobile', async ({ page }) => {
   await setup(page);
   await page.goto('/vacation');
+  await page.getByRole('button', { name: /New request/ }).click();
   await page.getByLabel('Start Date').fill('2026-09-14');
   await page.getByLabel('End Date').fill('2026-09-15');
   await expect(page.getByRole('region', { name: 'Leave balance preview' })).toContainText('Paid days remaining');

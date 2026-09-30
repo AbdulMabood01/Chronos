@@ -31,6 +31,8 @@ class TimesheetWorkflowTest {
     @Mock AuditService audit;
     @Mock NotificationService notifications;
     @Mock ProjectService projectService;
+    @Mock CompanyAccessService access;
+    @Mock TimesheetPeriodService periods;
     @InjectMocks TimesheetService service;
     User employee, admin;
     Project project;
@@ -38,11 +40,15 @@ class TimesheetWorkflowTest {
     TimesheetProjectSubmission submission;
 
     @BeforeEach void setup() {
+        lenient().when(access.companyIds(anyLong())).thenReturn(Set.of(1L));
+        lenient().when(access.maySubmit(anyLong(), anyLong())).thenReturn(true);
+        lenient().when(access.mayReview(anyLong(), anyLong(), anyLong(), anyBoolean(), anyString())).thenReturn(true);
+        lenient().when(access.mayManageProject(anyLong(), anyLong())).thenReturn(true);
         employee = User.builder().id(1L).firstName("Test").lastName("Employee").role(UserRole.EMPLOYEE)
                 .isActive(true).build();
         admin = User.builder().id(2L).role(UserRole.ADMIN).isActive(true).build();
-        project = Project.builder().id(3L).code("P1").name("Project").status(ProjectStatus.ACTIVE).build();
-        sheet = Timesheet.builder().id(4L).user(employee).year(2026).month(9).status(TimesheetStatus.DRAFT).build();
+        project = Project.builder().id(3L).companyId(1L).code("P1").name("Project").status(ProjectStatus.ACTIVE).build();
+        sheet = Timesheet.builder().id(4L).companyId(1L).user(employee).year(2026).month(9).status(TimesheetStatus.DRAFT).build();
         submission = TimesheetProjectSubmission.builder().id(5L).timesheet(sheet).project(project)
                 .status(TimesheetStatus.DRAFT).totalHours(BigDecimal.ZERO).build();
         when(timesheets.findForUpdate(4L)).thenReturn(Optional.of(sheet));
