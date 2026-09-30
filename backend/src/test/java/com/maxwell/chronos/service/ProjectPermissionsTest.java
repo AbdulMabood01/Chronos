@@ -38,7 +38,7 @@ class ProjectPermissionsTest {
 
     @BeforeEach void accessSetup() {
         when(access.hasPlatformRole(1L, "PLATFORM_ADMIN")).thenReturn(true);
-        when(access.companyIds(anyLong())).thenReturn(Set.of(1L));
+        when(access.companyIds(anyLong())).thenReturn(List.of(1L));
         when(access.mayCreateProject(1L, 2L)).thenReturn(true);
         when(access.mayManageProject(anyLong(), eq(2L))).thenReturn(true);
         when(access.hasCompanyRole(1L, 4L, "PROJECT_ADMIN")).thenReturn(true);

@@ -169,6 +169,7 @@ it('creates a draft with essentials and guides setup before activation', async (
   projectAPI.createProject.mockResolvedValue({ data: draft });
   render(<ProjectManagement />);
   fireEvent.click(await screen.findByRole('button', { name: 'New Project' }));
+  fireEvent.change(screen.getByLabelText('Company'), { target: { value: '1' } });
   fireEvent.change(screen.getByLabelText('Project Code'), { target: { value: 'P2' } });
   fireEvent.change(screen.getAllByLabelText('Project Name')[1], { target: { value: 'New Project' } });
   expect(screen.queryByLabelText('Primary Project Manager')).toBeNull();
@@ -181,24 +182,27 @@ it('creates a draft with essentials and guides setup before activation', async (
   expect(await screen.findByText('Add a team member')).toBeTruthy();
 });
 
-it('defaults the PM hours approver to the selected manager during draft setup', async () => {
+it('requires a distinct Project Admin to approve the PM hours during draft setup', async () => {
   currentUser.role = 'PROJECT_ADMIN'; currentUser.canManageProjects = true; currentUser.canCreateProjects = true;
   userAPI.getAllUsers.mockResolvedValue({ data: [{ id: 3, firstName: 'Project', lastName: 'Manager', isActive: true }] });
   projectAPI.createProject.mockResolvedValue({ data: { ...project, id: 11, code: 'P2', name: 'New Project', status: 'DRAFT', projectManagerId: null, projectManagerHoursApproverId: null, assignments: [] } });
   render(<ProjectManagement />);
   fireEvent.click(await screen.findByRole('button', { name: 'New Project' }));
+  fireEvent.change(screen.getByLabelText('Company'), { target: { value: '1' } });
   fireEvent.change(screen.getByLabelText('Project Code'), { target: { value: 'P2' } });
   fireEvent.change(screen.getAllByLabelText('Project Name')[1], { target: { value: 'New Project' } });
   fireEvent.click(screen.getByRole('button', { name: 'Create Draft' }));
   expect(await screen.findByLabelText('Primary Project Manager')).toBeTruthy();
   fireEvent.change(screen.getByLabelText('Primary Project Manager'), { target: { value: '3' } });
-  expect(screen.getByLabelText("Approver for the PM's own hours").value).toBe('3');
+  expect(screen.getByLabelText("Approver for the PM's own hours").value).toBe('');
+  expect(Array.from(screen.getByLabelText("Approver for the PM's own hours").options).map(option => option.value)).toEqual(['']);
 });
 
 it('suggests a code, catches duplicates, and protects unsaved draft changes', async () => {
   currentUser.role = 'PROJECT_ADMIN'; currentUser.canManageProjects = true; currentUser.canCreateProjects = true;
   render(<ProjectManagement />);
   fireEvent.click(await screen.findByRole('button', { name: 'New Project' }));
+  fireEvent.change(screen.getByLabelText('Company'), { target: { value: '1' } });
   fireEvent.change(screen.getAllByLabelText('Project Name')[1], { target: { value: 'Atlas' } });
   expect(screen.getByLabelText('Project Code').value).toBe('ATLAS');
   fireEvent.change(screen.getByLabelText('Project Code'), { target: { value: 'P1' } });
@@ -332,19 +336,26 @@ it('excludes Admin and inactive users from ownership selections and previews a h
   userAPI.getAllUsers.mockResolvedValue({ data: [
     { id: 3, firstName: 'Original', lastName: 'PM', role: 'EMPLOYEE', isActive: true },
     { id: 4, firstName: 'Next', lastName: 'PM', role: 'PROJECT_ADMIN', isActive: true },
+    { id: 7, firstName: 'Backup', lastName: 'Admin', role: 'PROJECT_ADMIN', isActive: true },
     { id: 5, firstName: 'Super', lastName: 'Admin', role: 'ADMIN', isActive: true },
     { id: 6, firstName: 'Inactive', lastName: 'User', role: 'EMPLOYEE', isActive: false },
+  ] });
+  companyAPI.members.mockResolvedValue({ data: [
+    { user_id: 3, status: 'ACTIVE', roles: ['PROJECT_MANAGER'] },
+    { user_id: 4, status: 'ACTIVE', roles: ['PROJECT_ADMIN'] },
+    { user_id: 7, status: 'ACTIVE', roles: ['PROJECT_ADMIN'] },
   ] });
   projectAPI.getProjects.mockResolvedValue({ data: [{ ...project, projectManagerName: 'Original PM', pendingApprovalCount: 2 }] });
   projectAPI.updateProject.mockResolvedValue({ data: project });
   await selectProject();
   fireEvent.click(screen.getByRole('button', { name: 'Project Details' }));
   const managers = screen.getByLabelText('Primary Project Manager');
-  expect(Array.from(managers.options).map((option) => option.value)).toEqual(['', '3', '4']);
-  expect(Array.from(screen.getByLabelText("Approver for the PM's own hours" ).options).map((option) => option.value)).toEqual(['', '3', '4']);
+  expect(Array.from(managers.options).map((option) => option.value)).toEqual(['', '3', '4', '7']);
+  expect(Array.from(screen.getByLabelText("Approver for the PM's own hours" ).options).map((option) => option.value)).toEqual(['', '4', '7']);
   fireEvent.change(managers, { target: { value: '4' } });
+  fireEvent.change(screen.getByLabelText("Approver for the PM's own hours"), { target: { value: '7' } });
   expect(screen.getByText('Approval handover')).toBeTruthy();
   expect(screen.getByText(/2 pending submissions/)).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: 'Save and transfer pending approvals' }));
-  await waitFor(() => expect(projectAPI.updateProject).toHaveBeenCalledWith(10, expect.objectContaining({ projectManagerId: 4, projectManagerHoursApproverId: 4 })));
+  await waitFor(() => expect(projectAPI.updateProject).toHaveBeenCalledWith(10, expect.objectContaining({ projectManagerId: 4, projectManagerHoursApproverId: 7 })));
 });

@@ -357,7 +357,7 @@ it('refreshes an approved opening and lets the employee resubmit instead of show
   const button = await screen.findByRole('button', { name: 'Resubmit for Approval' });
   expect(button.disabled).toBe(false);
   expect(screen.queryByText('TIMESHEET FROZEN')).toBeNull();
-  expect(screen.getByText(/Opening approved through/)).toBeTruthy();
+  expect(screen.getByText(/Correction window open through/)).toBeTruthy();
   fireEvent.click(button);
   await waitFor(() => expect(timesheetAPI.submitApprovalPeriod).toHaveBeenCalledWith('4', expect.any(String)));
 });

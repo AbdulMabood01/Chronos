@@ -40,7 +40,7 @@ class TimesheetWorkflowTest {
     TimesheetProjectSubmission submission;
 
     @BeforeEach void setup() {
-        lenient().when(access.companyIds(anyLong())).thenReturn(Set.of(1L));
+        lenient().when(access.companyIds(anyLong())).thenReturn(List.of(1L));
         lenient().when(access.maySubmit(anyLong(), anyLong())).thenReturn(true);
         lenient().when(access.mayReview(anyLong(), anyLong(), anyLong(), anyBoolean(), anyString())).thenReturn(true);
         lenient().when(access.mayManageProject(anyLong(), anyLong())).thenReturn(true);
