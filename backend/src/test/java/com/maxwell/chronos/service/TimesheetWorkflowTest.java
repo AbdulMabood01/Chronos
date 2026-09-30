@@ -67,7 +67,7 @@ class TimesheetWorkflowTest {
                     && current.getCorrectionUntil().isAfter(LocalDateTime.now()) && current.isEditable();
             if (!open && (sheet.isApprovalFrozen() || sheet.getStatus() == TimesheetStatus.APPROVED
                     || sheet.isLocked() || current != null && (current.getStatus() == TimesheetStatus.APPROVED
-                    || current.getStatus() == TimesheetStatus.LOCKED())))
+                    || current.getStatus() == TimesheetStatus.LOCKED)))
                 throw new IllegalArgumentException("This timesheet was approved; request an opening from your Project Admin");
             if (!open && !TimesheetService.standardEditingOpen(sheet, LocalDate.now()))
                 throw new IllegalArgumentException("This timesheet month is closed; request an opening from your Project Admin");
