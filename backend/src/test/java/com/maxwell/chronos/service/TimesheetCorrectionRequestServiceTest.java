@@ -8,8 +8,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
@@ -30,6 +34,7 @@ class TimesheetCorrectionRequestServiceTest {
     @Mock NotificationService notifications;
     @Mock AuditService audit;
     @Mock CompanyAccessService access;
+    @Spy Clock clock = Clock.fixed(Instant.parse("2026-10-15T12:00:00Z"), ZoneId.systemDefault());
     @InjectMocks TimesheetCorrectionRequestService service;
 
     User employee, admin;
@@ -41,7 +46,7 @@ class TimesheetCorrectionRequestServiceTest {
         employee = User.builder().id(1L).firstName("Test").lastName("Employee").role(UserRole.EMPLOYEE).build();
         admin = User.builder().id(2L).role(UserRole.PROJECT_ADMIN).isActive(true).build();
         project = Project.builder().id(3L).code("P1").build();
-        YearMonth month = YearMonth.now().minusMonths(1);
+        YearMonth month = YearMonth.from(java.time.LocalDate.now(clock)).minusMonths(1);
         sheet = Timesheet.builder().id(4L).user(employee).year(month.getYear()).month(month.getMonthValue())
                 .status(TimesheetStatus.DRAFT).build();
         lenient().when(timesheets.findForUpdate(4L)).thenReturn(Optional.of(sheet));
@@ -64,12 +69,12 @@ class TimesheetCorrectionRequestServiceTest {
     }
 
     @Test void requestDeadlineIsThirtyDaysAfterMonthEndAndDuplicateIsRejected() {
-        YearMonth old = YearMonth.now().minusMonths(2);
+        YearMonth old = YearMonth.from(java.time.LocalDate.now(clock)).minusMonths(2);
         sheet.setYear(old.getYear());
         sheet.setMonth(old.getMonthValue());
         assertTrue(assertThrows(IllegalArgumentException.class,
                 () -> service.request(4L, 3L, "Missed hours", employee)).getMessage().contains("request deadline"));
-        YearMonth eligible = YearMonth.now().minusMonths(1);
+        YearMonth eligible = YearMonth.from(java.time.LocalDate.now(clock)).minusMonths(1);
         sheet.setYear(eligible.getYear());
         sheet.setMonth(eligible.getMonthValue());
         when(requests.existsByTimesheetIdAndProjectIdAndStatus(4L, 3L, TimesheetCorrectionStatus.PENDING)).thenReturn(true);
@@ -103,7 +108,7 @@ class TimesheetCorrectionRequestServiceTest {
     }
 
     @Test void currentApprovedMonthCanRequestOpening() {
-        YearMonth current = YearMonth.now();
+        YearMonth current = YearMonth.from(java.time.LocalDate.now(clock));
         sheet.setYear(current.getYear());
         sheet.setMonth(current.getMonthValue());
         sheet.setStatus(TimesheetStatus.APPROVED);
@@ -116,7 +121,7 @@ class TimesheetCorrectionRequestServiceTest {
     }
 
     @Test void currentDraftMonthNeedsNoOpeningAndSystemAdminCannotDecide() {
-        YearMonth current = YearMonth.now();
+        YearMonth current = YearMonth.from(java.time.LocalDate.now(clock));
         sheet.setYear(current.getYear());
         sheet.setMonth(current.getMonthValue());
         var assignment = assignments.findByProjectIdAndUserId(3L, 1L).orElseThrow();
