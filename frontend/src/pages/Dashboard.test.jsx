@@ -20,7 +20,7 @@ beforeEach(() => {
   api.userAPI.getMyLeaveBalance.mockResolvedValue({ data: base().balance });
   api.projectAPI.getAssignedProjects.mockResolvedValue({ data: [project] });
 });
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.useRealTimers(); });
 const mount = () => render(<MemoryRouter><Dashboard /></MemoryRouter>);
 
 it('counts this week across month boundaries and excludes future hours', () => {
@@ -44,6 +44,8 @@ it('prioritizes corrections and completed-month drafts, not current drafts or ap
 });
 
 it('shows accurate personal summaries and hides empty sections without requesting management data', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(now);
   mount();
   await screen.findByText('12 days');
   expect(screen.getByRole('region', { name: 'Workspace summary' })).toBeTruthy();

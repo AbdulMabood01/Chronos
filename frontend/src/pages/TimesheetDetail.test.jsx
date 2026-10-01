@@ -319,6 +319,8 @@ it('hides approval actions from admins even when they are the routed approver', 
 });
 
 it('lets an employee request an opening with a comment during the 30-day window', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(2026, 9, 15, 12));
   const now = new Date();
   const previous = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   timesheetAPI.getTimesheetById.mockResolvedValue({ data: {
