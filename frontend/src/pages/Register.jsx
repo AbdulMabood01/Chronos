@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { authAPI } from '../api';
 import { BrandLogo } from '../components/Hourglass';
 import '../styles.css';
 import './Login.css';
 
 export default function Register() {
-  const [form, setForm] = useState({ firstName: '', lastName: '', email: '' });
+  const location = useLocation();
+  const invitedEmail = location.state?.invitedEmail || '';
+  const companyName = location.state?.companyName;
+  const [form, setForm] = useState({ firstName: '', lastName: '', email: invitedEmail });
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -25,20 +28,22 @@ export default function Register() {
     } finally { setBusy(false); }
   };
   return <div className="login-container"><main className="login-card account-card">
-    <BrandLogo /><h1>Create your employee account</h1>
-    {message ? <p role="status" className="inline-alert">{message}</p> : <>
-      <p className="signin-subtitle">Enter your details. We’ll email you a link to create your password.</p>
+    <BrandLogo /><h1>{companyName ? `Join ${companyName}` : 'Create your employee account'}</h1>
+    {message ? <p role="status" className="inline-alert">{message}{companyName && ' After signing in, you can review your company invitation.'}</p> : <>
+      <p className="signin-subtitle">{companyName
+        ? `Create your account to join ${companyName}. We’ll email you a link to create your password.`
+        : 'Enter your details. We’ll email you a link to create your password.'}</p>
       <form onSubmit={submit}>
         <div className="form-group"><label htmlFor="firstName">First name</label>
           <input id="firstName" name="firstName" autoComplete="given-name" required maxLength={100} disabled={busy} value={form.firstName} onChange={change} /></div>
         <div className="form-group"><label htmlFor="lastName">Last name</label>
           <input id="lastName" name="lastName" autoComplete="family-name" required maxLength={100} disabled={busy} value={form.lastName} onChange={change} /></div>
         <div className="form-group"><label htmlFor="registerEmail">Work email</label>
-          <input id="registerEmail" name="email" type="email" autoComplete="email" required maxLength={255} disabled={busy} value={form.email} onChange={change} /></div>
+          <input id="registerEmail" name="email" type="email" autoComplete="email" required maxLength={255} disabled={busy || !!invitedEmail} value={form.email} onChange={change} /></div>
         <button className="button button-primary" disabled={busy}>{busy ? 'Sending...' : 'Register'}</button>
       </form>
     </>}
     {error && <p role="alert" className="error-message">{error}</p>}
-    <Link className="account-link" to="/login">Back to sign in</Link>
+    <Link className="account-link" to="/login" state={location.state}>Back to sign in</Link>
   </main></div>;
 }

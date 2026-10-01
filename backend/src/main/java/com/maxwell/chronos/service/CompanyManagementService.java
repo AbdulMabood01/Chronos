@@ -14,6 +14,8 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.List;
@@ -33,6 +35,33 @@ public class CompanyManagementService {
     private final InvitationEmailService mail;
     private final AuditService audit;
     private final SecureRandom random = new SecureRandom();
+    public record InvitationDetails(long id, String companyName, String projectName, String role,
+                                    String email, String status, OffsetDateTime expiresAt) {}
+    private static final String INVITATION_DETAILS_SQL = "SELECT i.id, c.name AS company_name, " +
+            "p.name AS project_name, i.role_key, i.invitee_email, i.expires_at, " +
+            "CASE WHEN i.accepted_at IS NOT NULL THEN 'ACCEPTED' " +
+            "WHEN i.revoked_at IS NOT NULL THEN 'REVOKED' " +
+            "WHEN i.expires_at <= now() THEN 'EXPIRED' ELSE 'PENDING' END AS status " +
+            "FROM company_invitations i JOIN companies c ON c.id=i.company_id " +
+            "LEFT JOIN projects p ON p.id=i.project_id ";
+
+    private InvitationDetails invitationDetails(ResultSet rs, int row) throws SQLException {
+        return new InvitationDetails(rs.getLong("id"), rs.getString("company_name"),
+                rs.getString("project_name"), rs.getString("role_key"), rs.getString("invitee_email"),
+                rs.getString("status"), rs.getObject("expires_at", OffsetDateTime.class));
+    }
+
+    public InvitationDetails previewInvitation(String token) {
+        return db.query(INVITATION_DETAILS_SQL + "WHERE i.token_hash=?", this::invitationDetails, hash(token))
+                .stream().findFirst().orElseThrow(() -> new IllegalArgumentException("Invalid invitation"));
+    }
+
+    public List<InvitationDetails> myPendingInvitations(long actorId) {
+        User actor = users.findById(actorId).orElseThrow(() -> new AccessDeniedException("Sign in required"));
+        return db.query(INVITATION_DETAILS_SQL + "WHERE i.invitee_email=? AND i.accepted_at IS NULL " +
+                "AND i.revoked_at IS NULL AND i.expires_at > now() ORDER BY i.created_at DESC, i.id DESC",
+                this::invitationDetails, actor.getEmail().toLowerCase(Locale.ROOT));
+    }
 
     public List<Map<String, Object>> myCompanies(long actorId) {
         if (access.hasPlatformRole(actorId, "PLATFORM_ADMIN"))
@@ -128,6 +157,18 @@ public class CompanyManagementService {
         Map<String, Object> invitation = db.queryForList("SELECT * FROM company_invitations WHERE token_hash = ? " +
                 "FOR UPDATE", hash(token)).stream().findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Invalid invitation"));
+        acceptInvitation(invitation, actor, actorId);
+    }
+
+    public void acceptById(long invitationId, long actorId) {
+        User actor = users.findById(actorId).orElseThrow(() -> new AccessDeniedException("Sign in required"));
+        Map<String, Object> invitation = db.queryForList("SELECT * FROM company_invitations WHERE id=? " +
+                "AND invitee_email=? FOR UPDATE", invitationId, actor.getEmail().toLowerCase(Locale.ROOT))
+                .stream().findFirst().orElseThrow(() -> new IllegalArgumentException("Invitation not found for this account"));
+        acceptInvitation(invitation, actor, actorId);
+    }
+
+    private void acceptInvitation(Map<String, Object> invitation, User actor, long actorId) {
         if (invitation.get("accepted_at") != null || invitation.get("revoked_at") != null
                 || !Boolean.TRUE.equals(db.queryForObject(
                 "SELECT expires_at > now() FROM company_invitations WHERE id = ?", Boolean.class, invitation.get("id"))))

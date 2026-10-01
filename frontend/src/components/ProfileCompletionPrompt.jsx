@@ -8,7 +8,7 @@ export default function ProfileCompletionPrompt() {
   const { user, updateProfile } = useAuth();
   const { pathname } = useLocation();
 
-  if (!user || user.profileCompleted || ['/login', '/register', '/activate', '/forgot-password', '/reset-password'].includes(pathname)) {
+  if (!user || user.profileCompleted || ['/login', '/register', '/activate', '/company-invite', '/forgot-password', '/reset-password'].includes(pathname)) {
     return null;
   }
 

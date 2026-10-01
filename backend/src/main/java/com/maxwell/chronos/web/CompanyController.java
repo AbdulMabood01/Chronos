@@ -62,6 +62,21 @@ public class CompanyController {
         companies.accept(input.token(), actor(jwt));
     }
 
+    @PostMapping("/invitations/preview") public CompanyManagementService.InvitationDetails preview(
+            @RequestBody AcceptInput input) {
+        return companies.previewInvitation(input.token());
+    }
+
+    @GetMapping("/invitations/mine") public List<CompanyManagementService.InvitationDetails> myPendingInvitations(
+            @AuthenticationPrincipal Jwt jwt) {
+        return companies.myPendingInvitations(actor(jwt));
+    }
+
+    @PostMapping("/invitations/{invitationId}/accept") public void acceptById(
+            @PathVariable long invitationId, @AuthenticationPrincipal Jwt jwt) {
+        companies.acceptById(invitationId, actor(jwt));
+    }
+
     @PostMapping("/{companyId}/moderator-grants") public void grant(@PathVariable long companyId,
             @RequestBody ModeratorInput input, @AuthenticationPrincipal Jwt jwt) {
         companies.grantModerator(companyId, input.projectId(), input.userId(), input.timesheets(),

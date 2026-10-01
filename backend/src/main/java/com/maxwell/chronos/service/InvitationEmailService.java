@@ -38,9 +38,11 @@ public class InvitationEmailService {
         message.setTo(address);
         message.setSubject("Invitation to " + companyName + " on Chronos");
         message.setText("You have been invited to " + companyName + " on Chronos.\n\n"
-                + "Sign in or create an account using this email address, then open:\n"
+                + "Open your invitation to sign in or create an account using this email address:\n"
                 + frontend.replaceAll("/+$", "") + "/company-invite#token=" + token
-                + "\n\nThis invitation expires at " + expires + " (UTC).\n"
+                + "\n\nIf you create an account, activate it using the email we send you. After signing in, "
+                + "your company invitation will be ready to accept, even on another device.\n\n"
+                + "This invitation expires at " + expires + " (UTC).\n"
                 + "If you did not expect this invitation, you may ignore it.");
         try { mail.send(message); }
         catch (org.springframework.mail.MailException ex) {
