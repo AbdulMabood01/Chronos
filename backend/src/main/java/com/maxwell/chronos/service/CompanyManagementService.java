@@ -109,7 +109,7 @@ public class CompanyManagementService {
     public void invite(long companyId, Long projectId, String address, String role, long actorId,
                        Long accessRequestId) {
         String normalized = address == null ? "" : address.trim().toLowerCase(Locale.ROOT);
-        if (!normalized.matches("[^\\s@]+@[^\\s@]+\\.[^\\s@]+") || normalized.length() > 255)
+        if (!validEmail(normalized))
             throw new IllegalArgumentException("Valid invitee email is required");
         if (projectId == null && !COMPANY_ROLES.contains(role) || projectId != null && !PROJECT_ROLES.contains(role))
             throw new IllegalArgumentException("Role scope does not match invitation");
@@ -151,7 +151,7 @@ public class CompanyManagementService {
         if (!normalizedSlug.matches("[a-z0-9][a-z0-9-]{1,78}") || firstName == null
                 || firstName.isBlank() || firstName.length() > 100 || lastName == null
                 || lastName.isBlank() || lastName.length() > 100
-                || !email.matches("[^\\s@]+@[^\\s@]+\\.[^\\s@]+") || email.length() > 255)
+                || !validEmail(email))
             throw new IllegalArgumentException("Enter a workspace ID, name and valid email address");
         List<Long> ids = db.queryForList("SELECT id FROM companies WHERE slug=?", Long.class, normalizedSlug);
         if (ids.isEmpty()) return;
@@ -355,6 +355,14 @@ public class CompanyManagementService {
         if (!access.hasCompanyRole(companyId, actorId, "COMPANY_ADMIN")
                 && !access.hasPlatformRole(actorId, "PLATFORM_ADMIN"))
             throw new AccessDeniedException("Company Admin permission required");
+    }
+
+    private boolean validEmail(String email) {
+        if (email == null || email.length() > 255 || email.chars().anyMatch(Character::isWhitespace)) return false;
+        int at = email.indexOf('@');
+        if (at < 1 || at != email.lastIndexOf('@')) return false;
+        int dot = email.indexOf('.', at + 2);
+        return dot > at + 1 && dot < email.length() - 1;
     }
 
     private void requireTeamCapacity(long companyId, long projectId) {
