@@ -20,7 +20,7 @@ function EmptyState({ icon, title, description }) {
 }
 
 export function CompanyInvitation() {
-  const { user, logout, refreshUser } = useAuth();
+  const { user, login, logout, refreshUser } = useAuth();
   const navigate = useNavigate();
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -30,6 +30,8 @@ export function CompanyInvitation() {
   const [previewError, setPreviewError] = useState('');
   const [pending, setPending] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [account, setAccount] = useState({ firstName: '', lastName: '', password: '' });
 
   useEffect(() => {
     if (token) sessionStorage.setItem('chronos:company-invite', token);
@@ -75,6 +77,21 @@ export function CompanyInvitation() {
     } catch (error) { setMessage(errorText(error)); }
     finally { setBusy(false); }
   };
+  const claim = async event => {
+    event.preventDefault(); setBusy(true); setMessage('');
+    try {
+      await companyAPI.claimInvitation({ token, ...account });
+      sessionStorage.removeItem('chronos:company-invite');
+      setToken(''); setPreview(null);
+      try {
+        await login(preview.email, account.password);
+        navigate('/dashboard');
+      } catch {
+        setMessage('Account created and invitation accepted. Sign in with your new password.');
+      }
+    } catch (error) { setMessage(errorText(error)); }
+    finally { setBusy(false); }
+  };
   const signedInWithDifferentEmail = user && preview?.email?.toLowerCase() !== user.email?.toLowerCase();
   return <div className="page-container company-invite-page">
     <div className="company-invite-card">
@@ -92,8 +109,17 @@ export function CompanyInvitation() {
         <p>{preview ? 'Use the invited email address to continue.' : 'Sign in to review invitations sent to your email address.'}</p>
         <div className="company-invite-actions">
           <Link className="button button-primary" to="/login" state={{ invitedEmail: preview?.email, companyName: preview?.companyName }}>Sign in</Link>
-          <Link className="button button-secondary" to="/register" state={{ invitedEmail: preview?.email, companyName: preview?.companyName }}>Create an account</Link>
+          {preview?.status === 'PENDING' && <button type="button" className="button button-secondary" onClick={() => setShowCreate(value => !value)}>Create an account</button>}
         </div>
+        {showCreate && preview?.status === 'PENDING' && <form className="company-claim-form" onSubmit={claim}>
+          <h2>Create your account and join</h2>
+          <p>This invitation verifies {preview.email}. Choose a password to join {preview.companyName} as {roleName(preview.role)}.</p>
+          <label className="company-field">First name<input required maxLength={100} autoComplete="given-name" value={account.firstName} onChange={event => setAccount({ ...account, firstName: event.target.value })} /></label>
+          <label className="company-field">Last name<input required maxLength={100} autoComplete="family-name" value={account.lastName} onChange={event => setAccount({ ...account, lastName: event.target.value })} /></label>
+          <label className="company-field">Password<input required type="password" minLength={12} maxLength={72} autoComplete="new-password" value={account.password} onChange={event => setAccount({ ...account, password: event.target.value })} /></label>
+          <small>At least 12 characters, including uppercase, lowercase and a number.</small>
+          <button className="button button-primary" disabled={busy}>{busy ? 'Creating account...' : 'Create account and join'}</button>
+        </form>}
       </>}
       {user && preview?.status === 'PENDING' && <>
         {signedInWithDifferentEmail ? <div className="company-invite-note">
@@ -122,6 +148,7 @@ export default function Companies() {
   const [members, setMembers] = useState([]);
   const [grants, setGrants] = useState([]);
   const [invitations, setInvitations] = useState([]);
+  const [accessRequests, setAccessRequests] = useState([]);
   const [selected, setSelected] = useState('');
   const [tab, setTab] = useState('people');
   const [showCreate, setShowCreate] = useState(false);
@@ -148,13 +175,15 @@ export default function Companies() {
   };
   useEffect(() => { load().catch(error => setMessage(errorText(error))); }, []);
   useEffect(() => {
-    if (!selected) { setMembers([]); setGrants([]); setInvitations([]); return; }
+    if (!selected) { setMembers([]); setGrants([]); setInvitations([]); setAccessRequests([]); return; }
     companyAPI.members(selected).then(response => setMembers(response.data || []))
       .catch(() => setMembers([]));
     companyAPI.moderatorGrants(selected).then(response => setGrants(response.data || []))
       .catch(() => setGrants([]));
     companyAPI.invitations(selected).then(response => setInvitations(response.data || []))
       .catch(() => setInvitations([]));
+    companyAPI.accessRequests(selected).then(response => setAccessRequests(response.data || []))
+      .catch(() => setAccessRequests([]));
   }, [selected]);
   useEffect(() => {
     if (!selected || !roleProjectId) { setProjectRoles([]); return; }
@@ -168,12 +197,13 @@ export default function Companies() {
       const result = await action();
       await load();
       if (selected) {
-        const [roster, permissions, pending] = await Promise.allSettled([
-          companyAPI.members(selected), companyAPI.moderatorGrants(selected), companyAPI.invitations(selected),
+        const [roster, permissions, pending, requests] = await Promise.allSettled([
+          companyAPI.members(selected), companyAPI.moderatorGrants(selected), companyAPI.invitations(selected), companyAPI.accessRequests(selected),
         ]);
         if (roster.status === 'fulfilled') setMembers(roster.value.data || []);
         if (permissions.status === 'fulfilled') setGrants(permissions.value.data || []);
         if (pending.status === 'fulfilled') setInvitations(pending.value.data || []);
+        if (requests.status === 'fulfilled') setAccessRequests(requests.value.data || []);
         if (roleProjectId) {
           const roleResponse = await companyAPI.projectRoles(selected, roleProjectId);
           setProjectRoles(roleResponse.data || []);
@@ -188,9 +218,15 @@ export default function Companies() {
   const changeCompany = event => {
     setSelected(event.target.value);
     setRoleProjectId('');
-    setInvite(current => ({ ...current, projectId: '' }));
+    setInvite(current => ({ ...current, email: '', projectId: '', accessRequestId: null }));
     setGrant(current => ({ ...current, projectId: '', userId: '' }));
     setMessage('');
+  };
+
+  const inviteRequester = request => {
+    setInvite({ email: request.email, role: 'USER', projectId: '', accessRequestId: request.id });
+    setTab('invitations');
+    setMessage(`Choose a project and role for ${request.email}, then send the invitation.`);
   };
 
   return <div className="page-container companies-page">
@@ -233,7 +269,8 @@ export default function Companies() {
       <div className="company-overview-top">
         <div className="company-identity">
           <div className="company-avatar" aria-hidden="true">{active?.name?.trim().charAt(0).toUpperCase() || 'C'}</div>
-          <div><span className="company-eyebrow">Current company</span><h2>{active?.name || 'Select a company'}</h2><span className="company-plan">{roleName(active?.plan_tier)} plan</span></div>
+          <div><span className="company-eyebrow">Current company</span><h2>{active?.name || 'Select a company'}</h2><span className="company-plan">{roleName(active?.plan_tier)} plan</span>
+            {companyAdmin && <span className="company-workspace-id">Workspace ID: <strong>{active?.slug}</strong></span>}</div>
         </div>
         <label className="company-switcher">Switch company<select value={selected} onChange={changeCompany}>
           {companies.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}
@@ -273,9 +310,11 @@ export default function Companies() {
       {tab === 'invitations' && <div className="company-content-grid">
         <form className="company-card company-side-form" onSubmit={event => { event.preventDefault(); run(() => companyAPI.invite(selected, {
           email: invite.email, role: invite.role, projectId: invite.projectId ? Number(invite.projectId) : null,
-        }), 'Invitation sent.', () => setInvite(current => ({ ...current, email: '' }))); }}>
-          <div className="company-section-heading"><div><h2>Invite a person</h2><p>They can use the same email across multiple companies.</p></div></div>
-          <label className="company-field">Email address<input type="email" required value={invite.email} onChange={event => setInvite({ ...invite, email: event.target.value })} placeholder="name@company.com" /></label>
+          accessRequestId: invite.accessRequestId || null,
+        }), 'Invitation sent.', () => setInvite(current => ({ ...current, email: '', accessRequestId: null }))); }}>
+          <div className="company-section-heading"><div><h2>Invite a person</h2><p>They can use the same email across multiple companies. New people create an account from the invitation link.</p></div></div>
+          {invite.accessRequestId && <p className="company-request-selected">Responding to an access request. The email stays linked to this request.</p>}
+          <label className="company-field">Email address<input type="email" required value={invite.email} readOnly={!!invite.accessRequestId} onChange={event => setInvite({ ...invite, email: event.target.value })} placeholder="name@company.com" /></label>
           <label className="company-field">Role<select value={invite.role} onChange={event => setInvite({ ...invite, role: event.target.value,
             projectId: ['COMPANY_ADMIN', 'MODERATOR'].includes(event.target.value) ? '' : invite.projectId })}>
             {companyAdmin && <option value="COMPANY_ADMIN">Company Admin</option>}<option value="PROJECT_ADMIN">Project Admin</option>
@@ -301,6 +340,14 @@ export default function Companies() {
             </div>;
           })}</div> : <EmptyState icon="mail" title="No invitations yet" description="Invitations you send will appear here." />}
         </section>
+        {companyAdmin && <section className="company-card company-request-queue">
+          <div className="company-section-heading"><div><h2>Access requests</h2><p>Requests do not grant access. Review the person, then choose their project and role before sending an invitation.</p></div><span className="company-count">{accessRequests.length} pending</span></div>
+          {accessRequests.length ? <div className="company-list">{accessRequests.map(request => <div className="company-record-row" key={request.id}>
+            <div className="company-record-main"><strong>{request.first_name} {request.last_name}</strong><span>{request.email} · Requested {shortDate(request.requested_at)}</span></div>
+            <div className="company-row-actions"><button type="button" className="company-text-button" onClick={() => inviteRequester(request)}>Prepare invite</button>
+              <button type="button" className="company-text-button company-text-danger" disabled={busy} onClick={() => run(() => companyAPI.dismissAccessRequest(selected, request.id), 'Request dismissed.')}>Dismiss</button></div>
+          </div>)}</div> : <EmptyState icon="mail" title="No access requests" description={`Share the workspace ID ${active.slug} with people who need to request access.`} />}
+        </section>}
       </div>}
 
       {tab === 'roles' && <section className="company-card">

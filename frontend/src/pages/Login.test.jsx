@@ -19,7 +19,7 @@ it('submits email and password without a development or token login', async () =
   await waitFor(() => expect(login).toHaveBeenCalledWith('alice@example.com', 'StrongPassword123'));
   expect(screen.queryByText('Dev Sign In')).toBeNull();
   expect(screen.queryByLabelText('Company access token')).toBeNull();
-  expect(screen.getByRole('link', { name: 'Register as an employee' })).toHaveAttribute('href', '/register');
+  expect(screen.getByRole('link', { name: 'Request company access' })).toHaveAttribute('href', '/request-access');
   expect(screen.getByRole('link', { name: 'Forgot password?' })).toHaveAttribute('href', '/forgot-password');
 });
 

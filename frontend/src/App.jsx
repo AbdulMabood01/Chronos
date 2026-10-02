@@ -4,7 +4,7 @@ import { AuthProvider, useAuth } from './AuthContext';
 import { GlobalApiLoader, LoadingIndicator } from './components/Hourglass';
 import ProfileCompletionPrompt from './components/ProfileCompletionPrompt';
 import Login from './pages/Login';
-import Register from './pages/Register';
+import RequestAccess from './pages/RequestAccess';
 import Activate from './pages/Activate';
 import { ForgotPassword, ResetPassword } from './pages/PasswordRecovery';
 import Dashboard from './pages/Dashboard';
@@ -75,7 +75,8 @@ function AppContent({ darkBackground, onToggleBackground }) {
       <Route path="/employee-reports" element={<ProtectedRoute><Navigate to="/reports" replace /></ProtectedRoute>} />
       <Route path="/reports" element={<ProtectedRoute><Layout darkBackground={darkBackground} onToggleBackground={onToggleBackground}><EmployeeReports management /></Layout></ProtectedRoute>} />
       <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
+      <Route path="/register" element={<Navigate to="/request-access" replace />} />
+      <Route path="/request-access" element={<RequestAccess />} />
       <Route path="/company-invite" element={<CompanyInvitation />} />
       <Route path="/activate" element={<Activate />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />

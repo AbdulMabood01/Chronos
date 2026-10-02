@@ -72,7 +72,7 @@ export default function Login() {
 
         <div className="login-account-actions">
           <Link className="account-link" to="/forgot-password">Forgot password?</Link>
-          <Link className="button button-outline" to="/register" state={location.state?.invitedEmail ? { invitedEmail: location.state.invitedEmail, companyName: location.state.companyName } : undefined}>Register as an employee</Link>
+          <Link className="button button-outline" to="/request-access">Request company access</Link>
         </div>
         {error && <p className="error-message" role="alert">{error}</p>}
       </div>

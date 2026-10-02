@@ -40,8 +40,8 @@ public class InvitationEmailService {
         message.setText("You have been invited to " + companyName + " on Chronos.\n\n"
                 + "Open your invitation to sign in or create an account using this email address:\n"
                 + frontend.replaceAll("/+$", "") + "/company-invite#token=" + token
-                + "\n\nIf you create an account, activate it using the email we send you. After signing in, "
-                + "your company invitation will be ready to accept, even on another device.\n\n"
+                + "\n\nIf you are new, create your password on the invitation page to join. "
+                + "If you already have an account, sign in with this email and accept the invitation.\n\n"
                 + "This invitation expires at " + expires + " (UTC).\n"
                 + "If you did not expect this invitation, you may ignore it.");
         try { mail.send(message); }

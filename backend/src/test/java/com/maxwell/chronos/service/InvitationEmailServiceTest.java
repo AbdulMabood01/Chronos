@@ -43,5 +43,6 @@ class InvitationEmailServiceTest {
         assertTrue(message.getText().contains("Acme"));
         assertTrue(message.getText().contains("https://chronos.example.com/company-invite#token=secret-token"));
         assertTrue(message.getText().contains("sign in or create an account"));
+        assertFalse(message.getText().contains("activate it using the email"));
     }
 }

@@ -5,6 +5,7 @@ import com.maxwell.chronos.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.HashMap;
 import java.util.List;
@@ -12,6 +13,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -20,8 +22,11 @@ class CompanyInvitationAcceptanceTest {
     private final JdbcTemplate db = mock(JdbcTemplate.class);
     private final UserRepository users = mock(UserRepository.class);
     private final AuditService audit = mock(AuditService.class);
+    private final OnboardingService onboarding = mock(OnboardingService.class);
+    private final PasswordEncoder passwords = mock(PasswordEncoder.class);
     private final CompanyManagementService service = new CompanyManagementService(db,
-            mock(CompanyAccessService.class), users, mock(InvitationEmailService.class), audit);
+            mock(CompanyAccessService.class), users, mock(InvitationEmailService.class), audit,
+            onboarding, passwords);
 
     private Map<String, Object> invitation(String email) {
         Map<String, Object> row = new HashMap<>();
@@ -68,6 +73,28 @@ class CompanyInvitationAcceptanceTest {
         when(db.queryForObject(anyString(), eq(Boolean.class), eq(8L))).thenReturn(false);
 
         assertThrows(IllegalArgumentException.class, () -> service.acceptById(8L, 5L));
+        verifyNoInteractions(audit);
+    }
+
+    @Test void existingAccountMustSignInRatherThanResetItsPasswordWithInvitation() {
+        String token = "a".repeat(43);
+        when(db.queryForList(anyString(), anyString())).thenReturn(List.of(invitation("alice@example.com")));
+        when(db.queryForObject(anyString(), eq(Boolean.class), eq(8L))).thenReturn(true);
+        when(users.findByEmailForUpdate("alice@example.com")).thenReturn(Optional.of(
+                User.builder().id(5L).email("alice@example.com").passwordHash("existing-hash").build()));
+
+        assertEquals("This email already has an account. Sign in to accept the invitation.",
+                assertThrows(IllegalArgumentException.class,
+                        () -> service.claimInvitation(token, "Alice", "Smith", "StrongPassword123")).getMessage());
+        verifyNoInteractions(onboarding, passwords, audit);
+    }
+
+    @Test void unknownWorkspaceDoesNotCreateAnAccessRequest() {
+        when(db.queryForList(anyString(), eq(Long.class), eq("unknown-workspace"))).thenReturn(List.of());
+
+        service.requestAccess("unknown-workspace", "Alice", "Smith", "alice@example.com");
+
+        verify(db, never()).update(anyString(), any(), any(), any(), any());
         verifyNoInteractions(audit);
     }
 }

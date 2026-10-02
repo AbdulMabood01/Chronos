@@ -14,6 +14,8 @@
 .company-avatar { display: grid; place-items: center; flex: 0 0 auto; width: 60px; height: 60px; border-radius: 17px; color: white; background: var(--brand-gradient); font-size: 1.7rem; font-weight: 700; box-shadow: 0 8px 18px color-mix(in srgb, var(--primary-color) 22%, transparent); }
 .company-identity h2 { margin: .15rem 0 .25rem; color: var(--text-primary); font-size: 1.5rem; line-height: 1.2; letter-spacing: -.025em; }
 .company-plan { display: inline-block; color: var(--text-secondary); font-size: .84rem; }
+.company-workspace-id { display: block; margin-top: .4rem; color: var(--text-secondary); font-size: .78rem; }
+.company-workspace-id strong { color: var(--text-primary); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 .company-switcher { display: grid; gap: .42rem; min-width: 230px; color: var(--text-secondary); font-size: .76rem; font-weight: 700; }
 .company-switcher select { width: 100%; min-height: 42px; padding: .55rem .8rem; border: 1px solid var(--border-color); border-radius: 9px; background: var(--surface-color); color: var(--text-primary); font: inherit; font-size: .9rem; font-weight: 600; }
 .company-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--border-color); }
@@ -52,6 +54,8 @@
 .company-text-button:disabled { opacity: .55; cursor: not-allowed; }
 .company-text-danger { color: var(--danger-color); }
 .company-content-grid { display: grid; grid-template-columns: minmax(275px, .8fr) minmax(0, 1.4fr); align-items: start; gap: 1.2rem; }
+.company-request-queue { grid-column: 1 / -1; }
+.company-request-selected { margin: 0; padding: .7rem .85rem; border-radius: 9px; background: var(--surface-tint); color: var(--text-primary); font-size: .82rem; }
 .company-side-form { display: grid; gap: 1rem; }
 .company-side-form .company-section-heading { margin-bottom: .1rem; }
 .company-side-form .button { margin-top: .25rem; }
@@ -89,6 +93,10 @@
 .company-invite-pending-row span { color: var(--text-secondary); font-size: .78rem; }
 .company-invite-pending-row .button { margin: 0; padding: .5rem .8rem; font-size: .8rem; }
 .company-invite-back { display: inline-block; margin-top: 1.25rem; color: var(--primary-color); font-size: .85rem; font-weight: 700; }
+.company-claim-form { display: grid; gap: .85rem; margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px solid var(--border-color); }
+.company-claim-form h2 { margin: 0; color: var(--text-primary); font-size: 1.12rem; }
+.company-claim-form p, .company-claim-form small { margin: 0; color: var(--text-secondary); font-size: .82rem; line-height: 1.5; }
+.company-claim-form .button { justify-self: start; }
 @media (max-width: 850px) { .company-content-grid { grid-template-columns: 1fr; } }
 @media (max-width: 650px) {
   .companies-page { padding: 1.3rem 1rem 3rem; }

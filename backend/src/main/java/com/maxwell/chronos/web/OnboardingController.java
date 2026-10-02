@@ -45,11 +45,6 @@ public class OnboardingController {
     public Map<String,String> login(@Valid @RequestBody LoginRequest request) {
         return Map.of("token",authentication.login(request.email,request.password));
     }
-    @PostMapping("/auth/register")
-    public Map<String,String> register(@Valid @RequestBody EmployeeRequest request) {
-        onboarding.register(request.firstName, request.lastName, request.email);
-        return Map.of("message", "Check your work email for an activation link. If you already have an account, sign in or reset your password.");
-    }
     @PostMapping("/auth/invitations/validate")
     public OnboardingService.InvitationInfo validate(@Valid @RequestBody TokenRequest request) {
         return onboarding.validate(request.token);
