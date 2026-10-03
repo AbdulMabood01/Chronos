@@ -121,6 +121,7 @@ export const AuthProvider = ({ children }) => {
     error,
     login,
     logout,
+    refreshUser: checkAuth,
     updateProfile,
     isAdmin,
     sessionWarning,

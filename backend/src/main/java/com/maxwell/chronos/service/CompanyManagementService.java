@@ -5,6 +5,7 @@ import com.maxwell.chronos.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,6 +15,8 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.List;
@@ -32,7 +35,36 @@ public class CompanyManagementService {
     private final UserRepository users;
     private final InvitationEmailService mail;
     private final AuditService audit;
+    private final OnboardingService onboarding;
+    private final PasswordEncoder passwords;
     private final SecureRandom random = new SecureRandom();
+    public record InvitationDetails(long id, String companyName, String projectName, String role,
+                                    String email, String status, OffsetDateTime expiresAt) {}
+    private static final String INVITATION_DETAILS_SQL = "SELECT i.id, c.name AS company_name, " +
+            "p.name AS project_name, i.role_key, i.invitee_email, i.expires_at, " +
+            "CASE WHEN i.accepted_at IS NOT NULL THEN 'ACCEPTED' " +
+            "WHEN i.revoked_at IS NOT NULL THEN 'REVOKED' " +
+            "WHEN i.expires_at <= now() THEN 'EXPIRED' ELSE 'PENDING' END AS status " +
+            "FROM company_invitations i JOIN companies c ON c.id=i.company_id " +
+            "LEFT JOIN projects p ON p.id=i.project_id ";
+
+    private InvitationDetails invitationDetails(ResultSet rs, int row) throws SQLException {
+        return new InvitationDetails(rs.getLong("id"), rs.getString("company_name"),
+                rs.getString("project_name"), rs.getString("role_key"), rs.getString("invitee_email"),
+                rs.getString("status"), rs.getObject("expires_at", OffsetDateTime.class));
+    }
+
+    public InvitationDetails previewInvitation(String token) {
+        return db.query(INVITATION_DETAILS_SQL + "WHERE i.token_hash=?", this::invitationDetails, hash(token))
+                .stream().findFirst().orElseThrow(() -> new IllegalArgumentException("Invalid invitation"));
+    }
+
+    public List<InvitationDetails> myPendingInvitations(long actorId) {
+        User actor = users.findById(actorId).orElseThrow(() -> new AccessDeniedException("Sign in required"));
+        return db.query(INVITATION_DETAILS_SQL + "WHERE i.invitee_email=? AND i.accepted_at IS NULL " +
+                "AND i.revoked_at IS NULL AND i.expires_at > now() ORDER BY i.created_at DESC, i.id DESC",
+                this::invitationDetails, actor.getEmail().toLowerCase(Locale.ROOT));
+    }
 
     public List<Map<String, Object>> myCompanies(long actorId) {
         if (access.hasPlatformRole(actorId, "PLATFORM_ADMIN"))
@@ -71,8 +103,13 @@ public class CompanyManagementService {
     }
 
     public void invite(long companyId, Long projectId, String address, String role, long actorId) {
+        invite(companyId, projectId, address, role, actorId, null);
+    }
+
+    public void invite(long companyId, Long projectId, String address, String role, long actorId,
+                       Long accessRequestId) {
         String normalized = address == null ? "" : address.trim().toLowerCase(Locale.ROOT);
-        if (!normalized.matches("[^\\s@]+@[^\\s@]+\\.[^\\s@]+") || normalized.length() > 255)
+        if (!validEmail(normalized))
             throw new IllegalArgumentException("Valid invitee email is required");
         if (projectId == null && !COMPANY_ROLES.contains(role) || projectId != null && !PROJECT_ROLES.contains(role))
             throw new IllegalArgumentException("Role scope does not match invitation");
@@ -85,6 +122,13 @@ public class CompanyManagementService {
         if (projectId != null && !access.hasCompanyRole(companyId, actorId, "COMPANY_ADMIN")
                 && !access.mayManageProject(projectId, actorId))
             throw new AccessDeniedException("Project Admin invitation permission required");
+        if (accessRequestId != null) {
+            requireCompanyAdmin(companyId, actorId);
+            if (!Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS (SELECT 1 FROM company_access_requests " +
+                    "WHERE id=? AND company_id=? AND email=? AND invited_at IS NULL AND dismissed_at IS NULL)",
+                    Boolean.class, accessRequestId, companyId, normalized)))
+                throw new IllegalArgumentException("Pending access request not found for this email");
+        }
         if ("USER".equals(role)) requireTeamCapacity(companyId, projectId);
         byte[] bytes = new byte[32];
         random.nextBytes(bytes);
@@ -95,7 +139,40 @@ public class CompanyManagementService {
                 "created_by_user_id, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 companyId, projectId, normalized, role, hash(token), actorId, expires);
         mail.sendCompanyInvitation(normalized, companyName, token, expires.toInstant());
+        if (accessRequestId != null) db.update("UPDATE company_access_requests SET invited_at=now() " +
+                "WHERE id=? AND company_id=? AND email=? AND invited_at IS NULL AND dismissed_at IS NULL",
+                accessRequestId, companyId, normalized);
         audit.logAction(actorId, "COMPANY_INVITED", "Company", companyId, "Invited " + normalized + " as " + role);
+    }
+
+    public void requestAccess(String slug, String firstName, String lastName, String address) {
+        String normalizedSlug = slug == null ? "" : slug.trim().toLowerCase(Locale.ROOT);
+        String email = address == null ? "" : address.trim().toLowerCase(Locale.ROOT);
+        if (!normalizedSlug.matches("[a-z0-9][a-z0-9-]{1,78}") || firstName == null
+                || firstName.isBlank() || firstName.length() > 100 || lastName == null
+                || lastName.isBlank() || lastName.length() > 100
+                || !validEmail(email))
+            throw new IllegalArgumentException("Enter a workspace ID, name and valid email address");
+        List<Long> ids = db.queryForList("SELECT id FROM companies WHERE slug=?", Long.class, normalizedSlug);
+        if (ids.isEmpty()) return;
+        db.update("INSERT INTO company_access_requests(company_id,first_name,last_name,email) " +
+                "VALUES (?,?,?,?) ON CONFLICT (company_id,email) WHERE invited_at IS NULL AND dismissed_at IS NULL " +
+                "DO NOTHING", ids.get(0), firstName.trim(), lastName.trim(), email);
+    }
+
+    public List<Map<String, Object>> accessRequests(long companyId, long actorId) {
+        requireCompanyAdmin(companyId, actorId);
+        return db.queryForList("SELECT id,first_name,last_name,email,requested_at FROM company_access_requests " +
+                "WHERE company_id=? AND invited_at IS NULL AND dismissed_at IS NULL ORDER BY requested_at,id",
+                companyId);
+    }
+
+    public void dismissAccessRequest(long companyId, long requestId, long actorId) {
+        requireCompanyAdmin(companyId, actorId);
+        if (db.update("UPDATE company_access_requests SET dismissed_at=now() WHERE company_id=? AND id=? " +
+                "AND invited_at IS NULL AND dismissed_at IS NULL", companyId, requestId) != 1)
+            throw new IllegalArgumentException("Pending access request not found");
+        audit.logAction(actorId, "ROLE_CHANGED", "Company", companyId, "Dismissed access request " + requestId);
     }
 
     public List<Map<String, Object>> invitations(long companyId, long actorId) {
@@ -128,6 +205,43 @@ public class CompanyManagementService {
         Map<String, Object> invitation = db.queryForList("SELECT * FROM company_invitations WHERE token_hash = ? " +
                 "FOR UPDATE", hash(token)).stream().findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Invalid invitation"));
+        acceptInvitation(invitation, actor, actorId);
+    }
+
+    public String claimInvitation(String token, String firstName, String lastName, String password) {
+        OnboardingService.validatePassword(password);
+        if (firstName == null || firstName.isBlank() || firstName.length() > 100
+                || lastName == null || lastName.isBlank() || lastName.length() > 100)
+            throw new IllegalArgumentException("First and last name are required");
+        Map<String, Object> invitation = db.queryForList("SELECT * FROM company_invitations WHERE token_hash=? " +
+                "FOR UPDATE", hash(token)).stream().findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Invalid invitation"));
+        if (invitation.get("accepted_at") != null || invitation.get("revoked_at") != null
+                || !Boolean.TRUE.equals(db.queryForObject(
+                "SELECT expires_at > now() FROM company_invitations WHERE id=?", Boolean.class, invitation.get("id"))))
+            throw new IllegalArgumentException("Invitation has expired or is no longer valid");
+        String email = (String) invitation.get("invitee_email");
+        User actor = users.findByEmailForUpdate(email).orElse(null);
+        if (actor != null && actor.getPasswordHash() != null)
+            throw new IllegalArgumentException("This email already has an account. Sign in to accept the invitation.");
+        if (actor != null && !Boolean.TRUE.equals(actor.getIsActive()))
+            throw new IllegalArgumentException("This account is inactive. Contact your administrator.");
+        if (actor == null) actor = onboarding.create(firstName, lastName, email);
+        actor.setPasswordHash(passwords.encode(password));
+        users.saveAndFlush(actor);
+        acceptInvitation(invitation, actor, actor.getId());
+        return email;
+    }
+
+    public void acceptById(long invitationId, long actorId) {
+        User actor = users.findById(actorId).orElseThrow(() -> new AccessDeniedException("Sign in required"));
+        Map<String, Object> invitation = db.queryForList("SELECT * FROM company_invitations WHERE id=? " +
+                "AND invitee_email=? FOR UPDATE", invitationId, actor.getEmail().toLowerCase(Locale.ROOT))
+                .stream().findFirst().orElseThrow(() -> new IllegalArgumentException("Invitation not found for this account"));
+        acceptInvitation(invitation, actor, actorId);
+    }
+
+    private void acceptInvitation(Map<String, Object> invitation, User actor, long actorId) {
         if (invitation.get("accepted_at") != null || invitation.get("revoked_at") != null
                 || !Boolean.TRUE.equals(db.queryForObject(
                 "SELECT expires_at > now() FROM company_invitations WHERE id = ?", Boolean.class, invitation.get("id"))))
@@ -241,6 +355,14 @@ public class CompanyManagementService {
         if (!access.hasCompanyRole(companyId, actorId, "COMPANY_ADMIN")
                 && !access.hasPlatformRole(actorId, "PLATFORM_ADMIN"))
             throw new AccessDeniedException("Company Admin permission required");
+    }
+
+    private boolean validEmail(String email) {
+        if (email == null || email.length() > 255 || email.chars().anyMatch(Character::isWhitespace)) return false;
+        int at = email.indexOf('@');
+        if (at < 1 || at != email.lastIndexOf('@')) return false;
+        int dot = email.indexOf('.', at + 2);
+        return dot > at + 1 && dot < email.length() - 1;
     }
 
     private void requireTeamCapacity(long companyId, long projectId) {

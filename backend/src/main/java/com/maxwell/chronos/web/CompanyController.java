@@ -3,6 +3,8 @@ package com.maxwell.chronos.web;
 import com.maxwell.chronos.service.CompanyManagementService;
 import com.maxwell.chronos.service.UserService;
 import lombok.RequiredArgsConstructor;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.*;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
@@ -23,8 +25,21 @@ public class CompanyController {
     }
 
     public record CompanyInput(String name, String slug) {}
-    public record InvitationInput(Long projectId, String email, String role) {}
+    public record InvitationInput(Long projectId, String email, String role, Long accessRequestId) {}
     public record AcceptInput(String token) {}
+    // Keep credentials out of generated toString methods and logs.
+    public static class ClaimInput {
+        @NotBlank @Pattern(regexp="[A-Za-z0-9_-]{43}") public String token;
+        @NotBlank @Size(max=100) public String firstName;
+        @NotBlank @Size(max=100) public String lastName;
+        @NotBlank @Size(max=72) public String password;
+    }
+    public static class AccessRequestInput {
+        @NotBlank @Size(max=80) public String slug;
+        @NotBlank @Size(max=100) public String firstName;
+        @NotBlank @Size(max=100) public String lastName;
+        @NotBlank @Email @Size(max=255) public String email;
+    }
     public record ModeratorInput(long projectId, long userId, boolean timesheets, boolean expenses,
                                  LocalDate startsOn, LocalDate endsOn) {}
     public record OwnershipInput(long userId) {}
@@ -44,7 +59,7 @@ public class CompanyController {
 
     @PostMapping("/{companyId}/invitations") public void invite(@PathVariable long companyId,
             @RequestBody InvitationInput input, @AuthenticationPrincipal Jwt jwt) {
-        companies.invite(companyId, input.projectId(), input.email(), input.role(), actor(jwt));
+        companies.invite(companyId, input.projectId(), input.email(), input.role(), actor(jwt), input.accessRequestId());
     }
 
     @GetMapping("/{companyId}/invitations") public List<Map<String, Object>> invitations(
@@ -60,6 +75,40 @@ public class CompanyController {
     @PostMapping("/invitations/accept") public void accept(@RequestBody AcceptInput input,
             @AuthenticationPrincipal Jwt jwt) {
         companies.accept(input.token(), actor(jwt));
+    }
+
+    @PostMapping("/invitations/preview") public CompanyManagementService.InvitationDetails preview(
+            @RequestBody AcceptInput input) {
+        return companies.previewInvitation(input.token());
+    }
+
+    @PostMapping("/invitations/claim") public Map<String, String> claim(@Valid @RequestBody ClaimInput input) {
+        return Map.of("email", companies.claimInvitation(input.token, input.firstName, input.lastName, input.password));
+    }
+
+    @PostMapping("/access-requests") public Map<String, String> requestAccess(@Valid @RequestBody AccessRequestInput input) {
+        companies.requestAccess(input.slug, input.firstName, input.lastName, input.email);
+        return Map.of("message", "Request received. If the workspace ID is valid, its administrator can review it and send an invitation.");
+    }
+
+    @GetMapping("/{companyId}/access-requests") public List<Map<String, Object>> accessRequests(
+            @PathVariable long companyId, @AuthenticationPrincipal Jwt jwt) {
+        return companies.accessRequests(companyId, actor(jwt));
+    }
+
+    @DeleteMapping("/{companyId}/access-requests/{requestId}") public void dismissAccessRequest(
+            @PathVariable long companyId, @PathVariable long requestId, @AuthenticationPrincipal Jwt jwt) {
+        companies.dismissAccessRequest(companyId, requestId, actor(jwt));
+    }
+
+    @GetMapping("/invitations/mine") public List<CompanyManagementService.InvitationDetails> myPendingInvitations(
+            @AuthenticationPrincipal Jwt jwt) {
+        return companies.myPendingInvitations(actor(jwt));
+    }
+
+    @PostMapping("/invitations/{invitationId}/accept") public void acceptById(
+            @PathVariable long invitationId, @AuthenticationPrincipal Jwt jwt) {
+        companies.acceptById(invitationId, actor(jwt));
     }
 
     @PostMapping("/{companyId}/moderator-grants") public void grant(@PathVariable long companyId,

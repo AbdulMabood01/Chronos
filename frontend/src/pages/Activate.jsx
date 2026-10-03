@@ -38,7 +38,7 @@ export default function Activate() {
     <BrandLogo /><h1>Activate your Chronos account</h1>
     {loading && <p role="status">Please wait…</p>}
     {error && <p role="alert" className="error-message">{error}</p>}
-    {done ? <p role="status">Your account is active. <Link to="/login">Sign in</Link></p> : employee && <>
+    {done ? <p role="status">Your account is active. <Link to="/login">Sign in</Link> to review your company invitations.</p> : employee && <>
       <p>Welcome, {employee.firstName} {employee.lastName}.<br />{employee.email}</p>
       <form onSubmit={submit}>
         <p id="password-help">Use at least 12 characters with uppercase, lowercase and a number. Maximum 72 UTF-8 bytes.</p>

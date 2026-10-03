@@ -11,9 +11,11 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
+import java.time.ZoneId;
 import java.util.List;
 
 @Service
@@ -32,6 +34,7 @@ public class TimesheetCorrectionRequestService {
     private final NotificationService notifications;
     private final AuditService audit;
     private final CompanyAccessService access;
+    private final Clock clock;
 
     public TimesheetCorrectionRequestDTO request(Long timesheetId, Long projectId, String comment, User employee) {
         if (employee == null) throw new AccessDeniedException("Employee access required");
@@ -40,11 +43,12 @@ public class TimesheetCorrectionRequestService {
         Timesheet sheet = timesheets.findForUpdate(timesheetId)
                 .orElseThrow(() -> new IllegalArgumentException("Timesheet not found"));
         if (!sheet.getUser().getId().equals(employee.getId())) throw new AccessDeniedException("Not your timesheet");
+        LocalDate today = LocalDate.now(clock.withZone(ZoneId.systemDefault()));
         YearMonth period = YearMonth.of(sheet.getYear(), sheet.getMonth());
-        if (period.isAfter(YearMonth.now()))
+        if (period.isAfter(YearMonth.from(today)))
             throw new IllegalArgumentException("Future timesheets cannot be opened");
         LocalDate deadline = period.atEndOfMonth().plusDays(REQUEST_DAYS_AFTER_MONTH_END);
-        if (LocalDate.now().isAfter(deadline))
+        if (today.isAfter(deadline))
             throw new IllegalArgumentException("The opening request deadline was " + deadline + ".");
         Project project = projects.findById(projectId).orElseThrow(() -> new IllegalArgumentException("Project not found"));
         var assignment = assignments.findByProjectIdAndUserId(projectId, employee.getId())
@@ -57,7 +61,7 @@ public class TimesheetCorrectionRequestService {
                 .orElse(TimesheetStatus.DRAFT);
         boolean approved = projectStatus == TimesheetStatus.APPROVED || projectStatus == TimesheetStatus.LOCKED
                 || sheet.isApprovalFrozen() || sheet.getStatus() == TimesheetStatus.APPROVED || sheet.isLocked();
-        if (!approved && !LocalDate.now().isAfter(period.atEndOfMonth()
+        if (!approved && !today.isAfter(period.atEndOfMonth()
                 .plusDays(TimesheetService.EDIT_DAYS_AFTER_MONTH_END)))
             throw new IllegalArgumentException("This timesheet is still open for editing");
         if (submission.isPresent()) {
@@ -65,7 +69,7 @@ public class TimesheetCorrectionRequestService {
             if (status == TimesheetStatus.SUBMITTED || status == TimesheetStatus.CHANGE_REQUESTED)
                 throw new IllegalArgumentException("This project timesheet is already awaiting review");
             if (submission.get().getCorrectionUntil() != null
-                    && submission.get().getCorrectionUntil().isAfter(LocalDateTime.now())
+                    && submission.get().getCorrectionUntil().isAfter(LocalDateTime.now(clock.withZone(ZoneId.systemDefault())))
                     && submission.get().isEditable())
                 throw new IllegalArgumentException("A correction window is already open");
         }
@@ -127,7 +131,7 @@ public class TimesheetCorrectionRequestService {
         request.setStatus(approve ? TimesheetCorrectionStatus.APPROVED : TimesheetCorrectionStatus.DECLINED);
         request.setAdminComment(note);
         request.setDecidedBy(projectAdmin);
-        request.setDecidedAt(LocalDateTime.now());
+        request.setDecidedAt(LocalDateTime.now(clock.withZone(ZoneId.systemDefault())));
         requests.save(request);
         audit.logAction(projectAdmin.getId(), approve ? "TIMESHEET_CORRECTION_APPROVED" : "TIMESHEET_CORRECTION_DECLINED",
                 "TimesheetCorrectionRequest", requestId, note == null ? "Approved" : note);

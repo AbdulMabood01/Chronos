@@ -72,17 +72,26 @@ apiClient.interceptors.response.use((response) => {
   const passwordMessage = passwordRequest && status === 400
     && passwordErrors.has(error.response?.data?.message)
     ? error.response.data.message : '';
+  const invitationMessage = /^\/companies\/invitations(?:\/|$)/.test(error.config?.url || '')
+    && [400, 403].includes(status) && [
+      'Invalid invitation', 'Invitation has expired or is no longer valid',
+      'Invitation not found for this account', 'Sign in using the invited email address',
+      'This email already has an account. Sign in to accept the invitation.',
+      'This account is inactive. Contact your administrator.',
+      'Use at least 12 characters with uppercase, lowercase and a number (maximum 72 UTF-8 bytes).',
+      'First and last name are required',
+    ].includes(error.response?.data?.message) ? error.response.data.message : '';
   const message = !error.response && error.code === 'ECONNABORTED'
     ? 'The request is taking longer than expected. Please try again.'
     : !error.response ? 'Unable to connect. Check your internet connection and try again.'
     : status === 401 ? 'Your session has expired. Please sign in again.'
-    : status === 403 ? "You don't have permission to perform this action."
+    : status === 403 ? invitationMessage || "You don't have permission to perform this action."
     : status === 404 ? 'The requested item was not found.'
     : status === 423 && error.config?.url === '/auth/login'
       ? 'Your account is locked. Contact an administrator.'
     : status >= 500 ? 'Something went wrong on our side. Please try again.'
-    : status === 429 && error.config?.publicAuth ? 'Unable to sign in. Check your credentials or try again later.'
-    : validationMessage || correctionRequestMessage || timesheetClosedMessage || passwordMessage || (status === 400 ? 'Please check your entries and try again.'
+    : status === 429 && error.config?.publicAuth ? 'Too many attempts. Please try again in a minute.'
+    : validationMessage || correctionRequestMessage || timesheetClosedMessage || passwordMessage || invitationMessage || (status === 400 ? 'Please check your entries and try again.'
       : 'Unable to complete the request. Please try again.');
   error.userMessage = message;
   error.message = message;
@@ -100,7 +109,6 @@ apiClient.interceptors.response.use((response) => {
 });
 
 export const authAPI = {
-  register: data => apiClient.post('/auth/register', data, { publicAuth: true }),
   forgotPassword: email => apiClient.post('/auth/forgot-password', { email }, { publicAuth: true }),
   validatePasswordReset: token => apiClient.post('/auth/reset-password/validate', { token }, { publicAuth: true }),
   resetPassword: data => apiClient.post('/auth/reset-password', data, { publicAuth: true }),
@@ -122,6 +130,13 @@ export const companyAPI = {
   invitations: id => apiClient.get(`/companies/${id}/invitations`),
   revokeInvitation: (id, invitationId) => apiClient.delete(`/companies/${id}/invitations/${invitationId}`),
   accept: token => apiClient.post('/companies/invitations/accept', { token }),
+  previewInvitation: token => apiClient.post('/companies/invitations/preview', { token }, { publicAuth: true }),
+  claimInvitation: data => apiClient.post('/companies/invitations/claim', data, { publicAuth: true }),
+  requestAccess: data => apiClient.post('/companies/access-requests', data, { publicAuth: true }),
+  accessRequests: id => apiClient.get(`/companies/${id}/access-requests`),
+  dismissAccessRequest: (id, requestId) => apiClient.delete(`/companies/${id}/access-requests/${requestId}`),
+  myPendingInvitations: () => apiClient.get('/companies/invitations/mine', { background: true }),
+  acceptInvitation: id => apiClient.post(`/companies/invitations/${id}/accept`),
   grantModerator: (id, data) => apiClient.post(`/companies/${id}/moderator-grants`, data),
   moderatorGrants: id => apiClient.get(`/companies/${id}/moderator-grants`),
   revokeModerator: (id, grantId) => apiClient.delete(`/companies/${id}/moderator-grants/${grantId}`),

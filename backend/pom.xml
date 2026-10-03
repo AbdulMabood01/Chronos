@@ -19,7 +19,7 @@
 
     <properties>
         <java.version>25</java.version>
-        <jackson-bom.version>2.21.6</jackson-bom.version>
+        <jackson-bom.version>2.21.7</jackson-bom.version>
         <opentelemetry-instrumentation.version>2.31.1</opentelemetry-instrumentation.version>
         <!-- Security fixes newer than the Spring Boot 3.5.16 dependency baseline. -->
         <tomcat.version>10.1.60</tomcat.version>

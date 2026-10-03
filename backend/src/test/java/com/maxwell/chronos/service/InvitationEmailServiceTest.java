@@ -31,4 +31,18 @@ class InvitationEmailServiceTest {
         var ex=assertThrows(IllegalStateException.class,()->service.send(User.builder().email("alice@example.com").build(),"secret",Instant.now()));
         assertFalse(ex.getMessage().contains("sensitive")); assertNull(ex.getCause());
     }
+
+    @Test void companyInvitationStartsTheSameFlowForNewAndExistingAccounts() {
+        JavaMailSender sender=mock(JavaMailSender.class);
+        ObjectProvider<JavaMailSender> provider=mock(ObjectProvider.class); when(provider.getIfAvailable()).thenReturn(sender);
+        var service=new InvitationEmailService(provider,"chronos@example.com","https://chronos.example.com/");
+        service.sendCompanyInvitation("alice@example.com","Acme","secret-token",Instant.parse("2030-01-01T00:00:00Z"));
+        var captor=ArgumentCaptor.forClass(SimpleMailMessage.class); verify(sender).send(captor.capture());
+        var message=captor.getValue();
+        assertEquals("alice@example.com",message.getTo()[0]);
+        assertTrue(message.getText().contains("Acme"));
+        assertTrue(message.getText().contains("https://chronos.example.com/company-invite#token=secret-token"));
+        assertTrue(message.getText().contains("sign in or create an account"));
+        assertFalse(message.getText().contains("activate it using the email"));
+    }
 }
