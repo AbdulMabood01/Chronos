@@ -1,5 +1,5 @@
 /* Project Control: scoped surfaces that follow the workspace theme. */
-.projects-workspace-page { --pc-approved: #278569; --pc-submitted: #bf861f; --pc-rejected: #cf5267; --pc-draft: #518eae; }
+.projects-workspace-page { --pc-approved: var(--chart-approved); --pc-remaining: var(--chart-remaining); --pc-submitted: var(--chart-submitted); --pc-rejected: var(--chart-rejected); --pc-draft: var(--chart-draft); }
 .projects-workspace-page .admin-panel { padding: 32px; margin-bottom: 28px; }
 .projects-workspace-page .project-command-header { margin-bottom: 24px; }
 .projects-workspace-page .project-command-header .button { min-height: 42px; }
@@ -54,7 +54,7 @@
 .projects-workspace-page .project-donut-card { background: var(--surface-color); color: var(--text-primary); border: 1px solid var(--border-color); box-shadow: none; border-radius: 10px; padding: 24px; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 20px; min-width: 0; min-height: 0; }
 .projects-workspace-page .project-donut-card::after { display: none; }
 .projects-workspace-page .project-donut-left { grid-template-columns: minmax(0, 1fr); justify-self: stretch; justify-items: stretch; gap: 20px; min-width: 0; }
-.projects-workspace-page .project-donut-card .project-status-donut { width: min(200px, 100%); justify-self: center; border: 0; box-shadow: none; background: radial-gradient(circle at center, var(--surface-color) 0 56%, transparent 57%), conic-gradient(var(--pc-approved) 0 var(--approved-deg), var(--pc-submitted) var(--approved-deg) var(--submitted-deg), var(--pc-rejected) var(--submitted-deg) var(--rejected-deg), var(--pc-draft) var(--rejected-deg) var(--other-deg), var(--border-color) var(--other-deg) 360deg); }
+.projects-workspace-page .project-donut-card .project-status-donut { width: min(200px, 100%); justify-self: center; border: 0; box-shadow: none; background: radial-gradient(circle at center, var(--surface-color) 0 56%, transparent 57%), conic-gradient(var(--pc-approved) 0 var(--approved-deg), var(--pc-submitted) var(--approved-deg) var(--submitted-deg), var(--pc-rejected) var(--submitted-deg) var(--rejected-deg), var(--pc-draft) var(--rejected-deg) var(--other-deg), var(--pc-remaining) var(--other-deg) 360deg); }
 .projects-workspace-page .project-status-donut > span { color: var(--text-primary); font-size: clamp(21px, 2.3vw, 32px); font-weight: 650; text-align: center; max-width: 75%; }
 .projects-workspace-page .project-status-donut > small { color: var(--text-secondary); max-width: 76%; text-align: center; line-height: 1.2; }
 .projects-workspace-page .project-chart-legend { width: 100%; max-width: 100%; justify-self: stretch; gap: 9px; min-width: 0; }
@@ -64,7 +64,7 @@
 .projects-workspace-page .legend-submitted { background: var(--pc-submitted); }
 .projects-workspace-page .legend-rejected { background: var(--pc-rejected); }
 .projects-workspace-page .legend-logged { background: var(--pc-draft); }
-.projects-workspace-page .legend-remaining { background: var(--border-color); }
+.projects-workspace-page .legend-remaining { background: var(--pc-remaining); }
 .projects-workspace-page .project-insight-panel { background: var(--surface-muted); border: 1px solid var(--border-color); border-radius: 9px; padding: 22px; box-shadow: none; }
 .projects-workspace-page .project-insight-header span, .projects-workspace-page .project-insight-grid span, .projects-workspace-page .project-alert-card span { color: var(--text-secondary); font-size: 10px; letter-spacing: .5px; }
 .projects-workspace-page .project-insight-header strong, .projects-workspace-page .project-insight-grid strong, .projects-workspace-page .project-alert-card strong { color: var(--text-primary); overflow-wrap: anywhere; }
@@ -233,3 +233,7 @@ body.theme-dark .projects-workspace-page textarea { background: var(--surface-co
   .projects-workspace-page .pc-details-heading, .projects-workspace-page .pc-expense-budget-heading { flex-direction: column; }
   .projects-workspace-page .pc-details-actions > div, .projects-workspace-page .pc-details-actions .button, .projects-workspace-page .pc-budget-editor .button { width: 100%; }
 }
+
+.project-assignment-approvals { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 16px; padding: 16px; border: 1px solid var(--border-color); border-radius: 8px; }
+.project-assignment-approvals label { display: flex; align-items: center; gap: 8px; }
+.project-assignment-approvals small { width: 100%; color: var(--text-secondary); }

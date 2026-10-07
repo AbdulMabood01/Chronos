@@ -1,6 +1,12 @@
 /* Maxwell workspace design system. Shared by all employee and management pages. */
 :root {
   --primary-color: #820638;
+  --chart-approved: #2563eb;
+  --chart-remaining: #059669;
+  --chart-submitted: #f59e0b;
+  --chart-rejected: #e11d48;
+  --chart-draft: #7c3aed;
+  --chart-empty: #dfe6ec;
   --primary-dark: #63032a;
   --secondary-color: #10374b;
   --accent-color: #ab8152;
@@ -32,7 +38,7 @@ a, button, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .workspace-brand > span { font-size: 17px; font-weight: 750; letter-spacing: 2px; }
 .workspace-brand > span > span { display: block; font-size: 7px; letter-spacing: 1.4px; color: var(--text-secondary); margin-top: 5px; }
 .workspace-navigation { padding: 0 14px 24px; }
-.nav-section-label { font-size: 10px; letter-spacing: 1.6px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); padding: 0 14px; margin-bottom: 12px; }
+.nav-section-label { font-size: 11px; letter-spacing: .5px; font-weight: 700; text-transform: none; color: var(--text-secondary); padding: 0 14px; margin-bottom: 12px; }
 .management-label { margin-top: 30px; }
 .workspace-nav-link { display: flex; align-items: center; gap: 12px; min-height: 45px; padding: 10px 13px; margin-bottom: 4px; text-decoration: none; color: var(--text-secondary); border-radius: 7px; font-size: 13px; font-weight: 550; border: 1px solid transparent; transition: background .16s, color .16s; }
 .workspace-nav-link:hover { background: var(--surface-muted); color: var(--text-primary); }
@@ -68,13 +74,13 @@ a, button, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .page-subtitle { color: var(--text-secondary); font-size: 13px; line-height: 1.7; }
 .header-bar { margin-bottom: 26px; gap: 20px; }
 .accent-page-header {
-  padding: 22px 24px;
-  border: 1px solid color-mix(in srgb, var(--primary-color) 32%, var(--border-color));
-  border-left: 4px solid var(--primary-color);
-  border-radius: 12px;
-  background: linear-gradient(105deg, color-mix(in srgb, var(--primary-color) 13%, var(--surface-color)), var(--surface-color) 68%);
-  box-shadow: var(--shadow-card);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
+.workspace-content .page-container .header-bar { background:transparent; border:0; border-radius:0; box-shadow:none; padding:0; }
 .eyebrow { color: var(--primary-color); font-size: 9px; letter-spacing: 1.8px; font-weight: 750; }
 .card, .dashboard-card, .admin-panel, .table-container, .request-card, .project-card, .home-panel, .loading-panel, .empty-state { border: 1px solid var(--border-color); border-radius: 12px; background: var(--surface-color); box-shadow: var(--shadow-card); }
 .card, .admin-panel { padding: 24px; }
@@ -179,7 +185,7 @@ a, button, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .hero-month { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 0 28px; color: white; }
 .hero-month > strong { font-size: 13px; margin-top: 9px; font-weight: 550; }
 .hero-month > span { font-size: 10px; color: #b5c8d4; }
-.month-ring { width: 156px; height: 156px; border-radius: 50%; background: conic-gradient(#cea3b6 var(--progress), #ffffff12 0); padding: 5px; }
+.month-ring { width: 156px; height: 156px; border-radius: 50%; background: conic-gradient(var(--chart-approved) var(--progress), var(--chart-remaining) 0); padding: 5px; }
 .month-ring > div { border-radius: 50%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #103347; }
 .month-ring small { font-size: 7px; color: #bbccd7; letter-spacing: 1.4px; }
 .month-ring strong { margin-top: 8px; font-size: 42px; font-weight: 450; letter-spacing: -1px; }
@@ -191,7 +197,7 @@ a, button, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .employee-command-card { display: flex; flex-direction: column; padding: 20px; border: 1px solid var(--border-color); background: var(--surface-color); border-radius: 10px; box-shadow: var(--shadow-card); gap: 9px; text-decoration: none; color: var(--text-primary); }
 .employee-command-card:hover { transform: translateY(-3px); border-color: #bca1af; box-shadow: var(--shadow-soft); }
 .metric-heading { display: flex; align-items: center; justify-content: space-between; color: var(--text-secondary); margin-bottom: 4px; }
-.metric-heading .metric-icon { display: grid; place-items: center; color: var(--primary-color); background: var(--surface-tint); border-radius: 8px; width: 36px; height: 36px; }
+.metric-heading .metric-icon { display: grid; place-items: center; color: var(--primary-color); background: transparent; border-radius: 8px; width: 36px; height: 36px; }
 .employee-command-card > span { font-size: 10px; color: var(--text-secondary); text-transform: none; font-weight: 550; }
 .employee-command-card > strong { font-size: 30px; font-weight: 600; letter-spacing: -.8px; }
 .employee-command-card strong small { font-size: 11px; font-weight: 450; color: var(--text-secondary); letter-spacing: 0; }
@@ -232,6 +238,7 @@ a, button, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 /* A complete dark palette, while keeping the company logo on its original white ground. */
 body.theme-dark { --page-bg: #101d29; --surface-color: #172835; --surface-muted: #1b2e3d; --surface-tint: #35283a; --border-color: #2b3d4b; --text-primary: #e3eaf1; --text-secondary: #a2b2c2; --primary-color: #e5abc3; --primary-dark: #ca8ba6; --light-gray: #1b2e3d; background: var(--page-bg); }
 body.theme-dark .workspace-nav-link.active { border-color: #634155; }
+body.theme-dark { --chart-approved:#3b82f6; --chart-remaining:#10b981; --chart-submitted:#fbbf24; --chart-rejected:#f43f5e; --chart-draft:#8b5cf6; --chart-empty:#314755; }
 body.theme-dark .button-primary { background: #9b2252; color: white; }
 body.theme-dark .button-primary:hover { background: #b72e62; }
 body.theme-dark .card, body.theme-dark .admin-panel, body.theme-dark .admin-hero, body.theme-dark .summary-tile, body.theme-dark .calendar-day, body.theme-dark .employee-command-card, body.theme-dark .login-card { background: var(--surface-color); border-color: var(--border-color); color: var(--text-primary); }
@@ -302,4 +309,20 @@ body.theme-dark .inbox-count { background: #9b2252; }
   .summary-tile { min-width: 0; padding: 14px; }
   .summary-tile strong { font-size: 17px; }
   .summary-tile strong.status-badge { font-size: 12px; }
+}
+/* Shared company context controls. */
+.workspace-company-selector { display: grid; gap: 3px; font-size: .7rem; color: var(--text-secondary); }
+.workspace-company-selector select { max-width: 220px; min-height: 34px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--surface-color); color: var(--text-primary); padding: 5px 8px; }
+.company-selection-page { max-width: 680px; margin: 5vh auto; }
+.company-selection-card { padding: 2rem; border: 1px solid var(--border-color); border-radius: 16px; background: var(--surface-color); }
+.company-selection-list { display: grid; gap: 10px; margin: 1.5rem 0; }
+.company-selection-list .button { display: flex; justify-content: space-between; gap: 16px; }
+.company-selection-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 1.5rem; }
+@media (max-width: 640px) {
+  .workspace-company-selector select { max-width: 115px; font-size: 12px; }
+  .workspace-company-selector { font-size: 9px; }
+  .workspace-tools time { display: none; }
+  .workspace-tools { gap: 5px; }
+  .workspace-breadcrumb { min-width: 0; }
+  .workspace-breadcrumb strong { max-width: 65px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 }

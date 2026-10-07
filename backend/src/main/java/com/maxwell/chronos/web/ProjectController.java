@@ -21,12 +21,16 @@ import java.util.List;
 public class ProjectController {
     private final ProjectService projectService;
     private final UserService userService;
+    private final com.maxwell.chronos.service.CompanyAccessService access;
+
+    @PostMapping("/{projectId}/archive") public ProjectDTO archive(@PathVariable long projectId,@AuthenticationPrincipal Jwt jwt){return projectService.archiveProject(projectId,userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username")));}
 
     @GetMapping
-    public ResponseEntity<List<ProjectDTO>> getProjects(@AuthenticationPrincipal Jwt jwt) {
+    public ResponseEntity<List<ProjectDTO>> getProjects(@RequestParam(required=false) Long companyId,@AuthenticationPrincipal Jwt jwt) {
         var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
         try {
-            return ResponseEntity.ok(projectService.getProjects(user));
+            if(companyId!=null)access.requireActiveCompanyAccess(companyId,user.getId());
+            return ResponseEntity.ok(projectService.getProjects(user).stream().filter(p->companyId==null||companyId.equals(p.getCompanyId())).toList());
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(403).build();
         }
@@ -46,10 +50,12 @@ public class ProjectController {
     @GetMapping("/hours-dashboard")
     public ResponseEntity<List<ProjectHoursDashboardDTO>> getProjectHoursDashboard(@RequestParam int year,
                                                                                    @RequestParam int month,
+                                                                                   @RequestParam(required=false) Long companyId,
                                                                                    @AuthenticationPrincipal Jwt jwt) {
         var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
         try {
-            return ResponseEntity.ok(projectService.getProjectHoursDashboard(year, month, user));
+            if(companyId!=null)access.requireActiveCompanyAccess(companyId,user.getId());
+            return ResponseEntity.ok(projectService.getProjectHoursDashboard(year, month, user).stream().filter(p->companyId==null||companyId.equals(access.companyId(p.getProjectId()))).toList());
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(403).build();
         }
@@ -84,10 +90,12 @@ public class ProjectController {
                                                      @RequestParam LocalDate endDate,
                                                      @RequestParam BigDecimal billRate,
                                                      @RequestParam BigDecimal plannedHours,
+                                                     @RequestParam(defaultValue="false") boolean approveHours,
+                                                     @RequestParam(defaultValue="false") boolean approveExpenses,
                                                      @AuthenticationPrincipal Jwt jwt) {
         var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
         try {
-            return ResponseEntity.ok(projectService.assignEmployee(projectId, userId, startDate, endDate, billRate, plannedHours, user));
+            return ResponseEntity.ok(projectService.assignEmployee(projectId, userId, startDate, endDate, billRate, plannedHours, approveHours, approveExpenses, user));
         } catch (IllegalArgumentException e) {
             throw e;
         }

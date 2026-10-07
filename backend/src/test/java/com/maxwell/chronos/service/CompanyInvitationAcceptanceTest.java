@@ -25,7 +25,7 @@ class CompanyInvitationAcceptanceTest {
     private final OnboardingService onboarding = mock(OnboardingService.class);
     private final PasswordEncoder passwords = mock(PasswordEncoder.class);
     private final CompanyManagementService service = new CompanyManagementService(db,
-            mock(CompanyAccessService.class), users, mock(InvitationEmailService.class), audit,
+            mock(CompanyAccessService.class), users, mock(InvitationDeliveryService.class), audit,
             onboarding, passwords);
 
     private Map<String, Object> invitation(String email) {
@@ -56,6 +56,7 @@ class CompanyInvitationAcceptanceTest {
         when(db.queryForList(anyString(), eq(8L), eq("alice@example.com")))
                 .thenReturn(List.of(invitation("alice@example.com")));
         when(db.queryForObject(anyString(), eq(Boolean.class), eq(8L))).thenReturn(true);
+        when(db.update(org.mockito.ArgumentMatchers.startsWith("INSERT INTO company_memberships"),eq(12L),eq(5L))).thenReturn(1);
 
         service.acceptById(8L, 5L);
 

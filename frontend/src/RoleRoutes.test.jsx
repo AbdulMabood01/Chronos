@@ -1,110 +1,76 @@
 // @vitest-environment jsdom
 import React from 'react';
+import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import App from './App';
-import { notificationAPI, employeeReportsAPI } from './api';
+import { companyAPI, notificationAPI } from './api';
 vi.mock('./api');
-vi.mock('./AuthContext', () => ({
-  AuthProvider: ({ children }) => children,
-  useAuth: () => ({ user: currentUser, loading: false, logout: vi.fn() }),
-}));
-vi.mock('./pages/Dashboard', () => ({ default: () => <p>Dashboard content</p> }));
-const currentUser = { id: 1, role: 'ADMIN', profileCompleted: true };
-beforeEach(() => {
-  currentUser.role = 'ADMIN';
-  currentUser.canReviewProjects = false;
-  currentUser.canManageProjects = false;
-  currentUser.canViewProjects = false;
-  currentUser.canSubmitWork = false;
-  notificationAPI.getUnreadCount.mockResolvedValue({ data: 0 });
-  employeeReportsAPI.list.mockResolvedValue({ data: [] });
+const user = { id:1, role:'ADMIN', roles:['COMPANY_ADMIN','PROJECT_ADMIN'], profileCompleted:true,
+  canReviewProjects:true, canManageProjects:true, canViewProjects:true, canSubmitWork:true };
+const workspace = { companies:[{id:12,name:'Company A'}], currentCompany:{id:12,name:'Company A'},
+  companyCapabilities:{}, companyRoles:[], projectPermissions:[], platformAdmin:false,platformCapabilities:{},
+  loading:false,switching:false,error:'',selectCompany:vi.fn() };
+vi.mock('./AuthContext',()=>({AuthProvider:({children})=>children,useAuth:()=>({user,loading:false,logout:vi.fn()})}));
+vi.mock('./CompanyContext',()=>({CompanyProvider:({children})=>children,useCompany:()=>workspace}));
+vi.mock('./pages/WorkspaceOverview',()=>({default:()=> <p>Workspace overview</p>}));
+vi.mock('./pages/Companies',()=>({default:()=> <p>Company workspace</p>,CompanyInvitation:()=> <p>Invitations</p>}));
+vi.mock('./pages/ProjectManagement',()=>({default:()=> <p>Project workspace</p>}));
+vi.mock('./pages/AdminDashboard',()=>({default:()=> <p>Approval workspace</p>}));
+beforeEach(()=>{
+  workspace.currentCompany={id:12,name:'Company A'};
+  workspace.platformAdmin=false;workspace.platformCapabilities={};workspace.companyCapabilities={};workspace.companyRoles=[];workspace.projectPermissions=[];
+  notificationAPI.getUnreadCount.mockResolvedValue({data:0});
+  companyAPI.context.mockResolvedValue({data:{companies:[]}});
 });
 afterEach(cleanup);
 
-it.each(['/reports', '/employee-reports'])('opens HR management from the Admin reports route %s', async path => {
-  window.history.replaceState({}, '', path);
-  render(<App />);
-  await screen.findByRole('heading', { name: 'Employee reports' });
-  expect(screen.getByRole('link', { name: 'Reports' }).getAttribute('href')).toBe('/reports');
-  expect(screen.getByRole('link', { name: 'Time & leave reports' }).getAttribute('href')).toBe('/time-reports');
-  expect(screen.queryByRole('button', { name: 'Submit confidential report' })).toBeNull();
+it.each(['/projects','/project-hours','/admin','/settings','/users','/reports','/employee-reports',
+  '/time-reports','/missing-timesheets','/team-leave-calendar','/sensitive-access','/confidential-reports','/letter-management',
+  '/timesheets','/expenses','/admin/letter-request/5','/timesheet/5'])('blocks %s without selected-company capabilities despite legacy ADMIN flags',async path=>{
+  window.history.replaceState({},'',path);render(<App/>);
+  await screen.findByText('Workspace overview');
+  await waitFor(()=>expect(window.location.pathname).toBe('/dashboard'));
+  expect(screen.queryByRole('link',{name:'Projects'})).toBeNull();
+  expect(screen.queryByRole('link',{name:'Settings'})).toBeNull();
 });
 
-it('blocks project admins from the HR reports URL', async () => {
-  currentUser.role = 'PROJECT_ADMIN';
-  window.history.replaceState({}, '', '/reports');
-  render(<App />);
-  await screen.findByText('Dashboard content');
-  expect(window.location.pathname).toBe('/dashboard');
+it('opens company people through a safe alias and shows company admin tools',async()=>{
+  workspace.companyCapabilities={canManageCompanyPeople:true,canViewProjects:true};workspace.companyRoles=['COMPANY_ADMIN'];
+  window.history.replaceState({},'','/users');render(<App/>);
+  await screen.findByText('Company workspace');
+  expect(window.location.pathname).toBe('/companies');
+  expect(screen.getByRole('link',{name:'People & Access'})).toHaveAttribute('href','/companies');
+  expect(screen.getByRole('link',{name:'Projects'})).toBeInTheDocument();
+  expect(screen.queryByRole('link',{name:'Approvals'})).toBeNull();
+  expect(screen.queryByRole('link',{name:'Settings'})).toBeNull();
 });
 
-it.each(['/timesheets', '/vacation'])('redirects Admin away from personal route %s', async (path) => {
-  window.history.replaceState({}, '', path);
-  render(<App />);
-  await screen.findByText('Dashboard content');
-  await waitFor(() => expect(window.location.pathname).toBe('/dashboard'));
-  expect(screen.queryByRole('link', { name: 'Timesheets' })).toBeNull();
-  expect(screen.queryByRole('link', { name: 'Time off' })).toBeNull();
-  expect(screen.getByRole('link', { name: 'Projects' })).toBeTruthy();
-  expect(screen.queryByRole('link', { name: 'Project hours' })).toBeNull();
-  expect(screen.getByRole('link', { name: 'Approvals' })).toBeTruthy();
+it('opens approvals for a scoped reviewer',async()=>{
+  workspace.companyCapabilities={canReviewWork:true};
+  window.history.replaceState({},'','/admin');render(<App/>);
+  await screen.findByText('Approval workspace');
+  expect(screen.getByRole('link',{name:'Approvals'})).toBeInTheDocument();
 });
 
-it('shows approvals and projects to an employee with project permissions', () => {
-  currentUser.role = 'EMPLOYEE';
-  currentUser.canReviewProjects = true;
-  currentUser.canManageProjects = true;
-  currentUser.canViewProjects = true;
-  currentUser.canSubmitWork = true;
-  window.history.replaceState({}, '', '/dashboard');
-  render(<App />);
-  expect(screen.getByRole('link', { name: 'Approvals' })).toBeTruthy();
-  expect(screen.queryByRole('link', { name: 'Project hours' })).toBeNull();
-  expect(screen.getByRole('link', { name: 'Timesheets' })).toBeTruthy();
-  expect(screen.getByRole('link', { name: 'Projects' })).toBeTruthy();
+it('removes administrative navigation and redirects when switching to a User company',async()=>{
+  workspace.companyCapabilities={canManageCompanyPeople:true,canViewProjects:true};workspace.companyRoles=['COMPANY_ADMIN'];
+  window.history.replaceState({},'','/projects');const view=render(<App/>);
+  await screen.findByText('Project workspace');
+  workspace.currentCompany={id:13,name:'Company B'};workspace.companyCapabilities={canViewProjects:true,canSubmitWork:true};workspace.companyRoles=[];
+  workspace.projectPermissions=[{projectId:201,roles:['USER'],capabilities:{canSubmitWork:true}}];view.rerender(<App/>);
+  await screen.findByText('Workspace overview');
+  expect(screen.queryByRole('link',{name:'People & Access'})).toBeNull();
+  expect(screen.queryByRole('link',{name:'Projects'})).toBeNull();
+  expect(screen.getByRole('link',{name:'Timesheets'})).toBeInTheDocument();
+  expect(screen.getByText('Company Member')).toBeInTheDocument();
 });
 
-it('shows approvals without team management to an approver without project management access', () => {
-  currentUser.role = 'EMPLOYEE';
-  currentUser.canReviewProjects = true;
-  currentUser.canManageProjects = false;
-  window.history.replaceState({}, '', '/dashboard');
-  render(<App />);
-  expect(screen.queryByText('Management')).toBeNull();
-  expect(screen.queryByRole('link', { name: 'Missing timesheets' })).toBeNull();
-  expect(screen.queryByRole('link', { name: 'Team leave calendar' })).toBeNull();
-  expect(screen.getByRole('link', { name: 'Approvals' })).toBeTruthy();
-  expect(screen.queryByRole('link', { name: 'Projects' })).toBeNull();
-  expect(screen.queryByRole('link', { name: 'Project hours' })).toBeNull();
-});
-
-it.each(['/projects', '/project-hours'])('blocks project management URL for an approver who is not a project manager: %s', async path => {
-  currentUser.role = 'EMPLOYEE';
-  currentUser.canReviewProjects = true;
-  currentUser.canManageProjects = false;
-  window.history.replaceState({}, '', path);
-  render(<App />);
-  await screen.findByText('Dashboard content');
-  expect(window.location.pathname).toBe('/dashboard');
-});
-
-it.each(['/projects', '/project-hours', '/admin', '/missing-timesheets', '/team-leave-calendar', '/settings', '/users', '/reports', '/audit', '/employee-reports'])('hides management and blocks employee URL %s', async path => {
-  currentUser.role = 'EMPLOYEE';
-  window.history.replaceState({}, '', path);
-  render(<App />);
-  await screen.findByText('Dashboard content');
-  expect(window.location.pathname).toBe('/dashboard');
-  expect(screen.queryByText('Management')).toBeNull();
-  expect(screen.queryByRole('link', { name: 'Projects' })).toBeNull();
-});
-
-it('hides settings from Admin navigation and blocks direct Settings URL', async () => {
-  currentUser.role = 'PROJECT_ADMIN';
-  window.history.replaceState({}, '', '/settings');
-  render(<App />);
-  await screen.findByText('Dashboard content');
-  expect(window.location.pathname).toBe('/dashboard');
-  expect(screen.getByRole('link', { name: 'Reports' })).toBeTruthy();
-  expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull();
+it('keeps the platform menu free of company operational and HR screens',async()=>{
+  workspace.platformAdmin=true;workspace.platformCapabilities={canCreateCompanies:true,canManageCompanyPlans:true};
+  window.history.replaceState({},'','/dashboard');render(<App/>);
+  await screen.findByText('Workspace overview');
+  expect(screen.getByRole('link',{name:'Companies'})).toBeInTheDocument();
+  for(const name of ['People & Access','Projects','Approvals','Reports','Settings','Audit log','Timesheets','Time off'])
+    expect(screen.queryByRole('link',{name})).toBeNull();
 });

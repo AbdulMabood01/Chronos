@@ -28,10 +28,10 @@ class UserLeaveBalanceControllerTest {
         var jwt = Jwt.withTokenValue("test").header("alg", "none")
                 .claim("preferred_username", "employee@example.com").build();
         when(users.findUserEntityByEmail("employee@example.com")).thenReturn(employee);
-        var expected = new LeaveBalanceDTO(2026, false, null, null, null, null);
-        when(balances.getBalance(12L, 2026, employee)).thenReturn(expected);
 
-        assertSame(expected, controller.getMyLeaveBalance(2026, jwt));
-        verify(balances).getBalance(12L, 2026, employee);
+
+
+        org.junit.jupiter.api.Assertions.assertEquals(410, org.junit.jupiter.api.Assertions.assertThrows(org.springframework.web.server.ResponseStatusException.class,()->controller.getMyLeaveBalance(2026,jwt)).getStatusCode().value());
+        verifyNoInteractions(balances);
     }
 }

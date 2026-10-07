@@ -21,10 +21,8 @@ public class InitialAdminBootstrap {
         return args -> transaction.executeWithoutResult(status -> {
             // Serialize concurrent bootstrap processes across application instances.
             jdbc.execute("SELECT pg_advisory_xact_lock(823471901)");
-            if(users.existsByRole(UserRole.ADMIN)) {
-                jdbc.update("INSERT INTO role_assignments(user_id,role_key) " +
-                        "SELECT id,'PLATFORM_ADMIN' FROM users WHERE role::text='ADMIN' ON CONFLICT DO NOTHING");
-                log.info("Admin already exists; skipping bootstrap");
+            if(Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM role_assignments WHERE role_key='PLATFORM_ADMIN' AND company_id IS NULL AND removed_at IS NULL)",Boolean.class))) {
+                log.info("Platform Admin already exists; skipping bootstrap");
                 return;
             }
 
@@ -39,10 +37,10 @@ public class InitialAdminBootstrap {
                 throw new IllegalStateException("ADMIN_EMAIL belongs to an existing non-Admin account; bootstrap will not overwrite it");
 
             var user=onboarding.create("System", "Admin", normalizedEmail);
-            user.setRole(UserRole.ADMIN); users.saveAndFlush(user);
+            users.saveAndFlush(user);
             jdbc.update("INSERT INTO role_assignments(user_id,role_key) VALUES (?,'PLATFORM_ADMIN')", user.getId());
             onboarding.invite(user.getId());
-            log.info("Created the initial Admin and sent an account setup invitation to {}", normalizedEmail);
+            log.info("Created the initial Platform Admin and queued account setup delivery");
         });
     }
 }

@@ -29,7 +29,7 @@ class InitialAdminBootstrapTest {
     }
 
     @Test void existingAdminIsLeftUntouched() throws Exception {
-        when(users.existsByRole(UserRole.ADMIN)).thenReturn(true);
+        when(jdbc.queryForObject(contains("role_key='PLATFORM_ADMIN'"),eq(Boolean.class))).thenReturn(true);
         run("replacement@example.com");
         verifyNoInteractions(onboarding);
         verify(users,never()).findByEmailIgnoreCase(anyString());
@@ -51,7 +51,7 @@ class InitialAdminBootstrapTest {
 
         verify(users).saveAndFlush(created);
         verify(onboarding).invite(42L);
-        org.junit.jupiter.api.Assertions.assertEquals(UserRole.ADMIN,created.getRole());
+        org.junit.jupiter.api.Assertions.assertEquals(UserRole.EMPLOYEE,created.getRole());
     }
 
     @Test void existingEmailIsNeverPromotedOrOverwritten() {

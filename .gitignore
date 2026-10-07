@@ -29,6 +29,7 @@ postgres-pw.txt
 .postgres/
 backend/calendar_test.json
 backend/private/
+reports/db-backups/
 
 # Browser test artifacts
 frontend/test-results/

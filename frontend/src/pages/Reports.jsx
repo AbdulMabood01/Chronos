@@ -1,7 +1,8 @@
 import ScreenTitle from '../components/ScreenTitle';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../AuthContext';
-import { reportsAPI } from '../api';
+import {useCompany} from '../CompanyContext';
+import { reportsAPI, projectAPI } from '../api';
 import { LoadingIndicator } from '../components/Hourglass';
 import '../styles.css';
 import './Reports.css';
@@ -24,6 +25,7 @@ function downloadBlob(blob, filename) {
 
 export default function Reports() {
   const { user } = useAuth();
+  const {currentCompany,platformAdmin,companyCapabilities,projectPermissions=[]}=useCompany();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -33,7 +35,7 @@ export default function Reports() {
   const [selectedSubmissionIds, setSelectedSubmissionIds] = useState([]);
   const [loadingSummary, setLoadingSummary] = useState(true);
   const [error, setError] = useState('');
-  const canViewReports = user?.canManageProjects || user?.role === 'ADMIN';
+  const canViewReports = !platformAdmin&&currentCompany&&(companyCapabilities?.canViewCompanyReports||projectPermissions.some(p=>(p.roles||[]).some(role=>['PROJECT_ADMIN','PROJECT_MANAGER'].includes(role))));
 
   useEffect(() => {
     let cancelled = false;
@@ -47,10 +49,14 @@ export default function Reports() {
     }
     setLoadingSummary(true);
     setError('');
-    reportsAPI.approvalPeriods(year, month).then((response) => {
+    Promise.all([reportsAPI.companyPeriods(currentCompany.id,year, month), projectAPI.getProjects(currentCompany.id)]).then(([response, projectResponse]) => {
       if (cancelled) return;
       const grouped = new Map();
+      (projectResponse.data || []).filter(project => String(project.companyId) === String(currentCompany.id)).forEach(project => {
+        grouped.set(project.id, { projectId: project.id, projectCode: project.code, projectName: project.name, employees: [] });
+      });
       (response.data || []).forEach((period) => {
+        if(String(period.companyId)!==String(currentCompany.id))return;
         if (!grouped.has(period.projectId)) grouped.set(period.projectId, {
           projectId: period.projectId, projectCode: period.projectCode, projectName: period.projectName, employees: [],
         });
@@ -71,7 +77,7 @@ export default function Reports() {
       if (!cancelled) setLoadingSummary(false);
     });
     return () => { cancelled = true; };
-  }, [canViewReports, year, month]);
+  }, [canViewReports, year, month,currentCompany?.id]);
 
   const selectedProject = useMemo(
     () => projectSummaries.find((project) => String(project.projectId) === String(selectedProjectId)),
@@ -112,7 +118,7 @@ export default function Reports() {
     }
 
     try {
-      const response = await reportsAPI.exportApprovalPeriods(selectedSubmissionIds);
+      const response = await reportsAPI.companyExportPeriods(currentCompany.id,selectedSubmissionIds);
       downloadBlob(response.data, `project-timesheets-${year}-${month}.zip`);
       setError('');
     } catch (err) {
@@ -122,7 +128,7 @@ export default function Reports() {
 
   const handleExportVacation = async () => {
     try {
-      const response = await reportsAPI.exportVacationRequests(year);
+      const response = await reportsAPI.companyExportLeave(currentCompany.id,year);
       downloadBlob(response.data, `vacation-requests-${year}.xlsx`);
       setError('');
     } catch (err) {
@@ -155,7 +161,7 @@ export default function Reports() {
             <h2>Reporting period</h2>
             <p>Choose a period and project, then find the employees you need.</p>
           </div>
-          {user?.role === 'ADMIN' && <button className="button button-secondary" onClick={handleExportVacation} disabled={!Number.isInteger(year) || year < 1 || year > 9999}>
+          {companyCapabilities?.canViewCompanyReports && <button className="button button-secondary" onClick={handleExportVacation} disabled={!Number.isInteger(year) || year < 1900 || year > 9998}>
             Export vacations
           </button>}
         </div>
@@ -208,10 +214,10 @@ export default function Reports() {
 
         {loadingSummary ? (
           <div className="loading-panel"><LoadingIndicator label="Loading project timesheets..." /></div>
-        ) : projectSummaries.length === 0 ? (
+        ) : error ? null : projectSummaries.length === 0 ? (
           <div className="empty-state"><p>No project timesheets for this period.</p></div>
         ) : filteredRows.length === 0 ? (
-          <div className="empty-state"><p>No project members match this filter.</p></div>
+          <div className="empty-state"><p>{employeeFilter ? 'No project members match this filter.' : 'No timesheet submissions for this project in the selected period.'}</p></div>
         ) : (
           <div className="table-container">
             <table className="data-table selectable-table">

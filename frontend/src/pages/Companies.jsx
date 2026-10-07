@@ -1,15 +1,39 @@
-import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useState, useRef } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
+import { useCompany } from '../CompanyContext';
 import { companyAPI, projectAPI } from '../api';
 import Icon from '../components/Icon';
+import ScreenTitle from '../components/ScreenTitle';
 import './Companies.css';
+import CompanyEmploymentDetails from '../components/CompanyEmploymentDetails';
+import {PlatformCompanyTools} from './PlatformAdministration';
 
 const errorText = error => error?.response?.data?.message || error?.userMessage || 'Request failed';
 const roleName = role => (role || 'Member').replaceAll('_', ' ').toLowerCase().replace(/\b\w/g, letter => letter.toUpperCase());
 const shortDate = value => value ? String(value).slice(0, 10) : '—';
 const invitationStatus = item => item.accepted_at ? 'Accepted' : item.revoked_at ? 'Revoked'
   : new Date(item.expires_at) < new Date() ? 'Expired' : 'Pending';
+
+const companyRoleOptions=[['COMPANY_ADMIN','Company admin'],['PROJECT_ADMIN','Company project admin']];
+const companyRoleLabel=role=>companyRoleOptions.find(([key])=>key===role)?.[1]||roleName(role);
+
+function MemberConfirmation({action,company,busy,error,onConfirm,onCancel}){
+  const ref=useRef(null);
+  useEffect(()=>{const dialog=ref.current;if(dialog.showModal)dialog.showModal();else dialog.setAttribute('open','');
+    return()=>{dialog.close?.();};},[]);
+  const removal=action.status==='REMOVED';
+  const title=action.role ? `Remove ${companyRoleLabel(action.role)} role` : removal?'Remove company membership':'Reactivate company membership';
+  return <dialog ref={ref} className="company-member-dialog" aria-labelledby="member-action-title" onCancel={event=>{event.preventDefault();if(!busy)onCancel();}}>
+    <h2 id="member-action-title">{title}</h2><p>{action.member.email} in {company.name}</p>
+    <p>{action.role ? 'This removes the selected company role. Other roles remain.' : removal ?
+      'Company roles and project access will be revoked. Historical records and the shared login account will be kept. Other companies are unaffected.' :
+      'Membership will be restored. Previous company roles and project access stay revoked; assign the required roles again.'}</p>
+    {error&&<p role="alert" className="error-message">{error}</p>}
+    <div className="company-selection-actions"><button className="button button-secondary" autoFocus disabled={busy} onClick={onCancel}>Cancel</button>
+      <button className="button button-primary" disabled={busy} onClick={onConfirm}>{busy?'Saving...':action.role?'Remove role':removal?'Remove access':'Reactivate access'}</button></div>
+  </dialog>;
+}
 
 function EmptyState({ icon, title, description }) {
   return <div className="company-empty">
@@ -19,6 +43,14 @@ function EmptyState({ icon, title, description }) {
   </div>;
 }
 
+function EmploymentDialog({member,onClose,onSaved}) {
+  const dialog=useRef(null);
+  useEffect(()=>{const previous=document.activeElement;dialog.current?.showModal();return()=>{dialog.current?.close();previous?.focus();};},[]);
+  return <dialog ref={dialog} className="company-employment-dialog" aria-labelledby="employment-dialog-title" onCancel={event=>{event.preventDefault();onClose();}}>
+    <header><div><h2 id="employment-dialog-title">Employment details</h2><p>{[member?.first_name,member?.last_name].filter(Boolean).join(' ')||member?.email}</p></div><button type="button" className="button button-secondary" onClick={onClose}>Close employment details</button></header>
+    <CompanyEmploymentDetails userId={member?.user_id} editable onSaved={onSaved}/>
+  </dialog>;
+}
 export function CompanyInvitation() {
   const { user, login, logout, refreshUser } = useAuth();
   const navigate = useNavigate();
@@ -71,6 +103,7 @@ export function CompanyInvitation() {
         setToken(''); setPreview(null); setPreviewError('');
       }
       await refreshUser();
+      window.dispatchEvent(new Event('chronos:company-memberships-changed'));
       setPending(current => current.filter(item => item.id !== (invitationId || preview?.id)));
       setMessage('Invitation accepted. Your company access is ready.');
       refreshPending().catch(() => {});
@@ -85,6 +118,7 @@ export function CompanyInvitation() {
       setToken(''); setPreview(null);
       try {
         await login(preview.email, account.password);
+        window.dispatchEvent(new Event('chronos:company-memberships-changed'));
         navigate('/dashboard');
       } catch {
         setMessage('Account created and invitation accepted. Sign in with your new password.');
@@ -143,18 +177,26 @@ export function CompanyInvitation() {
 
 export default function Companies() {
   const { user } = useAuth();
-  const [companies, setCompanies] = useState([]);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { companies, currentCompany, selectCompany, refreshCompanies, error: companyError,
+    companyCapabilities, companyRoles, platformCapabilities, platformAdmin } = useCompany();
   const [projects, setProjects] = useState([]);
   const [members, setMembers] = useState([]);
   const [grants, setGrants] = useState([]);
   const [invitations, setInvitations] = useState([]);
   const [accessRequests, setAccessRequests] = useState([]);
-  const [selected, setSelected] = useState('');
+  const selected = currentCompany ? String(currentCompany.id) : '';
   const [tab, setTab] = useState('people');
   const [showCreate, setShowCreate] = useState(false);
   const [invite, setInvite] = useState({ email: '', role: 'USER', projectId: '' });
   const [grant, setGrant] = useState({ projectId: '', userId: '', timesheets: true, expenses: false, startsOn: '', endsOn: '' });
-  const [newCompany, setNewCompany] = useState({ name: '', slug: '' });
+  const [newCompany, setNewCompany] = useState({ name: '', slug: '', adminEmail: '' });
+  const [employmentUser,setEmploymentUser]=useState(null);
+  const [peopleSearch,setPeopleSearch]=useState('');
+  const [peopleStatus,setPeopleStatus]=useState('ACTIVE');
+  const [roleDrafts,setRoleDrafts]=useState({});
+  const [memberAction,setMemberAction]=useState(null);
   const [roleProjectId, setRoleProjectId] = useState('');
   const [projectRoles, setProjectRoles] = useState([]);
   const [message, setMessage] = useState('');
@@ -162,29 +204,36 @@ export default function Companies() {
 
   const active = companies.find(company => String(company.id) === String(selected));
   const companyProjects = projects.filter(project => String(project.companyId) === String(selected));
-  const companyAdmin = user?.role === 'ADMIN' || members.some(member => member.user_id === user?.id
-    && (member.roles || []).includes('COMPANY_ADMIN'));
+  const companyAdmin = companyCapabilities?.canManageCompanyPeople === true;
+  const canViewRoster = !platformAdmin && (companyAdmin || companyRoles?.includes('PROJECT_ADMIN'));
+  const activeAdmins=members.filter(member=>member.status==='ACTIVE'&&member.account_available===true&&member.platform_account!==true&&(member.roles||[]).includes('COMPANY_ADMIN')).length;
+  const isLastAdmin=member=>activeAdmins===1&&member.status==='ACTIVE'&&member.account_available===true&&member.platform_account!==true&&(member.roles||[]).includes('COMPANY_ADMIN');
+  const shownMembers=members.filter(member=>(companyAdmin||member.status==='ACTIVE')&&(peopleStatus==='ALL'||member.status===peopleStatus))
+    .filter(member=>!peopleSearch.trim()||['email','first_name','last_name','employee_id','job_title'].some(field=>String(member[field]||'').toLowerCase().includes(peopleSearch.trim().toLowerCase())));
   const pendingInvitations = invitations.filter(item => invitationStatus(item) === 'Pending').length;
 
   const load = async () => {
-    const companyResponse = await companyAPI.mine();
-    const projectResponse = await projectAPI.getProjects().catch(() => ({ data: [] }));
-    setCompanies(companyResponse.data || []);
+    await refreshCompanies();
+    const projectResponse = !platformAdmin && companyCapabilities?.canViewProjects
+      ? await projectAPI.getProjects().catch(() => ({ data: [] })) : { data: [] };
     setProjects(projectResponse.data || []);
-    setSelected(current => current || String(companyResponse.data?.[0]?.id || ''));
   };
   useEffect(() => { load().catch(error => setMessage(errorText(error))); }, []);
   useEffect(() => {
-    if (!selected) { setMembers([]); setGrants([]); setInvitations([]); setAccessRequests([]); return; }
-    companyAPI.members(selected).then(response => setMembers(response.data || []))
-      .catch(() => setMembers([]));
-    companyAPI.moderatorGrants(selected).then(response => setGrants(response.data || []))
-      .catch(() => setGrants([]));
-    companyAPI.invitations(selected).then(response => setInvitations(response.data || []))
-      .catch(() => setInvitations([]));
-    companyAPI.accessRequests(selected).then(response => setAccessRequests(response.data || []))
-      .catch(() => setAccessRequests([]));
-  }, [selected]);
+    let cancelled = false;
+    setMembers([]); setGrants([]); setInvitations([]); setAccessRequests([]);
+    setRoleProjectId(''); setProjectRoles([]);
+    setInvite({ email: '', role: 'USER', projectId: '' });
+    setGrant({ projectId: '', userId: '', timesheets: true, expenses: false, startsOn: '', endsOn: '' });
+    if (!selected || !canViewRoster) return;
+    Promise.allSettled([companyAPI.members(selected), companyAPI.moderatorGrants(selected),
+      companyAPI.invitations(selected), companyAPI.accessRequests(selected)]).then(results => {
+      if (cancelled) return;
+      const data = index => results[index].status === 'fulfilled' ? results[index].value.data || [] : [];
+      setMembers(data(0)); setGrants(data(1)); setInvitations(data(2)); setAccessRequests(data(3));
+    });
+    return () => { cancelled = true; };
+  }, [selected, canViewRoster,companyAdmin]);
   useEffect(() => {
     if (!selected || !roleProjectId) { setProjectRoles([]); return; }
     companyAPI.projectRoles(selected, roleProjectId).then(response => setProjectRoles(response.data || []))
@@ -196,7 +245,7 @@ export default function Companies() {
     try {
       const result = await action();
       await load();
-      if (selected) {
+      if (selected && canViewRoster) {
         const [roster, permissions, pending, requests] = await Promise.allSettled([
           companyAPI.members(selected), companyAPI.moderatorGrants(selected), companyAPI.invitations(selected), companyAPI.accessRequests(selected),
         ]);
@@ -209,17 +258,18 @@ export default function Companies() {
           setProjectRoles(roleResponse.data || []);
         }
       }
-      onSuccess?.(result);
+      await onSuccess?.(result);
       setMessage(success);
     } catch (error) { setMessage(errorText(error)); }
     finally { setBusy(false); }
   };
 
   const changeCompany = event => {
-    setSelected(event.target.value);
+    selectCompany(event.target.value).catch(() => {});
     setRoleProjectId('');
     setInvite(current => ({ ...current, email: '', projectId: '', accessRequestId: null }));
     setGrant(current => ({ ...current, projectId: '', userId: '' }));
+    setEmploymentUser(null);setMemberAction(null);setRoleDrafts({});setPeopleSearch('');setPeopleStatus('ACTIVE');
     setMessage('');
   };
 
@@ -229,40 +279,45 @@ export default function Companies() {
     setMessage(`Choose a project and role for ${request.email}, then send the invitation.`);
   };
 
-  return <div className="page-container companies-page">
+  return <div className={`page-container companies-page${!platformAdmin ? ' people-access-page' : ''}`}>
     <header className="company-header">
-      <div>
+      {platformAdmin ? <div>
         <span className="company-eyebrow">Workspace administration</span>
         <h1>Companies</h1>
-        <p>Manage the people, project roles, and approval access in your company.</p>
-      </div>
+        <p>{platformAdmin ? 'Manage company workspaces and initial admin invitations.' : 'Manage the people, project roles, and approval access in your company.'}</p>
+      </div> : <ScreenTitle title={companyAdmin ? 'People & access' : 'Workspace'} icon="users" eyebrow="MANAGEMENT" description="Manage your team, invitations, and access in one place." />}
       <div className="company-header-actions">
         <Link className="button button-secondary" to="/company-invite">My invitations</Link>
-        {user?.role === 'ADMIN' && <button type="button" className="button button-secondary" onClick={() => setShowCreate(value => !value)}>
+        {platformCapabilities?.canCreateCompanies === true && <button type="button" className="button button-secondary" onClick={() => setShowCreate(value => !value)}>
           {showCreate ? 'Cancel' : '+ New company'}
         </button>}
-        {active && <button type="button" className="button button-primary" onClick={() => setTab('invitations')}>
+        {active && canViewRoster && <button type="button" className="button button-primary" onClick={() => setTab('invitations')}>
           <Icon name="mail" size={17} /> Invite a person
         </button>}
       </div>
     </header>
 
     {message && <div className="company-feedback" role="status">{message}</div>}
+    {location.state?.createdCompanyId === currentCompany?.id && <div className="company-feedback" role="status">Company created. The initial company admin invitation is queued for delivery.</div>}
+    {companyError && <p className="error-message" role="alert">{companyError}</p>}
 
-    {showCreate && <form className="company-card company-create" onSubmit={event => {
+    {showCreate && platformCapabilities?.canCreateCompanies === true && <form className="company-card company-create" onSubmit={event => {
       event.preventDefault();
-      run(() => companyAPI.create(newCompany.name, newCompany.slug), 'Company created.', result => {
-        if (result?.data?.id) setSelected(String(result.data.id));
-        setNewCompany({ name: '', slug: '' });
+      run(() => companyAPI.create(newCompany.name.trim(), newCompany.slug.trim().toLowerCase(), newCompany.adminEmail.trim()), 'Company created. The initial company admin invitation is queued for delivery.', async result => {
+        if (result?.data?.id) await selectCompany(result.data.id);
+        if (result?.data?.id) navigate('/companies', { replace:true, state:{ createdCompanyId:result.data.id } });
+        setNewCompany({ name: '', slug: '', adminEmail: '' });
         setShowCreate(false);
+        setTab('invitations');
       });
     }}>
-      <div className="company-section-heading"><div><h2>Create a company</h2><p>Set up a separate workspace for a new client.</p></div></div>
+      <div className="company-section-heading"><div><h2>Create a company</h2><p>Create a workspace and invite its first company admin.</p></div></div>
       <div className="company-form-grid">
         <label className="company-field">Company name<input required maxLength="150" value={newCompany.name} onChange={event => setNewCompany({ ...newCompany, name: event.target.value })} placeholder="Acme Corporation" /></label>
-        <label className="company-field">Slug<input required pattern="[a-z0-9][a-z0-9-]{1,78}" value={newCompany.slug} onChange={event => setNewCompany({ ...newCompany, slug: event.target.value })} placeholder="acme-corporation" /></label>
+        <label className="company-field">Workspace ID<input required minLength={2} maxLength={79} pattern="[a-z0-9][a-z0-9\-]{1,78}" title="Use 2 to 79 lowercase letters, numbers or hyphens, starting with a letter or number." value={newCompany.slug} onChange={event => setNewCompany({ ...newCompany, slug: event.target.value.toLowerCase() })} placeholder="acme-corporation" /><small>Unique ID using letters, numbers and hyphens. Share it with people requesting access.</small></label>
+        <label className="company-field">Initial company admin email<input aria-label="Initial company admin email" required type="email" maxLength={255} autoComplete="email" value={newCompany.adminEmail} onChange={event => setNewCompany({ ...newCompany, adminEmail: event.target.value })} placeholder="admin@acme.com" /><small>They will receive an invitation to choose their password and manage this company.</small></label>
       </div>
-      <button className="button button-primary" disabled={busy}>Create company</button>
+      <button className="button button-primary" disabled={busy}>{busy ? 'Creating company and queuing invitation...' : 'Create company and invite admin'}</button>
     </form>}
 
     {companies.length > 0 && <section className="company-overview" aria-label="Company overview">
@@ -272,39 +327,70 @@ export default function Companies() {
           <div><span className="company-eyebrow">Current company</span><h2>{active?.name || 'Select a company'}</h2><span className="company-plan">{roleName(active?.plan_tier)} plan</span>
             {companyAdmin && <span className="company-workspace-id">Workspace ID: <strong>{active?.slug}</strong></span>}</div>
         </div>
-        <label className="company-switcher">Switch company<select value={selected} onChange={changeCompany}>
+        {platformAdmin&&<label className="company-switcher">Switch company<select value={selected} onChange={changeCompany}>
+          <option value="">Select company</option>
           {companies.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}
-        </select></label>
+        </select></label>}
       </div>
-      {active && <div className="company-stats">
-        <div><span>Team members</span><strong>{members.length}</strong><small>{active.team_limit != null ? `of ${active.team_limit} allowed` : 'In this company'}</small></div>
+      {active && canViewRoster && <div className="company-stats">
+        <div><span>Team members</span><strong>{members.filter(member=>member.status==='ACTIVE').length}</strong><small>Active in this company</small></div>
         <div><span>Projects</span><strong>{companyProjects.length}</strong><small>{active.project_limit != null ? `of ${active.project_limit} allowed` : 'In this company'}</small></div>
         <div><span>Pending invites</span><strong>{pendingInvitations}</strong><small>Waiting to join</small></div>
       </div>}
     </section>}
 
+    {platformAdmin && active && <PlatformCompanyTools/>}
     {!active && !showCreate && <EmptyState icon="briefcase" title="No company yet" description="Once you are invited to a company, it will appear here." />}
 
-    {active && <>
+    {active && canViewRoster && <>
       <nav className="company-tabs" aria-label="Company sections">
         {[
           ['people', 'People', 'users'],
           ['invitations', 'Invitations', 'mail'],
           ['roles', 'Project roles', 'briefcase'],
-          ...(companyAdmin ? [['moderators', 'Moderator access', 'check']] : []),
+          
         ].map(([key, label, icon]) => <button key={key} type="button" className={tab === key ? 'active' : ''}
           aria-current={tab === key ? 'page' : undefined} onClick={() => setTab(key)}>
           <Icon name={icon} size={17} />{label}{key === 'invitations' && pendingInvitations > 0 && <span className="company-tab-count">{pendingInvitations}</span>}
         </button>)}
       </nav>
 
+      {employmentUser&&companyAdmin&&<EmploymentDialog member={members.find(member=>member.user_id===employmentUser)} onClose={()=>setEmploymentUser(null)} onSaved={load}/>}
       {tab === 'people' && <section className="company-card">
-        <div className="company-section-heading"><div><h2>People</h2><p>Everyone with access to {active.name}.</p></div><span className="company-count">{members.length} members</span></div>
-        {members.length ? <div className="company-list">{members.map(member => <div className="company-person-row" key={member.user_id}>
+        <div className="company-section-heading"><div><h2>People</h2><p>Membership and company roles in {active.name}.</p></div><span className="company-count">{shownMembers.length} members</span></div>
+        <div className="company-people-tools"><label className="company-field">Search people<input maxLength={100} value={peopleSearch} onChange={event=>setPeopleSearch(event.target.value)} placeholder="Name, email, employee ID or job title"/></label>
+          <label className="company-field">Membership status<select aria-label="Membership status" value={peopleStatus} onChange={event=>setPeopleStatus(event.target.value)}>
+            <option value="ACTIVE">Active</option>{companyAdmin&&<><option value="REMOVED">Removed</option><option value="PENDING">Pending</option><option value="ALL">All memberships</option></>}
+          </select></label></div>
+        {shownMembers.length ? <div className="company-list">{shownMembers.map(member => <div className="company-person-row" key={member.user_id} role="group" aria-label={`Member ${member.email}`}>
           <span className="company-person-avatar" aria-hidden="true">{(member.first_name || member.email || '?').charAt(0).toUpperCase()}</span>
-          <div className="company-person-info"><strong>{[member.first_name, member.last_name].filter(Boolean).join(' ') || member.email}</strong><span>{member.email}</span></div>
-          <div className="company-pills">{(member.roles || []).length ? member.roles.map(role => <span className="company-pill" key={role}>{roleName(role)}</span>) : <span className="company-pill">Member</span>}</div>
-        </div>)}</div> : <EmptyState icon="users" title="No members yet" description="Invite someone to get your team started." />}
+          <div className="company-person-info"><strong>{[member.first_name, member.last_name].filter(Boolean).join(' ') || member.email}</strong><span>{member.email}</span>
+            <span>{[member.employee_id,member.job_title].filter(Boolean).join(' · ')}</span></div>
+          <div className="company-pills"><span className={`company-status company-status-${member.status.toLowerCase()}`}>{roleName(member.status)}</span>
+            {(member.roles || []).length ? member.roles.map(role => <span className="company-pill" key={role}>{companyRoleLabel(role)}</span>) : <span className="company-pill">Member</span>}
+            {companyAdmin&&member.account_available===false&&<span className="company-pill">Account unavailable</span>}</div>
+          {companyAdmin&&<button className="company-text-button" onClick={()=>setEmploymentUser(member.user_id)}>Employment details</button>}
+          {companyAdmin&&<details className="company-member-actions"><summary>Manage access</summary><div className="company-member-controls">
+            {member.status==='ACTIVE'&&<>
+              <label className="company-field">Company role<select aria-label={`Company role for ${member.email}`} value={roleDrafts[member.user_id]||''} disabled={busy||!member.account_available||member.platform_account} onChange={event=>setRoleDrafts({...roleDrafts,[member.user_id]:event.target.value})}>
+                <option value="">Choose a role</option>{companyRoleOptions.filter(([role])=>!(member.roles||[]).includes(role)).map(([role,label])=><option key={role} value={role}>{label}</option>)}
+              </select></label>
+              <button className="company-text-button" disabled={busy||!roleDrafts[member.user_id]||!Number.isInteger(member.membership_version)} onClick={()=>run(()=>companyAPI.assignCompanyRole(selected,member.user_id,roleDrafts[member.user_id],member.membership_version),'Company role assigned.',()=>setRoleDrafts({...roleDrafts,[member.user_id]:''}))}>Assign role</button>
+              {(member.roles||[]).filter(role=>companyRoleOptions.some(([key])=>key===role)).map(role=><button key={role} className="company-text-button company-text-danger" disabled={busy||!Number.isInteger(member.membership_version)||(role==='COMPANY_ADMIN'&&isLastAdmin(member))}
+                title={role==='COMPANY_ADMIN'&&isLastAdmin(member)?'Appoint another active Company Admin first.':undefined}
+                onClick={()=>{setMessage('');setMemberAction({member,role});}}>Remove {companyRoleLabel(role)} role</button>)}
+              <button className="company-text-button" disabled={busy} onClick={()=>run(()=>companyAPI.recoverMemberPassword(selected,member.user_id),'Password recovery requested for the registered account email.')}>Send password recovery</button>
+              <button className="company-text-button company-text-danger" disabled={busy||isLastAdmin(member)||!Number.isInteger(member.membership_version)} title={isLastAdmin(member)?'Appoint another active Company Admin first.':undefined}
+                onClick={()=>{setMessage('');setMemberAction({member,status:'REMOVED'});}}>Remove membership</button>
+            </>}
+            {member.status==='REMOVED'&&<button className="company-text-button" disabled={busy||!Number.isInteger(member.membership_version)||!member.account_available||member.platform_account}
+              onClick={()=>{setMessage('');setMemberAction({member,status:'ACTIVE'});}}>Reactivate membership</button>}
+          </div></details>}
+        </div>)}</div> : <EmptyState icon="users" title={members.length?'No matching members':'No members yet'} description={members.length?'Try another search or membership status.':'Invite someone to get your team started.'} />}
+        {memberAction&&<MemberConfirmation action={memberAction} company={active} busy={busy} error={message} onCancel={()=>{setMemberAction(null);setMessage('');}}
+          onConfirm={()=>run(()=>memberAction.role?companyAPI.removeCompanyRole(selected,memberAction.member.user_id,memberAction.role,memberAction.member.membership_version)
+            :companyAPI.setMemberStatus(selected,memberAction.member.user_id,memberAction.status,memberAction.member.membership_version),
+            memberAction.role?'Company role removed.':memberAction.status==='REMOVED'?'Company membership removed.':'Membership reactivated. Assign company and project roles as needed.',()=>setMemberAction(null))}/>}
       </section>}
 
       {tab === 'invitations' && <div className="company-content-grid">
@@ -317,8 +403,8 @@ export default function Companies() {
           <label className="company-field">Email address<input type="email" required value={invite.email} readOnly={!!invite.accessRequestId} onChange={event => setInvite({ ...invite, email: event.target.value })} placeholder="name@company.com" /></label>
           <label className="company-field">Role<select value={invite.role} onChange={event => setInvite({ ...invite, role: event.target.value,
             projectId: ['COMPANY_ADMIN', 'MODERATOR'].includes(event.target.value) ? '' : invite.projectId })}>
-            {companyAdmin && <option value="COMPANY_ADMIN">Company Admin</option>}<option value="PROJECT_ADMIN">Project Admin</option>
-            <option value="PROJECT_MANAGER">Project Manager</option>{companyAdmin && <option value="MODERATOR">Moderator</option>}
+            {companyAdmin && <><option value="COMPANY_ADMIN">Company Admin</option><option value="PROJECT_ADMIN">Project Admin</option></>}
+            <option value="PROJECT_MANAGER">Project Manager</option>
             <option value="USER">User</option></select></label>
           {!['COMPANY_ADMIN', 'MODERATOR'].includes(invite.role) && <label className="company-field">Project<select value={invite.projectId}
             onChange={event => setInvite({ ...invite, projectId: event.target.value })}>
@@ -334,9 +420,10 @@ export default function Companies() {
             const status = invitationStatus(item);
             const projectName = companyProjects.find(project => String(project.id) === String(item.project_id))?.name;
             return <div className="company-record-row" key={item.id}>
-              <div className="company-record-main"><strong>{item.invitee_email}</strong><span>{roleName(item.role_key)}{projectName ? ` · ${projectName}` : ''}</span></div>
+              <div className="company-record-main"><strong>{item.invitee_email}</strong><span>{roleName(item.role_key)}{projectName ? ` · ${projectName}` : ''}</span><span>Delivery: {item.delivery_status || 'Legacy'}</span></div>
               <span className={`company-status company-status-${status.toLowerCase()}`}>{status}</span>
               {status === 'Pending' && <button type="button" className="company-text-button" disabled={busy} onClick={() => run(() => companyAPI.revokeInvitation(selected, item.id), 'Invitation revoked.')}>Revoke</button>}
+              {['Pending','Expired'].includes(status)&&<button type="button" className="company-text-button" disabled={busy} onClick={()=>run(()=>companyAPI.resendInvitation(selected,item.id),'Invitation queued again.')}>Resend</button>}
             </div>;
           })}</div> : <EmptyState icon="mail" title="No invitations yet" description="Invitations you send will appear here." />}
         </section>

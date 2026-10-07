@@ -6,11 +6,17 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import TimesheetDetail from './TimesheetDetail';
 import { timesheetAPI, projectAPI, reportsAPI, companyAPI } from '../api';
 vi.mock('../AuthContext', () => ({ useAuth: () => ({ user: employee }) }));
+vi.mock('../CompanyContext', () => ({ useCompany: () => ({currentCompany:{id:1,name:'Test Company'},platformAdmin:employee.role==='ADMIN',
+  companyCapabilities:{canReviewWork:employee.role==='PROJECT_ADMIN'||employee.canReviewProjects},
+  permissionsForProject:()=>({capabilities:{canSubmitWork:employee.role==='EMPLOYEE',canReviewTime:employee.role==='PROJECT_ADMIN'||employee.canReviewProjects}}),
+}) }));
 vi.mock('../api', () => ({
   timesheetAPI: {
     getTimesheetById: vi.fn(),
     getProjectSubmission: vi.fn(),
     getApprovalPeriod: vi.fn(),
+    getApprovalMonth: vi.fn(),
+    submitApprovalPeriods: vi.fn(),
     getApprovalPeriodHistory: vi.fn(),
     getMyTimesheets: vi.fn(),
     addTimeEntry: vi.fn(),
@@ -30,7 +36,7 @@ vi.mock('../api', () => ({
   reportsAPI: { exportProjectTimesheetPdf: vi.fn(), exportApprovalPeriodPdf: vi.fn() },
 }));
 const employee = { id: 1, role: 'EMPLOYEE' };
-const sheet = { id: 2, userId: 1, userName: 'Test Employee', year: 2026, month: 8, status: 'APPROVED',
+const sheet = { id: 2, companyId:1, userId: 1, userName: 'Test Employee', year: 2026, month: 8, status: 'APPROVED',
   timeEntries: [{ id: 8, projectId: 4, projectCode: 'ATLAS', projectName: 'Atlas', entryDate: '2026-08-03', hours: 8 }], vacationDays: [] };
 const approval = { id: 3, timesheetId: 2, projectId: 4, status: 'APPROVED', pdfExportEligible: true, totalHours: 8 };
 function open(lockPastMonths = true) {
@@ -54,11 +60,16 @@ beforeEach(() => {
     graceEnd.setDate(graceEnd.getDate() + 7);
     const correctionOpen = Boolean(data.correctionUntil && new Date(data.correctionUntil) > new Date());
     return { data: { ...data, userId: sheet.userId, periodStart, periodEnd, frequency: 'MONTHLY',
-      editable: ['DRAFT', 'REJECTED'].includes(data.status) && (new Date() <= graceEnd || correctionOpen)
+      editable: ['DRAFT', 'REJECTED'].includes(data.status)
         || data.status === 'APPROVED' && correctionOpen,
       reviewAllowed: data.status === 'SUBMITTED' && data.routedApproverId === employee.id && employee.id !== sheet.userId,
       timeEntries: [], } };
   });
+  timesheetAPI.getApprovalMonth.mockImplementation(async (projectId,date,userId) => {
+    const response=await timesheetAPI.getApprovalPeriod(projectId,date,userId);
+    return {data:[{...response.data,selectionDate:response.data.periodStart}]};
+  });
+  timesheetAPI.submitApprovalPeriods.mockResolvedValue({data:[]});
   timesheetAPI.addTimeEntry.mockResolvedValue({ data: {} });
   timesheetAPI.updateTimeEntry.mockResolvedValue({ data: {} });
   timesheetAPI.deleteTimeEntry.mockResolvedValue({});
@@ -69,30 +80,55 @@ beforeEach(() => {
   timesheetAPI.decideApprovalPeriod.mockResolvedValue({ data: {} });
   timesheetAPI.requestPeriodOpening.mockResolvedValue({ data: {} });
   companyAPI.mine.mockResolvedValue({ data: [] });
-  projectAPI.getAssignedProjects.mockResolvedValue({ data: [{ id: 4, code: 'ATLAS', name: 'Atlas' }] });
+  projectAPI.getAssignedProjects.mockResolvedValue({ data: [{ id: 4, companyId:1, code: 'ATLAS', name: 'Atlas' }] });
   projectAPI.getProjects.mockResolvedValue({ data: [] });
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
-it('allows month-end edits through day seven and freezes them on day eight', async () => {
+it('shows the load failure and allows retry instead of claiming the timesheet is missing', async () => {
+  timesheetAPI.getTimesheetById.mockRejectedValueOnce({ response: { data: { message: 'Company membership required' } } });
+  open();
+  expect(await screen.findByText('Company membership required')).toBeTruthy();
+  expect(screen.queryByText('Timesheet not found')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+  await waitFor(() => expect(timesheetAPI.getTimesheetById).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull());
+});
+
+it('keeps the selected period visible while refreshing its status', async () => {
+  open(false);
+  await screen.findByText('Approved');
+  const pending=[];
+  timesheetAPI.getApprovalPeriod.mockImplementation(()=>new Promise(resolve=>pending.push(resolve)));
+  fireEvent.click(screen.getByRole('button',{name:'Refresh status'}));
+  expect(screen.getByRole('region',{name:'Selected approval period'}).textContent).toContain('2026-08-01');
+  expect(screen.getByRole('button',{name:'Refresh status'}).disabled).toBe(true);
+  await act(async()=>{
+    pending.forEach(resolve=>resolve({data:{...approval,userId:1,periodStart:'2026-08-01',periodEnd:'2026-08-31',frequency:'MONTHLY',editable:false}}));
+  });
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Refresh status'}).disabled).toBe(false));
+});
+
+it('keeps past draft days editable after the former seven-day cutoff', async () => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date(2026, 9, 6, 12));
   const septemberSheet = { ...sheet, year: 2026, month: 9, status: 'DRAFT', timeEntries: [] };
   timesheetAPI.getTimesheetById.mockResolvedValue({ data: septemberSheet });
   timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, status: 'DRAFT', plannedHours: 160 } });
-  projectAPI.getAssignedProjects.mockResolvedValue({ data: [{ id: 4, code: 'ATLAS', name: 'Atlas',
+  projectAPI.getAssignedProjects.mockResolvedValue({ data: [{ id: 4, companyId: 1, code: 'ATLAS', name: 'Atlas',
     status: 'ACTIVE', isActive: true, assignments: [{ userId: 1, isActive: false,
-      startDate: '2026-09-01', endDate: '2026-09-30', plannedHours: 160 }] }] });
+      startDate: '2026-09-01', endDate: '2026-09-30', plannedHours: 160, isActive:true }] }] });
   const view = open();
   const input = await screen.findByLabelText('Hours for 2026-09-03');
+  await waitFor(()=>expect(input.disabled).toBe(false));
   await waitFor(() => expect(input.disabled).toBe(false));
-  expect(screen.getByText(/You can edit this approval period through Oct 7, 2026/)).toBeTruthy();
+  expect(screen.getByText(/Past draft days remain editable/)).toBeTruthy();
   view.unmount();
 
   vi.setSystemTime(new Date(2026, 9, 8, 12));
   open();
-  expect(await screen.findByRole('button', { name: 'Request opening' })).toBeTruthy();
-  expect(screen.queryByLabelText('Hours for 2026-09-03')?.disabled ?? true).toBe(true);
+  await waitFor(()=>expect(screen.getByLabelText('Hours for 2026-09-03').disabled).toBe(false));
+  expect(screen.queryByRole('button', { name: 'Request opening' })).toBeNull();
 });
 it('lets a project manager enter hours on their own assigned project', async () => {
   employee.canReviewProjects = true;
@@ -103,7 +139,7 @@ it('lets a project manager enter hours on their own assigned project', async () 
   timesheetAPI.getTimesheetById.mockResolvedValue({ data: { ...sheet, year, month, status: 'DRAFT', timeEntries: [] } });
   timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, status: 'DRAFT', plannedHours: 160, routedApproverId: 6 } });
   projectAPI.getAssignedProjects.mockResolvedValue({ data: [{
-    id: 4, code: 'ATLAS', name: 'Atlas', projectManagerId: 1, status: 'ACTIVE', isActive: true,
+    id: 4, companyId: 1, code: 'ATLAS', name: 'Atlas', projectManagerId: 1, status: 'ACTIVE', isActive: true,
     assignments: [{ userId: 1, isActive: true, startDate: `${year}-01-01`, endDate: `${year}-12-31`, plannedHours: 160 }],
   }] });
   open();
@@ -138,8 +174,8 @@ describe('daily notes and summary', () => {
   it('shows monthly and cumulative project hours in one summary', async () => {
     timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, loggedHoursToDate: 120 } });
     open();
-    expect(await screen.findByText('8.00 / 120.00')).toBeTruthy();
-    expect(screen.getByText('Hours logged This Month/Till Date')).toBeTruthy();
+    await waitFor(() => expect(screen.getByLabelText('Hours overview').textContent).toContain('120.00 total to date'));
+    expect(screen.getByText('Hours This Month')).toBeTruthy();
   });
   it('saves notes using the existing entry hours and sessions', async () => {
     HTMLDialogElement.prototype.showModal = vi.fn(function () { this.setAttribute('open', ''); });
@@ -203,7 +239,7 @@ describe('employee PDF export', () => {
   it('refreshes approval when the employee returns after manager approval', async () => {
     timesheetAPI.getProjectSubmission.mockResolvedValueOnce({ data: { ...approval, status: 'SUBMITTED', pdfExportEligible: false } });
     open();
-    await screen.findByText('This submitted project timesheet is read-only until a Project Manager approves or rejects it.');
+    await screen.findByText(/This submitted project timesheet is read-only until a Project Manager approves or rejects it/);
     expect(screen.getByRole('button', { name: 'Export PDF' }).disabled).toBe(true);
     fireEvent.focus(window);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Export PDF' }).disabled).toBe(false));
@@ -218,7 +254,7 @@ describe('employee PDF export', () => {
 });
 
 it('shows an offboarding notice and prevents further entry', async () => {
-  projectAPI.getAssignedProjects.mockResolvedValue({ data: [{ id: 4, code: 'ATLAS', assignments: [{ userId: 1, isActive: false, startDate: '2026-08-01', endDate: '2026-08-31', plannedHours: 8 }] }] });
+  projectAPI.getAssignedProjects.mockResolvedValue({ data: [{ id: 4, companyId: 1, code: 'ATLAS', assignments: [{ userId: 1, isActive: false, startDate: '2026-08-01', endDate: '2026-08-31', plannedHours: 8 }] }] });
   timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, status: 'DRAFT', plannedHours: 8 } });
   open(false);
   expect(await screen.findByText('You have been offboarded from this project.')).toBeTruthy();
@@ -232,7 +268,7 @@ it('renders approved hours as text without calendar clocks', async () => {
 });
 
 it('prioritizes completed project messaging over offboarding', async () => {
-  projectAPI.getAssignedProjects.mockResolvedValue({ data: [{ id: 4, code: 'ATLAS', name: 'Atlas', status: 'COMPLETED', assignments: [{ userId: 1, isActive: false, startDate: '2026-08-01', endDate: '2026-08-31' }] }] });
+  projectAPI.getAssignedProjects.mockResolvedValue({ data: [{ id: 4, companyId: 1, code: 'ATLAS', name: 'Atlas', status: 'COMPLETED', assignments: [{ userId: 1, isActive: false, startDate: '2026-08-01', endDate: '2026-08-31' }] }] });
   open(false);
   expect(await screen.findByText('This project has been completed.')).toBeTruthy();
   expect(screen.getByText('Atlas - Completed')).toBeTruthy();
@@ -240,7 +276,7 @@ it('prioritizes completed project messaging over offboarding', async () => {
 });
 
 it('shows on-hold messaging even when the project and assignment are inactive', async () => {
-  projectAPI.getAssignedProjects.mockResolvedValue({ data: [{ id: 4, code: 'ATLAS', name: 'Atlas', status: 'ON_HOLD', isActive: false, assignments: [{ userId: 1, isActive: false, startDate: '2026-08-01', endDate: '2026-08-31' }] }] });
+  projectAPI.getAssignedProjects.mockResolvedValue({ data: [{ id: 4, companyId: 1, code: 'ATLAS', name: 'Atlas', status: 'ON_HOLD', isActive: false, assignments: [{ userId: 1, isActive: false, startDate: '2026-08-01', endDate: '2026-08-31' }] }] });
   open(false);
   expect(await screen.findByText('This project is currently on hold.')).toBeTruthy();
   expect(screen.getByText('Atlas - On Hold')).toBeTruthy();
@@ -268,11 +304,12 @@ it('saves typed hour edits as manual hours without stale clock sessions', async 
   timesheetAPI.getTimesheetById.mockResolvedValue({ data: draftSheet });
   timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, status: 'DRAFT', plannedHours: 160 } });
   projectAPI.getAssignedProjects.mockResolvedValue({
-    data: [{ id: 4, code: 'ATLAS', name: 'Atlas', assignments: [{ userId: 1, isActive: true, startDate: '2026-09-01', plannedHours: 160 }] }],
+    data: [{ id: 4, companyId: 1, code: 'ATLAS', name: 'Atlas', assignments: [{ userId: 1, isActive: true, startDate: '2026-09-01', plannedHours: 160 }] }],
   });
   open(false);
 
   const input = await screen.findByLabelText('Hours for 2026-09-03');
+  await waitFor(()=>expect(input.disabled).toBe(false));
   fireEvent.change(input, { target: { value: '7' } });
   fireEvent.blur(input);
 
@@ -297,11 +334,12 @@ it('shows backend validation messages when hour saves fail', async () => {
   timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, status: 'DRAFT', plannedHours: 160 } });
   timesheetAPI.updateTimeEntry.mockRejectedValue({ response: { data: { message: 'Entry date must be within the project assignment dates' } } });
   projectAPI.getAssignedProjects.mockResolvedValue({
-    data: [{ id: 4, code: 'ATLAS', name: 'Atlas', assignments: [{ userId: 1, isActive: true, startDate: '2026-09-01', plannedHours: 160 }] }],
+    data: [{ id: 4, companyId: 1, code: 'ATLAS', name: 'Atlas', assignments: [{ userId: 1, isActive: true, startDate: '2026-09-01', plannedHours: 160 }] }],
   });
   open(false);
 
   const input = await screen.findByLabelText('Hours for 2026-09-03');
+  await waitFor(()=>expect(input.disabled).toBe(false));
   fireEvent.change(input, { target: { value: '7' } });
   fireEvent.blur(input);
 
@@ -313,7 +351,7 @@ it('hides approval actions from admins even when they are the routed approver', 
   employee.role = 'ADMIN';
   timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, status: 'SUBMITTED', routedApproverId: 6 } });
   open(false);
-  await screen.findByText('SUBMITTED');
+  await screen.findByText('Awaiting Approval');
   expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull();
 });
@@ -324,12 +362,12 @@ it('lets an employee request an opening with a comment during the 30-day window'
   const now = new Date();
   const previous = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   timesheetAPI.getTimesheetById.mockResolvedValue({ data: {
-    ...sheet, year: previous.getFullYear(), month: previous.getMonth() + 1, status: 'DRAFT', timeEntries: [],
+    ...sheet, year: previous.getFullYear(), month: previous.getMonth() + 1, status: 'APPROVED', timeEntries: [],
   } });
-  timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, id: null, status: 'DRAFT', correctionUntil: null } });
+  timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, status: 'APPROVED', correctionUntil: null } });
   timesheetAPI.requestPeriodOpening.mockResolvedValue({ data: {} });
   open(false);
-  fireEvent.click(await screen.findByRole('button', { name: 'Request opening' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Request opening' }, {timeout:3000}));
   fireEvent.change(screen.getByLabelText('Why do you need this timesheet opened?'), { target: { value: 'Missed project hours' } });
   fireEvent.click(screen.getByRole('button', { name: 'Send request to Project Admin' }));
   await waitFor(() => expect(timesheetAPI.requestPeriodOpening).toHaveBeenCalledWith('4', expect.any(String), 'Missed project hours'));
@@ -376,9 +414,9 @@ it('shows the expired deadline without an opening action', async () => {
   const now = new Date();
   const old = new Date(now.getFullYear(), now.getMonth() - 2, 1);
   timesheetAPI.getTimesheetById.mockResolvedValue({ data: {
-    ...sheet, year: old.getFullYear(), month: old.getMonth() + 1, status: 'DRAFT', timeEntries: [],
+    ...sheet, year: old.getFullYear(), month: old.getMonth() + 1, status: 'APPROVED', timeEntries: [],
   } });
-  timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, id: null, status: 'DRAFT', correctionUntil: null } });
+  timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, status: 'APPROVED', correctionUntil: null } });
   open(false);
   expect(await screen.findByText(/The request deadline has passed/)).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Request opening' })).toBeNull();
@@ -390,7 +428,7 @@ describe('favorites and corrections', () => {
     localStorage.clear();
     localStorage.setItem('chronos:project-favorites:99', '[4]');
     localStorage.setItem('chronos:project-favorites:1', '["5"]');
-    projectAPI.getAssignedProjects.mockResolvedValue({ data: [{ id: 4, code: 'ATLAS' }, { id: 5, code: 'ZEBRA' }] });
+    projectAPI.getAssignedProjects.mockResolvedValue({ data: [{ id: 4, companyId: 1, code: 'ATLAS' }, { id: 5, companyId: 1, code: 'ZEBRA' }] });
     open(false);
     await waitFor(() => expect(screen.getByLabelText('Project').options[0].value).toBe('5'));
     expect(screen.queryByRole('button', { name: 'Add to favorites' })).toBeNull();
@@ -415,7 +453,7 @@ it('does not let a PM approve their own hours', async () => {
   timesheetAPI.getTimesheetById.mockResolvedValue({ data: { ...sheet, status: 'SUBMITTED' } });
   timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, status: 'SUBMITTED', routedApproverId: 9, projectManagerId: 1 } });
   open(false);
-  await screen.findByText('SUBMITTED');
+  await screen.findByText('Awaiting Approval');
   expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull();
 });

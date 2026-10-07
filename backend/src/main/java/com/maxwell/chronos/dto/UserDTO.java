@@ -13,7 +13,9 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
 public class UserDTO {
+    private boolean platformAdmin;
     private String accountStatus;
     private boolean adminLocked;
     private java.time.Instant lockedUntil;
@@ -48,6 +50,10 @@ public class UserDTO {
     private String firstName;
     private String lastName;
     private String jobTitle;
+    private String gender;
+    private String race;
+    private String ethnicity;
+    private Boolean profileDetailsSubmitted;
     private LocalDate dateOfBirth;
     private LocalDate joiningDate;
     private String ssnLast4;

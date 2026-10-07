@@ -3,6 +3,7 @@ import { formatDate } from '../utils/dates';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
+import { useCompany } from '../CompanyContext';
 import { expenseAPI, letterRequestAPI, timesheetAPI, vacationAPI } from '../api';
 import { LoadingIndicator } from '../components/Hourglass';
 import { downloadReceipt } from './Expenses';
@@ -30,6 +31,7 @@ const accountingOptions = [['PAID_NO_QUOTA', 'Paid, no annual balance'], ['UNPAI
 
 export default function AdminDashboard() {
   const { user } = useAuth();
+  const { currentCompany, companyCapabilities, projectPermissions, platformAdmin } = useCompany();
   const navigate = useNavigate();
   const [pendingTimesheets, setPendingTimesheets] = useState([]);
   const [pendingVacations, setPendingVacations] = useState([]);
@@ -49,29 +51,31 @@ export default function AdminDashboard() {
   const [openingBusy, setOpeningBusy] = useState(false);
   const [reviewingLeave, setReviewingLeave] = useState(null);
   const [specialAccounting, setSpecialAccounting] = useState('');
-  const isReviewer = user?.canReviewProjects || ['PROJECT_ADMIN', 'ADMIN'].includes(user?.role);
-  const canReviewLetters = user?.role === 'ADMIN';
+  const isReviewer = !platformAdmin && companyCapabilities?.canReviewWork === true;
+  const canReviewLetters = false; // Company-scoped letter review is introduced with that workflow's migration.
+  const canReview = (projectId, type) => projectPermissions.some(project => String(project.projectId) === String(projectId)
+    && project.capabilities[type] === true);
 
   useEffect(() => {
     if (!isReviewer) return;
     loadPendingItems();
-  }, [isReviewer, canReviewLetters]);
+  }, [isReviewer, canReviewLetters, currentCompany?.id, projectPermissions]);
 
   const loadPendingItems = async () => {
     try {
       const requests = [
-        user?.role !== 'ADMIN' ? timesheetAPI.getPendingApprovalPeriods() : Promise.resolve({ data: [] }),
-        user?.role === 'ADMIN' ? vacationAPI.getPendingRequests() : Promise.resolve({ data: [] }),
+        timesheetAPI.getPendingApprovalPeriods(),
+        Promise.resolve({ data: [] }),
         canReviewLetters ? letterRequestAPI.getPendingRequests() : Promise.resolve({ data: [] }),
         expenseAPI.pending(),
-        user?.canManageProjects ? timesheetAPI.getPendingPeriodOpenings() : Promise.resolve({ data: [] }),
+        companyCapabilities?.canManageProjects ? timesheetAPI.getPendingPeriodOpenings() : Promise.resolve({ data: [] }),
       ];
       const [timesheetRes, vacationRes, letterRes, expenseRes, openingRes] = await Promise.allSettled(requests);
-      if (timesheetRes.status === 'fulfilled') setPendingTimesheets(timesheetRes.value.data || []);
+      if (timesheetRes.status === 'fulfilled') setPendingTimesheets((timesheetRes.value.data || []).filter(task => canReview(task.projectId, 'canReviewTime')));
       if (vacationRes.status === 'fulfilled') setPendingVacations(vacationRes.value.data || []);
       if (letterRes.status === 'fulfilled') setPendingLetters(letterRes.value.data || []);
-      if (expenseRes.status === 'fulfilled') setPendingExpenses(expenseRes.value.data || []);
-      if (openingRes.status === 'fulfilled') setPendingOpeningRequests(openingRes.value.data || []);
+      if (expenseRes.status === 'fulfilled') setPendingExpenses((expenseRes.value.data || []).filter(task => canReview(task.project_id, 'canReviewExpenses')));
+      if (openingRes.status === 'fulfilled') setPendingOpeningRequests((openingRes.value.data || []).filter(task => canReview(task.projectId, 'canReviewTime')));
       const failed = [[timesheetRes, 'timesheets'], [vacationRes, 'vacation requests'], [letterRes, 'letters'], [expenseRes, 'expenses'], [openingRes, 'timesheet openings']]
         .filter(([result]) => result?.status === 'rejected').map(([, label]) => label);
       setError(failed.length ? 'Could not refresh ' + failed.join(', ') + '. Previously loaded items may be out of date. Please retry.' : '');
@@ -84,7 +88,7 @@ export default function AdminDashboard() {
   };
 
   const pendingTasks = useMemo(() => [
-    ...pendingOpeningRequests.map((task) => ({
+    ...pendingOpeningRequests.filter(task => canReview(task.projectId, 'canReviewTime')).map((task) => ({
       id: `opening-${task.id}`,
       entityId: task.id,
       timesheetId: task.timesheetId,
@@ -101,7 +105,7 @@ export default function AdminDashboard() {
       kind: 'opening',
       opening: task,
     })),
-    ...pendingTimesheets.map((task) => ({
+    ...pendingTimesheets.filter(task => canReview(task.projectId, 'canReviewTime')).map((task) => ({
       id: `timesheet-${task.id}`,
       entityId: task.id,
       timesheetId: task.timesheetId,
@@ -111,7 +115,7 @@ export default function AdminDashboard() {
       employee: task.userName,
       designation: task.userJobTitle || '-',
       project: `${task.projectCode}${task.projectName ? ` - ${task.projectName}` : ''}`,
-      period: task.periodStart ? `${task.periodStart} to ${task.periodEnd}${task.late ? ' · Late' : ''}` : `${task.month}/${task.year}`,
+      period: task.periodStart ? `${task.periodStart} to ${task.periodEnd}` : `${task.month}/${task.year}`,
       detail: `${Number(task.totalHours || 0).toFixed(2)} hours`,
       timeDetail: (task.timeEntries || [])
         .flatMap((entry) => (entry.sessions || []).map((session) => `${entry.entryDate}: ${session.loginTime}-${session.logoutTime}`))
@@ -119,6 +123,7 @@ export default function AdminDashboard() {
       submittedAt: task.submittedAt,
       status: task.status,
       kind: 'timesheet',
+      late: Boolean(task.late),
       isOwn: task.userId === user?.id,
       fallbackRequired: task.fallbackRequired,
       periodBased: Boolean(task.periodStart),
@@ -148,7 +153,7 @@ export default function AdminDashboard() {
       status: task.status,
       kind: 'letter',
     })),
-    ...pendingExpenses.map((task) => ({
+    ...pendingExpenses.filter(task => canReview(task.project_id, 'canReviewExpenses')).map((task) => ({
       id: `expense-${task.id}`,
       entityId: task.id,
       type: 'Expense Approval',
@@ -161,7 +166,7 @@ export default function AdminDashboard() {
       kind: 'expense',
       expense: task,
     })),
-  ].sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0)), [pendingOpeningRequests, pendingTimesheets, pendingVacations, pendingLetters, pendingExpenses, user?.id]);
+  ].sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0)), [pendingOpeningRequests, pendingTimesheets, pendingVacations, pendingLetters, pendingExpenses, user?.id, projectPermissions]);
 
   const decideOpening = async approve => {
     if (!reviewingOpening || openingBusy) return;
@@ -305,7 +310,7 @@ export default function AdminDashboard() {
                   <p>{task.designation}</p>
                   <div className="request-meta">
                     {['timesheet', 'opening'].includes(task.kind) && <span>{task.project}</span>}
-                    <span>{task.period}</span>
+                    <span>{task.period}</span>{task.late && <span className="approval-late-badge">Late submission</span>}
                     <span>{task.detail}</span>
                     <span>Submitted {formatDate(task.submittedAt)}</span>
                     <span className={`status-badge status-${task.status.toLowerCase()}`}>{task.status.replace('_', ' ')}</span>

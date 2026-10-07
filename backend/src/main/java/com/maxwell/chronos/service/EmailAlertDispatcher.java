@@ -31,16 +31,22 @@ public class EmailAlertDispatcher {
     @Scheduled(fixedDelayString="${chronos.email-alerts.poll-ms:30000}")
     @Transactional
     public void deliver() {
+        // One dispatcher transaction at a time, including across application instances.
+        db.queryForObject("SELECT pg_advisory_xact_lock(hashtextextended('chronos-company-alert-delivery',0))",Object.class);
         // Includes scheduled announcements once their publication date arrives.
         var announcements = db.queryForList("""
-            SELECT id,version FROM company_announcements WHERE status='PUBLISHED'
+            SELECT id,version,company_id FROM company_announcements WHERE status='PUBLISHED' AND company_id IS NOT NULL
             AND publish_date <= (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date
             AND (expiration_date IS NULL OR expiration_date >= (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date)
-            AND emailed_version < version FOR UPDATE SKIP LOCKED
+            AND emailed_version < version ORDER BY company_id,id
             """);
         for (var announcement : announcements) {
-            db.queryForList("SELECT id FROM users WHERE is_active=true", Long.class).forEach(id ->
-                alerts.enqueue(id, EmailAlertService.Category.ANNOUNCEMENTS, "Chronos: announcement published or updated", "/announcements"));
+            long company=((Number)announcement.get("company_id")).longValue();
+            db.queryForList("SELECT id FROM companies WHERE id=? FOR UPDATE",Long.class,company);
+            var current=db.queryForList("SELECT id FROM company_announcements WHERE id=? AND status='PUBLISHED' AND emailed_version<version AND publish_date<=(CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date AND (expiration_date IS NULL OR expiration_date>=(CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date) FOR UPDATE",announcement.get("id"));
+            if(current.isEmpty())continue;
+            db.queryForList("SELECT u.id FROM users u JOIN company_memberships m ON m.user_id=u.id WHERE m.company_id=? AND m.status='ACTIVE' AND u.is_active AND NOT u.admin_locked AND NOT EXISTS(SELECT 1 FROM role_assignments p WHERE p.user_id=u.id AND p.role_key='PLATFORM_ADMIN' AND p.removed_at IS NULL)",Long.class,company).forEach(id ->
+                alerts.enqueueCompany(company,id, EmailAlertService.Category.ANNOUNCEMENTS, "Chronos: announcement published or updated", "/announcements",(java.util.UUID)announcement.get("id"),false));
             db.update("UPDATE company_announcements SET emailed_version=version WHERE id=?", announcement.get("id"));
         }
         JavaMailSender mail = sender.getIfAvailable();
@@ -51,9 +57,10 @@ public class EmailAlertDispatcher {
             ORDER BY o.id LIMIT 25 FOR UPDATE OF o SKIP LOCKED
             """);
         for (var item : pending) {
+            if(item.get("company_id") instanceof Number company)db.queryForList("SELECT id FROM companies WHERE id=? FOR UPDATE",Long.class,company.longValue());
             Long userId = ((Number)item.get("user_id")).longValue();
             var category = EmailAlertService.Category.valueOf((String)item.get("category"));
-            if (!Boolean.TRUE.equals(item.get("is_active")) || !alerts.preferences(userId).allows(category)) {
+            if (!Boolean.TRUE.equals(item.get("is_active")) || !alerts.preferences(userId).allows(category) || !alerts.companyDeliveryAllowed(item)) {
                 db.update("UPDATE email_alert_outbox SET completed_at=CURRENT_TIMESTAMP WHERE id=?",item.get("id"));
                 continue;
             }

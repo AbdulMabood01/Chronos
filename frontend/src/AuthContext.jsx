@@ -19,6 +19,7 @@ export const AuthProvider = ({ children }) => {
   const lastTouch = useRef(0);
 
   const expire = () => {
+    window.dispatchEvent(new Event('chronos:auth-cleared'));
     localStorage.removeItem('authToken');
     setUser(null);
     setSessionWarning(false);
@@ -84,12 +85,15 @@ export const AuthProvider = ({ children }) => {
       return response.data;
     } catch (err) {
       setError('Unable to sign in. Check your credentials or try again later.');
+      window.dispatchEvent(new Event('chronos:auth-cleared'));
+      setUser(null);
       localStorage.removeItem('authToken');
       throw err;
     }
   };
 
   const logout = () => {
+    window.dispatchEvent(new Event('chronos:auth-cleared'));
     const token = localStorage.getItem('authToken');
     localStorage.removeItem('authToken');
     setUser(null);
@@ -113,7 +117,7 @@ export const AuthProvider = ({ children }) => {
     return response.data;
   };
 
-  const isAdmin = () => user?.role === 'ADMIN';
+  const isAdmin = () => user?.platformAdmin===true;
 
   const value = {
     user,

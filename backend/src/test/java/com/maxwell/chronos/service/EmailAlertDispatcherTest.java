@@ -22,6 +22,7 @@ class EmailAlertDispatcherTest {
     EmailAlertDispatcher dispatcher = new EmailAlertDispatcher(db,alerts,provider,"chronos@example.com","https://chronos.example.com/");
     @BeforeEach void setup() {
         when(provider.getIfAvailable()).thenReturn(mail);
+        when(alerts.companyDeliveryAllowed(anyMap())).thenReturn(true);
         when(alerts.preferences(1L)).thenReturn(new EmailAlertService.Preferences(true,true,true,true,true,true,true,true));
         when(db.queryForList(contains("FROM email_alert_outbox"))).thenReturn(List.of(Map.of(
             "id",7L,"user_id",1L,"category","FEEDBACK","email","employee@example.com","is_active",true,
@@ -54,11 +55,17 @@ class EmailAlertDispatcherTest {
         verify(db,never()).queryForList(contains("FROM email_alert_outbox"));
     }
     @Test void visibleAnnouncementVersionsAreQueuedOncePerActiveAudience() {
-        when(db.queryForList(contains("FROM company_announcements"))).thenReturn(List.of(Map.of("id","announcement","version",1)));
-        when(db.queryForList(contains("SELECT id FROM users"),eq(Long.class))).thenReturn(List.of(1L,2L));
+        var id=java.util.UUID.randomUUID();
+        when(db.queryForList(contains("SELECT id,version,company_id FROM company_announcements"))).thenReturn(List.of(Map.of("id",id,"version",1,"company_id",12L)));
+        when(db.queryForList(contains("SELECT id FROM company_announcements"),eq(id))).thenReturn(List.of(Map.of("id",id)));
+        when(db.queryForList(contains("SELECT u.id FROM users"),eq(Long.class),eq(12L))).thenReturn(List.of(1L,2L));
         dispatcher.deliver();
-        verify(alerts).enqueue(1L,EmailAlertService.Category.ANNOUNCEMENTS,"Chronos: announcement published or updated","/announcements");
-        verify(alerts).enqueue(2L,EmailAlertService.Category.ANNOUNCEMENTS,"Chronos: announcement published or updated","/announcements");
-        verify(db).update(contains("emailed_version=version"),eq("announcement"));
+        verify(alerts).enqueueCompany(12L,1L,EmailAlertService.Category.ANNOUNCEMENTS,"Chronos: announcement published or updated","/announcements",id,false);
+        verify(alerts).enqueueCompany(12L,2L,EmailAlertService.Category.ANNOUNCEMENTS,"Chronos: announcement published or updated","/announcements",id,false);
+        verify(db).update(contains("emailed_version=version"),eq(id));
+    }
+    @Test void revokedCompanyOrHandlerAccessDropsQueuedNotifications() {
+        when(alerts.companyDeliveryAllowed(anyMap())).thenReturn(false);
+        dispatcher.deliver();verifyNoInteractions(mail);verify(db).update(contains("completed_at=CURRENT_TIMESTAMP"),eq(7L));
     }
 }

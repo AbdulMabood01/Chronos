@@ -24,7 +24,7 @@ public class E2eFixtureController {
     @PostMapping("/reset")
     public ResponseEntity<Map<String, Object>> reset(@AuthenticationPrincipal Jwt jwt) {
         var requester = jwt == null ? null : users.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        if (requester == null || !requester.isAdmin()) return ResponseEntity.status(403).build();
+        if (requester == null || !E2eFixtures.ADMIN_EMAIL.equals(requester.getEmail())) return ResponseEntity.status(403).build();
         return ResponseEntity.ok(fixtures.reset());
     }
 
@@ -32,7 +32,7 @@ public class E2eFixtureController {
     public ResponseEntity<Map<String, String>> invitationToken(@PathVariable long employeeId,
                                                                 @AuthenticationPrincipal Jwt jwt) {
         var requester = jwt == null ? null : users.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        if (requester == null || !requester.isAdmin()) return ResponseEntity.status(403).build();
+        if (requester == null || !E2eFixtures.ADMIN_EMAIL.equals(requester.getEmail())) return ResponseEntity.status(403).build();
         return ResponseEntity.ok(Map.of("token", fixtures.issueInvitationToken(employeeId)));
     }
 
@@ -40,7 +40,22 @@ public class E2eFixtureController {
     public ResponseEntity<Map<String, String>> passwordResetToken(@PathVariable long employeeId,
                                                                   @AuthenticationPrincipal Jwt jwt) {
         var requester = jwt == null ? null : users.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        if (requester == null || !requester.isAdmin()) return ResponseEntity.status(403).build();
+        if (requester == null || !E2eFixtures.ADMIN_EMAIL.equals(requester.getEmail())) return ResponseEntity.status(403).build();
         return ResponseEntity.ok(Map.of("token", fixtures.issuePasswordResetToken(employeeId)));
+    }
+
+    @PostMapping("/company-invitation-token/{invitationId}")
+    public ResponseEntity<Map<String,String>> companyInvitationToken(@PathVariable long invitationId,@AuthenticationPrincipal Jwt jwt) {
+        var requester=jwt==null?null:users.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
+        if(requester==null||!E2eFixtures.ADMIN_EMAIL.equals(requester.getEmail())) return ResponseEntity.status(403).build();
+        return ResponseEntity.ok(Map.of("token",fixtures.issueCompanyInvitationToken(invitationId)));
+    }
+
+    @PostMapping("/company-invitations/{invitationId}/expire")
+    public ResponseEntity<Void> expireCompanyInvitation(@PathVariable long invitationId,@AuthenticationPrincipal Jwt jwt) {
+        var requester=jwt==null?null:users.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
+        if(requester==null||!E2eFixtures.ADMIN_EMAIL.equals(requester.getEmail())) return ResponseEntity.status(403).build();
+        fixtures.expireCompanyInvitation(invitationId);
+        return ResponseEntity.ok().build();
     }
 }

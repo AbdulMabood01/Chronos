@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "deliver",
+  "type": "workflow",
+  "input": "C:\\Users\\maboo\\Chronos\\docs\\user-flows\\leave-and-letters.json",
+  "output": "C:\\Users\\maboo\\Chronos\\docs\\user-flows\\leave-and-letters.html",
+  "specification": {
+    "sha256": "552e51df8c325cc4b4535cf1ca984c0d25103b6837723d2fe48d08440783c7ae",
+    "bytes": 2944
+  },
+  "artifact": {
+    "sha256": "db8f2da306b5c101c34c196b53a27aca7f898c0bd5536773a0b7e0d94143626f",
+    "bytes": 803307
+  },
+  "validation": {
+    "checksPassed": 9,
+    "checkCount": 9,
+    "compositionProfile": "showcase",
+    "compositionStatus": "pass",
+    "errors": 0,
+    "warnings": 0
+  }
+}

@@ -120,7 +120,7 @@ class ProjectHealthServiceTest {
         assertThrows(AccessDeniedException.class, () -> service.overview(employee));
         verifyNoInteractions(projects, assignments, entries, submissions);
         when(visibility.canReviewProjects(employee.getId())).thenReturn(true);
-        when(visibility.visibleProjectIds(employee)).thenReturn(Set.of(1L));
+        when(visibility.getProjects(employee)).thenReturn(List.of(com.maxwell.chronos.dto.ProjectDTO.builder().id(1L).build()));
         when(projects.findAllById(Set.of(1L))).thenReturn(List.of(project));
         assertEquals(List.of(1L), service.overview(employee).stream().map(ProjectHealthDTO::projectId).toList());
         verify(entries).findForHealth(eq(Set.of(1L)), any());

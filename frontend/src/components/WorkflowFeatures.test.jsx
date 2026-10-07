@@ -7,6 +7,7 @@ import MissingTimesheets from './MissingTimesheets';
 import LeaveBalancePreview, { calculateLeavePreview } from './LeaveBalancePreview';
 import { timesheetAPI, userAPI } from '../api';
 vi.mock('../api');
+vi.mock('../CompanyContext',()=>({useCompany:()=>({currentCompany:{id:12},companyCapabilities:{canReviewWork:true}})}));
 beforeEach(() => vi.resetAllMocks());
 afterEach(cleanup);
 
@@ -19,7 +20,7 @@ it('lists employees without timesheets and reloads when month changes', async ()
   timesheetAPI.getMissingTimesheets.mockResolvedValue({ data: [] });
   fireEvent.change(screen.getByLabelText('Submission month'), { target: { value: '2026-08' } });
   expect(await screen.findByText('No timesheet records for this month.')).toBeTruthy();
-  expect(timesheetAPI.getMissingTimesheets).toHaveBeenLastCalledWith(2026, 8);
+  expect(timesheetAPI.getMissingTimesheets).toHaveBeenLastCalledWith(2026, 8,12);
 });
 it('does not mistake missing-dashboard errors for an empty queue', async () => {
   timesheetAPI.getMissingTimesheets.mockRejectedValue(new Error('offline'));
@@ -61,7 +62,7 @@ it('splits leave by year, excludes weekends and accounts for pending days', () =
     { id: 2, startDate: '2026-12-31', endDate: '2027-01-04', status: 'DRAFT', vacationType: 'VACATION' },
   ], [{ year: 2026, balance: { configured: true, vacation: { remainingDays: 2 } } }, { year: 2027, balance: { configured: true, vacation: { remainingDays: 1 } } }], 2);
   expect(result[0]).toMatchObject({ requested: 1, pending: 1, remaining: 0, excess: 0 });
-  expect(result[1]).toMatchObject({ requested: 2, pending: 0, remaining: 0, excess: 1 });
+  expect(result[1]).toMatchObject({ requested: 1, pending: 0, remaining: 0, excess: 0 });
 });
 it('shows an unpaid preview without fetching a paid balance', async () => {
   render(<LeaveBalancePreview userId={1} requests={[]} form={{ startDate: '2026-09-14', endDate: '2026-09-15', vacationType: 'UNPAID_LEAVE' }} />);

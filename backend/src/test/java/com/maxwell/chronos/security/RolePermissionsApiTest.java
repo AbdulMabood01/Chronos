@@ -57,13 +57,13 @@ class RolePermissionsApiTest {
         return jwt().jwt(j -> j.subject("subject").claim("preferred_username", user.getEmail()));
     }
 
-    @Test void teamCalendarRequiresManagerPermission() throws Exception {
-        mvc.perform(get("/vacation/team-calendar").param("year", "2026").param("month", "9").with(token())).andExpect(status().isOk());
+    @Test void globalTeamCalendarIsRetiredForAllLegacyRoles() throws Exception {
+        mvc.perform(get("/vacation/team-calendar").param("year", "2026").param("month", "9").with(token())).andExpect(status().isGone());
         user.setRole(UserRole.EMPLOYEE);
-        mvc.perform(get("/vacation/team-calendar").param("year", "2026").param("month", "9").with(token())).andExpect(status().isForbidden());
-        mvc.perform(get("/vacation/team-calendar").param("year", "2026").param("month", "9").with(token())).andExpect(status().isForbidden());
+        mvc.perform(get("/vacation/team-calendar").param("year", "2026").param("month", "9").with(token())).andExpect(status().isGone());
+        mvc.perform(get("/vacation/team-calendar").param("year", "2026").param("month", "9").with(token())).andExpect(status().isGone());
         when(access.hasAnyProjectRole(1L, "PROJECT_ADMIN")).thenReturn(true);
-        mvc.perform(get("/vacation/team-calendar").param("year", "2026").param("month", "9").with(token())).andExpect(status().isOk());
+        mvc.perform(get("/vacation/team-calendar").param("year", "2026").param("month", "9").with(token())).andExpect(status().isGone());
     }
 
     @Test void systemAdminReadsButAllProjectWriteEndpointsReturnForbidden() throws Exception {
@@ -90,7 +90,7 @@ class RolePermissionsApiTest {
         when(vacations.findById(3L)).thenReturn(Optional.of(VacationRequest.builder().id(3L).user(user).status(VacationStatus.DRAFT).build()));
         mvc.perform(post("/timesheets/2/submit").with(token())).andExpect(status().isForbidden());
         mvc.perform(post("/timesheets/2/projects/10/submit").with(token())).andExpect(status().isForbidden());
-        mvc.perform(post("/vacation/3/submit").with(token())).andExpect(status().isForbidden());
+        mvc.perform(post("/vacation/3/submit").with(token())).andExpect(status().isGone());
     }
 
     @Test void authResponseHidesAdminSsnAndExposesEmployeeProjectCapability() throws Exception {
@@ -99,20 +99,20 @@ class RolePermissionsApiTest {
         user.setRole(UserRole.EMPLOYEE);
         when(access.hasAnyProjectRole(1L, "PROJECT_MANAGER")).thenReturn(true);
         mvc.perform(get("/auth/me").with(token())).andExpect(status().isOk())
-                .andExpect(jsonPath("$.role").value("EMPLOYEE"))
-                .andExpect(jsonPath("$.canReviewProjects").value(true))
-                .andExpect(jsonPath("$.canViewProjects").value(true))
-                .andExpect(jsonPath("$.canManageProjects").value(false));
+                .andExpect(jsonPath("$.role").doesNotExist())
+                .andExpect(jsonPath("$.canReviewProjects").doesNotExist())
+                .andExpect(jsonPath("$.canViewProjects").doesNotExist())
+                .andExpect(jsonPath("$.canManageProjects").doesNotExist()).andExpect(jsonPath("$.platformAdmin").value(false));
     }
 
     @Test void removedGlobalRoleCannotBeAssigned() throws Exception {
-        mvc.perform(patch("/users/2/role").param("role", "PROJECT_MANAGER").with(token())).andExpect(status().isBadRequest());
+        mvc.perform(patch("/users/2/role").param("role", "PROJECT_MANAGER").with(token())).andExpect(status().isGone());
         verify(userService, never()).changeRole(any(), any(), any());
     }
     @Test void ordinaryEmployeeCannotReadManagementEndpoints() throws Exception {
         user.setRole(UserRole.EMPLOYEE);
         mvc.perform(get("/projects").with(token())).andExpect(status().isForbidden());
         mvc.perform(get("/projects/hours-dashboard").param("year", "2026").param("month", "9").with(token())).andExpect(status().isForbidden());
-        mvc.perform(get("/vacation/pending").with(token())).andExpect(status().isForbidden());
+        mvc.perform(get("/vacation/pending").with(token())).andExpect(status().isGone());
     }
 }

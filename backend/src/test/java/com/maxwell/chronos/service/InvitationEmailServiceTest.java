@@ -20,7 +20,7 @@ class InvitationEmailServiceTest {
         var message=captor.getValue(); assertEquals("alice@example.com",message.getTo()[0]);
         assertEquals("chronos@example.com",message.getFrom());
         assertTrue(message.getText().contains("Alice Smith"));
-        assertTrue(message.getText().contains("https://chronos.example.com/activate?token=test-token"));
+        assertTrue(message.getText().contains("https://chronos.example.com/activate#token=test-token"));
         assertTrue(message.getText().contains(expiry.toString()));
     }
     @Test void smtpErrorsDoNotExposeMessageOrCredentials() {

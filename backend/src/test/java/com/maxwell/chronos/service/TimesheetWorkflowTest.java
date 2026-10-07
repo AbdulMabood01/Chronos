@@ -129,17 +129,20 @@ class TimesheetWorkflowTest {
             return state;
         });
         when(projectService.canManageProjects(6L)).thenReturn(true);
-        when(projectService.visibleProjectIds(manager)).thenReturn(Set.of(3L));
-        when(projectService.visibleProjectIds(admin)).thenReturn(Set.of(3L));
+        when(projectService.getProjects(manager)).thenReturn(List.of(com.maxwell.chronos.dto.ProjectDTO.builder().id(3L).build()));
         var assignment = assignments.findByProjectIdAndUserId(3L, 1L).orElseThrow();
         when(assignments.findAll()).thenReturn(List.of(assignment));
         var missing = service.getMissingTimesheets(2026, 9, manager);
         assertEquals(1, missing.size());
         assertEquals("NOT_STARTED", missing.get(0).status());
         assertNull(missing.get(0).timesheetId());
-        when(projectService.visibleProjectIds(manager)).thenReturn(Set.of());
+        when(projectService.getProjects(manager)).thenReturn(List.of());
         assertTrue(service.getMissingTimesheets(2026, 9, manager).isEmpty());
         assertThrows(org.springframework.security.access.AccessDeniedException.class, () -> service.getMissingTimesheets(2026, 9, employee));
+        assertThrows(org.springframework.security.access.AccessDeniedException.class, () -> service.getMissingTimesheets(2026,9,admin));
+        admin.setRole(UserRole.PROJECT_ADMIN);
+        when(projectService.canManageProjects(2L)).thenReturn(true);
+        when(projectService.getProjects(admin)).thenReturn(List.of(com.maxwell.chronos.dto.ProjectDTO.builder().id(3L).build()));
         assertTrue(service.getMissingTimesheets(2026, 10, admin).isEmpty());
         when(timesheets.findByYearAndMonth(2026,9)).thenReturn(List.of(sheet));
         submission.setStatus(TimesheetStatus.SUBMITTED);
@@ -215,7 +218,7 @@ class TimesheetWorkflowTest {
     }
 
     @Test void systemAdminCannotSubmitMonthlyOrProjectTimesheets() {
-        employee.setRole(UserRole.ADMIN);
+        employee.setRole(UserRole.ADMIN);when(access.hasPlatformRole(1L,"PLATFORM_ADMIN")).thenReturn(true);
         assertThrows(org.springframework.security.access.AccessDeniedException.class, () -> service.submitTimesheet(4L, 1L));
         assertThrows(org.springframework.security.access.AccessDeniedException.class, () -> service.submitProjectTimesheet(4L, 3L, 1L));
         verify(submissions, never()).save(any());

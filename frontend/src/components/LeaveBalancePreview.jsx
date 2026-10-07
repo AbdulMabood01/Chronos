@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { eachDayOfInterval, isWeekend, parseISO } from 'date-fns';
-import { userAPI } from '../api';
+import {leaveWorkingDates} from '../utils/federalHolidays';
+import { userAPI, companyLeaveAPI } from '../api';
 import './WorkflowFeatures.css';
 
 export function leaveBucket(type) {
@@ -10,7 +10,7 @@ function datesInYear(request, year) {
   const start = request.startDate > year + '-01-01' ? request.startDate : year + '-01-01';
   const end = request.endDate < year + '-12-31' ? request.endDate : year + '-12-31';
   if (start > end) return [];
-  return eachDayOfInterval({ start: parseISO(start), end: parseISO(end) }).filter(d => !isWeekend(d)).map(d => d.getTime());
+  return leaveWorkingDates(start,end).map(d => d.getTime());
 }
 export function calculateLeavePreview(form, requests, balances, editingId) {
   const bucket = leaveBucket(form.vacationType);
@@ -22,7 +22,7 @@ export function calculateLeavePreview(form, requests, balances, editingId) {
     return { year, requested, pending: bucket ? pending : 0, available, remaining: available == null ? null : Math.max(0, available - requested), excess: available == null ? 0 : Math.max(0, requested - available), configured: balance?.configured };
   });
 }
-export default function LeaveBalancePreview({ userId, form, requests, editingId }) {
+export default function LeaveBalancePreview({ userId, form, requests, editingId, companyId }) {
   const [state, setState] = useState({ rows: [], loading: false, error: '' });
   const valid = /^\d{4}-\d{2}-\d{2}$/.test(form.startDate) && /^\d{4}-\d{2}-\d{2}$/.test(form.endDate) && form.startDate <= form.endDate;
   useEffect(() => {
@@ -32,15 +32,15 @@ export default function LeaveBalancePreview({ userId, form, requests, editingId 
     const first = Number(form.startDate.slice(0, 4)), last = Number(form.endDate.slice(0, 4));
     if (last - first > 10) { setState({ rows: [], loading: false, error: 'Choose a date range of ten years or less.' }); return; }
     const years = Array.from({ length: last - first + 1 }, (_, i) => first + i);
-    Promise.all(years.map(async year => ({ year, balance: leaveBucket(form.vacationType) ? (await userAPI.getMyLeaveBalance(year)).data : null })))
+    Promise.all(years.map(async year => ({ year, balance: leaveBucket(form.vacationType) ? (await (companyId ? companyLeaveAPI.balance(companyId, null, year) : userAPI.getMyLeaveBalance(year))).data : null })))
       .then(balances => { if (active) setState({ rows: calculateLeavePreview(form, requests, balances, editingId), loading: false, error: '' }); })
       .catch(() => { if (active) setState({ rows: [], loading: false, error: 'Balance preview is unavailable. Your balance will be checked again when submitting.' }); });
     return () => { active = false; };
-  }, [form.startDate, form.endDate, form.vacationType, userId, requests, editingId, valid]);
+  }, [form.startDate, form.endDate, form.vacationType, userId, requests, editingId, valid, companyId]);
   if (!valid) return null;
   return <section className="workflow-panel" aria-label="Leave balance preview" aria-live="polite">
     <h3>Balance after this request</h3>
-    <p>Estimate in working days. Weekends are excluded.</p>
+    <p>Estimate in working days. Weekends and U.S. federal holidays are excluded.</p>
     {state.loading && <p>Calculating balance...</p>}{state.error && <p role="alert">{state.error}</p>}
     {state.rows.map(row => <div key={row.year}><h4>{row.year}</h4>
       {leaveBucket(form.vacationType) && row.configured === false && <p>Allowance not set for this year. Ask an Admin to assign it.</p>}

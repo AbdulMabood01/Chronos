@@ -56,9 +56,9 @@ public class UserService {
 
     public List<com.maxwell.chronos.dto.EmployeeDirectoryDTO> getEmployeeDirectory() {
         return userRepository.findByIsActiveTrue().stream().map(user ->
-                new com.maxwell.chronos.dto.EmployeeDirectoryDTO(user.getId(), user.getEmployeeId(),
-                    user.getFirstName(), user.getLastName(), user.getEmail(), user.getJobTitle(),
-                    user.getRole(), user.getIsActive())).toList();
+                new com.maxwell.chronos.dto.EmployeeDirectoryDTO(user.getId(), null,
+                    user.getFirstName(), user.getLastName(), user.getEmail(), null,
+                    null, user.getIsActive())).toList();
     }
 
     public List<UserDTO> getAllActiveUsers() {
@@ -76,6 +76,7 @@ public class UserService {
     public void deactivateUser(Long userId, Long requestingUserId) {
         User user = userRepository.findForUpdate(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        if(jdbc!=null)new CompanyAccessService(jdbc).guardAccountAdminAccessLoss(userId);
         
         user.setIsActive(false);
         user.setCredentialVersion(user.getCredentialVersion() + 1);
@@ -99,9 +100,10 @@ public class UserService {
 
     public UserDTO lockAccount(Long id, Long actorId, String reason) {
         User actor = userRepository.findById(actorId).orElse(null);
-        if (actor == null || !actor.isAdmin()) throw new org.springframework.security.access.AccessDeniedException("Forbidden");
+        if (actor == null || !isPlatform(actor.getId())) throw new org.springframework.security.access.AccessDeniedException("Forbidden");
         if (id.equals(actorId)) throw new IllegalArgumentException("You cannot lock your own account");
         User target = userRepository.findForUpdate(id).orElseThrow(() -> new IllegalArgumentException("User not found"));
+        if(jdbc!=null)new CompanyAccessService(jdbc).guardAccountAdminAccessLoss(id);
         target.setAdminLocked(true);
         target.setAdminLockReason(reason == null ? null : reason.substring(0, Math.min(reason.length(), 500)));
         target.setLockedAt(java.time.Instant.now());
@@ -113,7 +115,7 @@ public class UserService {
 
     public UserDTO unlockAccount(Long id, Long actorId) {
         User actor = userRepository.findById(actorId).orElse(null);
-        if (actor == null || !actor.isAdmin()) throw new org.springframework.security.access.AccessDeniedException("Forbidden");
+        if (actor == null || !isPlatform(actor.getId())) throw new org.springframework.security.access.AccessDeniedException("Forbidden");
         User target = userRepository.findForUpdate(id).orElseThrow(() -> new IllegalArgumentException("User not found"));
         target.setAdminLocked(false);
         target.setAdminLockReason(null);
@@ -127,53 +129,22 @@ public class UserService {
 
     public void signOutAll(Long id, Long actorId) {
         User actor = userRepository.findById(actorId).orElse(null);
-        if (actor == null || !actor.isAdmin()) throw new org.springframework.security.access.AccessDeniedException("Forbidden");
+        if (actor == null || !isPlatform(actor.getId())) throw new org.springframework.security.access.AccessDeniedException("Forbidden");
         User target = userRepository.findForUpdate(id).orElseThrow(() -> new IllegalArgumentException("User not found"));
         target.setCredentialVersion(target.getCredentialVersion() + 1);
         sessions.revokeAll(id);
         auditService.logSecurityAction(actorId, com.maxwell.chronos.enums.AuditAction.SESSIONS_REVOKED, id);
     }
 
-    public void changeRole(Long userId, UserRole newRole, Long requestingUserId) {
-        if (newRole == UserRole.PROJECT_ADMIN)
-            throw new IllegalArgumentException("Appoint Project Admins within a company or project instead");
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
-
-        UserRole oldRole = user.getRole();
-
-        if (userId.equals(requestingUserId)) {
-            throw new IllegalArgumentException("Users cannot change their own role");
-        }
-
-        if (oldRole == UserRole.ADMIN && newRole != UserRole.ADMIN
-                && userRepository.findByRole(UserRole.ADMIN).size() <= 1) {
-            throw new IllegalArgumentException("Cannot demote the last remaining Admin");
-        }
-
-        user.setRole(newRole);
-        userRepository.save(user);
-        if (newRole == UserRole.ADMIN)
-            jdbc.update("INSERT INTO role_assignments(user_id,role_key,assigned_by_user_id) " +
-                    "VALUES (?,'PLATFORM_ADMIN',?) ON CONFLICT DO NOTHING", userId, requestingUserId);
-        else if (oldRole == UserRole.ADMIN)
-            jdbc.update("UPDATE role_assignments SET removed_at=now() WHERE user_id=? " +
-                    "AND role_key='PLATFORM_ADMIN' AND removed_at IS NULL", userId);
-
-        auditService.logAction(requestingUserId, "ROLE_CHANGED", "User", userId,
-                "Old role: " + oldRole + ", New role: " + newRole);
-    }
+    public void changeRole(Long userId,UserRole role,Long actor){throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.GONE,"Use scoped company/project roles or platform administrators");}
 
     public UserDTO updateJoiningDate(Long id, java.time.LocalDate joiningDate, User requester) {
-        if (requester == null || !requester.isAdmin())
-            throw new org.springframework.security.access.AccessDeniedException("Only Admin can edit joining dates");
-        User employee = userRepository.findForUpdate(id).orElseThrow(() -> new IllegalArgumentException("User not found"));
-        employee.setJoiningDate(joiningDate);
-        auditService.logAction(requester.getId(), "USER_PROFILE_UPDATED", "User", id, "Joining date: " + joiningDate);
-        return toDTO(userRepository.save(employee));
+        throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.GONE,
+                "Edit joining dates within a company membership instead");
     }
 
     public UserDTO updateOwnProfile(String email, UpdateProfileRequest request) {
+        if(request.getJobTitle()!=null) throw new IllegalArgumentException("Job title is managed in your company employment details");
         String timezone = request.getTimezone();
         if (timezone != null && !java.time.ZoneId.getAvailableZoneIds().contains(timezone)) {
             throw new IllegalArgumentException("Choose a valid timezone");
@@ -181,12 +152,17 @@ public class UserService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
-        if (user.isAdmin() && clean(request.getSsnLast4()) != null) {
+        user=userRepository.findForUpdate(user.getId()).orElseThrow(()->new IllegalArgumentException("User not found"));
+        if (isPlatform(user.getId()) && clean(request.getSsnLast4()) != null) {
             throw new org.springframework.security.access.AccessDeniedException("SSN is not available for Admin profiles");
         }
 
         String firstName = clean(request.getFirstName());
         String lastName = clean(request.getLastName());
+        if(Boolean.TRUE.equals(user.getProfileCompleted()) &&
+            (!java.util.Objects.equals(firstName,user.getFirstName()) || !java.util.Objects.equals(lastName,user.getLastName())
+            || !java.util.Objects.equals(request.getDateOfBirth(),user.getDateOfBirth())))
+            throw new IllegalArgumentException("Name and date of birth are locked after profile submission");
 
         if (firstName != null) {
             user.setFirstName(firstName);
@@ -194,9 +170,14 @@ public class UserService {
         if (lastName != null) {
             user.setLastName(lastName);
         }
-        user.setJobTitle(clean(request.getJobTitle()));
         user.setDateOfBirth(request.getDateOfBirth());
-        if (!user.isAdmin()) {
+        if(Boolean.TRUE.equals(user.getProfileDetailsSubmitted()) &&
+            (!java.util.Objects.equals(clean(request.getGender()),user.getGender()) || !java.util.Objects.equals(clean(request.getRace()),user.getRace())
+             || !java.util.Objects.equals(clean(request.getEthnicity()),user.getEthnicity()) || !java.util.Objects.equals(request.getJoiningDate(),user.getJoiningDate())))
+            throw new IllegalArgumentException("Gender, race, ethnicity and joining date are locked after submission");
+        user.setGender(clean(request.getGender()));user.setRace(clean(request.getRace()));user.setEthnicity(clean(request.getEthnicity()));user.setJoiningDate(request.getJoiningDate());
+        user.setProfileDetailsSubmitted(true);
+        if (!isPlatform(user.getId())) {
             user.setSsnLast4(clean(request.getSsnLast4()));
         }
         user.setProfileImageUrl(clean(request.getProfileImageUrl()));
@@ -222,6 +203,7 @@ public class UserService {
         auditService.logAction(saved.getId(), "USER_PROFILE_UPDATED", "User", saved.getId(),
                 "User updated their profile");
         UserDTO profile = toDTO(saved);
+        profile.setGender(saved.getGender());profile.setRace(saved.getRace());profile.setEthnicity(saved.getEthnicity());profile.setJoiningDate(saved.getJoiningDate());profile.setProfileDetailsSubmitted(saved.getProfileDetailsSubmitted());
         profile.setPhoneNumber(saved.getPhoneNumber());
         profile.setPersonalEmail(saved.getPersonalEmail());
         profile.setAddressLine1(saved.getAddressLine1());
@@ -240,8 +222,10 @@ public class UserService {
 
     public boolean hasAdminRole(Long userId) {
         User user = userRepository.findById(userId).orElse(null);
-        return user != null && user.isAdmin();
+        return user != null && isPlatform(user.getId());
     }
+
+    private boolean isPlatform(Long id){return jdbc!=null && new CompanyAccessService(jdbc).hasPlatformRole(id,"PLATFORM_ADMIN");}
 
     private String clean(String value) {
         if (value == null) {
@@ -258,17 +242,14 @@ public class UserService {
                 .accountStatus(user.getAccountStatus())
                 .timezone(user.getTimezone())
                 .id(user.getId())
-                .employeeId(user.getEmployeeId())
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
-                .jobTitle(user.getJobTitle())
-                .joiningDate(user.getJoiningDate())
                 .dateOfBirth(user.getDateOfBirth())
-                .ssnLast4(user.isAdmin() ? null : user.getSsnLast4())
+                .ssnLast4(isPlatform(user.getId()) ? null : user.getSsnLast4())
                 .profileImageUrl(user.getProfileImageUrl())
                 .profileCompleted(Boolean.TRUE.equals(user.getProfileCompleted()))
                 .email(user.getEmail())
-                .role(user.getRole())
+                .platformAdmin(isPlatform(user.getId()))
                 .isActive(user.getIsActive())
                 .createdAt(user.getCreatedAt())
                 .updatedAt(user.getUpdatedAt())

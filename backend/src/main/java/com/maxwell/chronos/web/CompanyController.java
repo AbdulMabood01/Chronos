@@ -24,7 +24,7 @@ public class CompanyController {
         return users.findUserEntityByEmail(jwt.getClaimAsString("preferred_username")).getId();
     }
 
-    public record CompanyInput(String name, String slug) {}
+    public record CompanyInput(String name, String slug, String adminEmail) {}
     public record InvitationInput(Long projectId, String email, String role, Long accessRequestId) {}
     public record AcceptInput(String token) {}
     // Keep credentials out of generated toString methods and logs.
@@ -48,13 +48,23 @@ public class CompanyController {
         return companies.myCompanies(actor(jwt));
     }
 
+    @GetMapping("/context") public CompanyManagementService.CompanyContext context(@AuthenticationPrincipal Jwt jwt) {
+        return companies.companyContext(actor(jwt));
+    }
+
+    @GetMapping("/{companyId}/context") public Map<String, Object> selectContext(
+            @PathVariable long companyId, @AuthenticationPrincipal Jwt jwt) {
+        return companies.validateCompanyContext(companyId, actor(jwt));
+    }
+
     @PostMapping public Map<String, Long> create(@RequestBody CompanyInput input, @AuthenticationPrincipal Jwt jwt) {
-        return Map.of("id", companies.createCompany(input.name(), input.slug(), actor(jwt)));
+        return Map.of("id", companies.createCompany(input.name(), input.slug(), input.adminEmail(), actor(jwt)));
     }
 
     @GetMapping("/{companyId}/members") public List<Map<String, Object>> members(
-            @PathVariable long companyId, @AuthenticationPrincipal Jwt jwt) {
-        return companies.members(companyId, actor(jwt));
+            @PathVariable long companyId,@RequestParam(required=false) String status,@RequestParam(required=false) String query,
+            @AuthenticationPrincipal Jwt jwt) {
+        return companies.members(companyId, actor(jwt),status,query);
     }
 
     @PostMapping("/{companyId}/invitations") public void invite(@PathVariable long companyId,
@@ -71,6 +81,7 @@ public class CompanyController {
             @PathVariable long companyId, @PathVariable long invitationId, @AuthenticationPrincipal Jwt jwt) {
         companies.revokeInvitation(companyId, invitationId, actor(jwt));
     }
+    @PostMapping("/{companyId}/invitations/{invitationId}/resend") public void resendInvitation(@PathVariable long companyId,@PathVariable long invitationId,@AuthenticationPrincipal Jwt jwt){companies.resendInvitation(companyId,invitationId,actor(jwt));}
 
     @PostMapping("/invitations/accept") public void accept(@RequestBody AcceptInput input,
             @AuthenticationPrincipal Jwt jwt) {

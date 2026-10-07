@@ -22,44 +22,25 @@ public class UserController {
     private final com.maxwell.chronos.service.CompanyAccessService companyAccess;
     private final com.maxwell.chronos.service.LeaveBalanceService leaveBalanceService;
 
-    @PatchMapping("/{id}/lock")
-    public UserDTO lockAccount(@PathVariable Long id, @RequestBody(required = false) java.util.Map<String, String> body,
-                               @AuthenticationPrincipal Jwt jwt) {
-        var actor = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        if (actor == null || !actor.isAdmin()) throw new org.springframework.security.access.AccessDeniedException("Forbidden");
-        return userService.lockAccount(id, actor.getId(), body == null ? null : body.get("reason"));
-    }
-
-    @PatchMapping("/{id}/unlock")
-    public UserDTO unlockAccount(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
-        var actor = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        if (actor == null || !actor.isAdmin()) throw new org.springframework.security.access.AccessDeniedException("Forbidden");
-        return userService.unlockAccount(id, actor.getId());
-    }
-
-    @PostMapping("/{id}/sign-out-all")
-    public void signOutAll(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
-        var actor = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        if (actor == null || !actor.isAdmin()) throw new org.springframework.security.access.AccessDeniedException("Forbidden");
-        userService.signOutAll(id, actor.getId());
-    }
+    @RequestMapping(value={"/{id}/lock","/{id}/unlock","/{id}/sign-out-all","/all","/{id}/deactivate","/{id}/reactivate","/{id}/role"})
+    public void retiredAccountManagement(){throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.GONE,"Use platform account administration or company membership management");}
 
     @GetMapping("/{id}/leave-balance")
     public com.maxwell.chronos.dto.LeaveBalanceDTO getLeaveBalance(@PathVariable Long id, @RequestParam int year, @AuthenticationPrincipal Jwt jwt) {
-        return leaveBalanceService.getBalance(id, year, userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username")));
+        throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.GONE,"Use company leave balances");
     }
 
     @GetMapping("/me/leave-balance")
     public com.maxwell.chronos.dto.LeaveBalanceDTO getMyLeaveBalance(@RequestParam int year, @AuthenticationPrincipal Jwt jwt) {
         var requester = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
         if (requester == null) throw new org.springframework.security.access.AccessDeniedException("Leave balance permission required");
-        return leaveBalanceService.getBalance(requester.getId(), year, requester);
+        throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.GONE,"Use company leave balances");
     }
 
     @PutMapping("/{id}/leave-allowance")
     public com.maxwell.chronos.dto.LeaveBalanceDTO updateLeaveAllowance(@PathVariable Long id,
             @Valid @RequestBody com.maxwell.chronos.dto.LeaveAllowanceRequest request, @AuthenticationPrincipal Jwt jwt) {
-        return leaveBalanceService.update(id, request, userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username")));
+        throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.GONE,"Use company leave allowances");
     }
 
     public record JoiningDateRequest(java.time.LocalDate joiningDate) {}
@@ -74,7 +55,7 @@ public class UserController {
     @GetMapping("/{id}")
     public ResponseEntity<UserDTO> getUser(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
         var requester = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        if (requester == null || (!requester.isAdmin() && !requester.getId().equals(id))) {
+        if (requester == null || !requester.getId().equals(id)) {
             return ResponseEntity.status(403).build();
         }
         UserDTO user = userService.findById(id);
@@ -106,63 +87,4 @@ public class UserController {
         }
     }
 
-    @GetMapping("/all")
-    public ResponseEntity<List<UserDTO>> getAllUsers(@AuthenticationPrincipal Jwt jwt) {
-        String email = jwt.getClaimAsString("preferred_username");
-        var currentUser = userService.findUserEntityByEmail(email);
-
-        if (currentUser == null || !currentUser.isAdmin()) {
-            return ResponseEntity.status(403).build();
-        }
-
-        List<UserDTO> users = userService.getAllUsers();
-        return ResponseEntity.ok(users);
-    }
-
-    @PatchMapping("/{id}/deactivate")
-    public ResponseEntity<UserDTO> deactivateUser(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
-        String email = jwt.getClaimAsString("preferred_username");
-        var currentUser = userService.findUserEntityByEmail(email);
-
-        if (currentUser == null || !currentUser.isAdmin()) {
-            return ResponseEntity.status(403).build();
-        }
-
-        userService.deactivateUser(id, currentUser.getId());
-        UserDTO updatedUser = userService.findById(id);
-        return ResponseEntity.ok(updatedUser);
-    }
-
-    @PatchMapping("/{id}/reactivate")
-    public ResponseEntity<UserDTO> reactivateUser(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
-        String email = jwt.getClaimAsString("preferred_username");
-        var currentUser = userService.findUserEntityByEmail(email);
-
-        if (currentUser == null || !currentUser.isAdmin()) {
-            return ResponseEntity.status(403).build();
-        }
-
-        userService.reactivateUser(id, currentUser.getId());
-        UserDTO updatedUser = userService.findById(id);
-        return ResponseEntity.ok(updatedUser);
-    }
-
-    @PatchMapping("/{id}/role")
-    public ResponseEntity<UserDTO> changeRole(@PathVariable Long id, @RequestParam UserRole role,
-                                              @AuthenticationPrincipal Jwt jwt) {
-        String email = jwt.getClaimAsString("preferred_username");
-        var currentUser = userService.findUserEntityByEmail(email);
-
-        if (currentUser == null || !currentUser.isAdmin()) {
-            return ResponseEntity.status(403).build();
-        }
-
-        try {
-            userService.changeRole(id, role, currentUser.getId());
-        } catch (IllegalArgumentException e) {
-            throw e;
-        }
-        UserDTO updatedUser = userService.findById(id);
-        return ResponseEntity.ok(updatedUser);
-    }
 }

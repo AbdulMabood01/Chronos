@@ -1,77 +1,23 @@
 package com.maxwell.chronos.web;
-
-import com.maxwell.chronos.dto.SystemSettingDTO;
-import com.maxwell.chronos.service.SystemSettingsService;
-import com.maxwell.chronos.service.UserService;
+import com.maxwell.chronos.service.*;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.Map;
-
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 @RestController
-@RequestMapping("/settings")
 @RequiredArgsConstructor
 public class SettingsController {
-    private final SystemSettingsService systemSettingsService;
-    private final UserService userService;
-
-    private boolean canManageSettings(com.maxwell.chronos.domain.User user) {
-        return user != null && user.isAdmin();
-    }
-
-    @GetMapping("/leave-defaults/preview")
-    public SystemSettingsService.LeaveDefaultsPreview previewLeaveDefaults(@RequestParam int year, @AuthenticationPrincipal Jwt jwt) {
-        return systemSettingsService.previewLeaveDefaults(year,
-                userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username")));
-    }
-
-    @PostMapping("/leave-defaults/apply")
-    public java.util.Map<String, Integer> applyLeaveDefaults(
-            @jakarta.validation.Valid @RequestBody com.maxwell.chronos.dto.ApplyLeaveDefaultsRequest input,
-            @AuthenticationPrincipal Jwt jwt) {
-        var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        if (!canManageSettings(user)) {
-            throw new org.springframework.security.access.AccessDeniedException("Only Admin can manage settings");
-        }
-        return java.util.Map.of("updated", systemSettingsService.applyLeaveDefaults(input.year(), input.confirmed(), user,
-                input.expectedVacationDays(), input.expectedSickDays(), input.expectedBereavementDays()));
-    }
-
-    @GetMapping
-    public ResponseEntity<List<SystemSettingDTO>> getAllSettings(@AuthenticationPrincipal Jwt jwt) {
-        var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        if (!canManageSettings(user)) {
-            return ResponseEntity.status(403).build();
-        }
-        return ResponseEntity.ok(systemSettingsService.getAllSettings());
-    }
-
-    @GetMapping("/{key}")
-    public ResponseEntity<SystemSettingDTO> getSetting(@PathVariable String key, @AuthenticationPrincipal Jwt jwt) {
-        var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        if (!canManageSettings(user)) {
-            return ResponseEntity.status(403).build();
-        }
-        SystemSettingDTO setting = systemSettingsService.getSetting(key);
-        if (setting == null) {
-            return ResponseEntity.notFound().build();
-        }
-        return ResponseEntity.ok(setting);
-    }
-
-    @PutMapping("/{key}")
-    public ResponseEntity<SystemSettingDTO> updateSetting(@PathVariable String key,
-                                                           @RequestBody Map<String, String> body,
-                                                           @AuthenticationPrincipal Jwt jwt) {
-        var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        if (!canManageSettings(user)) {
-            return ResponseEntity.status(403).build();
-        }
-        SystemSettingDTO updated = systemSettingsService.updateSetting(key, body.get("value"), user.getId());
-        return ResponseEntity.ok(updated);
-    }
+    private final PlatformSettingsService settings;
+    private final UserService users;
+    private long actor(Jwt jwt){return users.findUserEntityByEmail(jwt.getClaimAsString("preferred_username")).getId();}
+    @GetMapping("/platform/settings") public PlatformSettingsService.Snapshot get(@AuthenticationPrincipal Jwt jwt){return settings.get(actor(jwt));}
+    @PutMapping("/platform/settings/{key}") public PlatformSettingsService.Snapshot update(@PathVariable String key,
+        @Valid @RequestBody CompanySettingsService.Input input,@AuthenticationPrincipal Jwt jwt){return settings.update(actor(jwt),key,input);}
+    // Retire global business-policy endpoints, including bulk allowance application.
+    @RequestMapping(value={"/settings","/settings/{key}","/settings/leave-defaults/preview","/settings/leave-defaults/apply"},
+        method={RequestMethod.GET,RequestMethod.PUT,RequestMethod.POST})
+    public void retired(){throw new ResponseStatusException(HttpStatus.GONE,"Global settings have moved to company and platform settings");}
 }

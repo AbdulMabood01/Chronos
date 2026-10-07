@@ -1,5 +1,5 @@
 const { expect } = require('@playwright/test');
-const { accounts, loginByApi } = require('./auth.cjs');
+const { accounts, loginByApi, clearSessions } = require('./auth.cjs');
 
 async function apiAs(request, role) {
   const token = await loginByApi(request, accounts[role]);
@@ -15,10 +15,11 @@ async function apiAs(request, role) {
 }
 
 async function resetFixtures(request) {
-  const admin = await apiAs(request, 'superAdmin');
+  const admin = await apiAs(request, 'companyAdmin');
   const response = await admin.post('/api/e2e/reset');
   const body = await response.text();
   expect(response.ok(), `Fixture reset failed: ${response.status()} ${body}`).toBeTruthy();
+  clearSessions(request);
   return JSON.parse(body);
 }
 

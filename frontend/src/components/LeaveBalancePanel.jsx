@@ -1,8 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { userAPI } from '../api';
+import { companyLeaveAPI } from '../api';
+import {useCompany} from '../CompanyContext';
 import './LeaveBalancePanel.css';
+import LeaveBalanceChart from './LeaveBalanceChart';
 
 export default function LeaveBalancePanel({ userId, editable = false, ownBalance = false, onSavingChange }) {
+  const {currentCompany,platformAdmin,companyCapabilities}=useCompany();
+  editable=editable&&companyCapabilities?.canManageLeavePolicy===true;
   const [year, setYear] = useState(new Date().getFullYear());
   const [balance, setBalance] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -17,8 +21,10 @@ export default function LeaveBalancePanel({ userId, editable = false, ownBalance
       setLoading(true); setBalance(null); setError(''); setMessage('');
       if (!Number.isInteger(year) || year < 1900 || year > 9998) { setLoading(false); setError('Enter a year between 1900 and 9998.'); return; }
       try {
-        const response = ownBalance ? await userAPI.getMyLeaveBalance(year) : await userAPI.getLeaveBalance(userId, year);
+        if(!currentCompany||platformAdmin){setLoading(false);return;}
+        const response = await companyLeaveAPI.balance(currentCompany.id,ownBalance?null:userId,year);
         if (cancelled) return;
+        if(String(response.data.companyId)!==String(currentCompany.id))throw new Error('Company balance mismatch');
         setBalance(response.data);
         setForm({ vacationDays: response.data.vacation.allowanceDays, sickDays: response.data.sick.allowanceDays, bereavementDays: response.data.bereavement?.allowanceDays ?? 0, addVacationDays: 0, addSickDays: 0, reason: '' });
       } catch (err) { if (!cancelled) setError(err.response?.data?.message || 'Unable to load leave balances.'); }
@@ -27,12 +33,12 @@ export default function LeaveBalancePanel({ userId, editable = false, ownBalance
     load();
     if (!editable) window.addEventListener('focus', load);
     return () => { cancelled = true; window.removeEventListener('focus', load); };
-  }, [userId, year, editable, ownBalance]);
+  }, [userId, year, editable, ownBalance,currentCompany?.id,platformAdmin]);
 
   const save = async (event) => {
     event.preventDefault(); setSaving(true); onSavingChange?.(true); setError(''); setMessage('');
     try {
-      const response = await userAPI.updateLeaveAllowance(userId, { year, ...form,
+      const response = await companyLeaveAPI.allowance(currentCompany.id,userId, { year, ...form,version:balance.version,
         vacationDays: Number(form.vacationDays), sickDays: Number(form.sickDays), bereavementDays: Number(form.bereavementDays),
         addVacationDays: Number(form.addVacationDays), addSickDays: Number(form.addSickDays) });
       setBalance(response.data);
@@ -54,19 +60,10 @@ export default function LeaveBalancePanel({ userId, editable = false, ownBalance
     {message && <p role="status" className="leave-status-message">{message}</p>}
     {loading && <p role="status" className="leave-loading">Loading balances...</p>}
     {balance && <>
-      {!balance.configured && <p className="leave-policy-note">Allowance not set for {year}. An Admin can assign the annual policy or a personal allowance.</p>}
+      {!balance.configured && <p className="leave-policy-note">Allowance not set for {year}. A Company Admin can apply the annual policy or a personal allowance.</p>}
       {balance.configured && <p className="leave-policy-source">{balance.source === 'POLICY' ? `${year} annual policy` : 'Personal allowance'} · Extra grants are tracked separately.</p>}
-      {balance.configured && <div className="leave-balance-grid">{['vacation', 'sick', 'bereavement'].filter(type => balance[type]).map(type => <div className="leave-balance-tile" key={type}>
-        <h3>{type === 'vacation' ? 'Vacation' : type === 'sick' ? 'Sick leave' : 'Bereavement leave'}</h3>
-        <strong>{Number(balance[type].remainingDays).toFixed(1)} <small>days remaining</small></strong>
-        <dl>
-          <div><dt>Annual</dt><dd>{Number(balance[type].allowanceDays)}</dd></div>
-          <div><dt>Extra</dt><dd>{Number(balance[type].extraDays)}</dd></div>
-          <div><dt>Approved</dt><dd>{Number(balance[type].usedDays)}</dd></div>
-          <div><dt>Pending</dt><dd>{Number(balance[type].pendingDays || 0)}</dd></div>
-        </dl>
-      </div>)}</div>}
-      <p className="leave-policy-note">Approved weekday leave uses the annual allowance and extra grants. Pending requests are shown separately. Requests over the available balance need an allowance update or an unpaid leave request. One day equals 8 hours.</p>
+      {balance.configured && <div className="leave-balance-charts">{['vacation','sick','bereavement'].filter(type=>balance[type]).map(type=><LeaveBalanceChart key={type} title={type==='vacation'?'Vacation':type==='sick'?'Sick leave':'Bereavement leave'} balance={balance[type]}/>)}</div>}
+      <p className="leave-policy-note">Approved working-day leave (excluding weekends and U.S. federal holidays) uses the annual allowance and extra grants. Pending requests are shown separately. Requests over the available balance need an allowance update or an unpaid leave request. One day equals 8 hours.</p>
       {editable && <form onSubmit={save} className="leave-allowance-form">
         <fieldset disabled={saving} className="leave-allowance-fields"><legend>Set allowance and add extra days</legend>
           {[['vacationDays', 'Annual vacation days'], ['sickDays', 'Annual sick days'], ['bereavementDays', 'Annual bereavement days'], ['addVacationDays', 'Add extra vacation days'], ['addSickDays', 'Add extra sick days']].map(([key, label]) =>

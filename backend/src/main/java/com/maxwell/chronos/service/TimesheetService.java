@@ -28,6 +28,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.Objects;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.YearMonth;
@@ -89,17 +90,16 @@ public class TimesheetService {
 
     public List<MissingTimesheet> getMissingTimesheets(int year, int month, User reviewer) {
         YearMonth period = YearMonth.of(year, month);
-        if (reviewer == null || (!reviewer.isProjectAdmin() && !reviewer.isAdmin()
-                && !projectService.canManageProjects(reviewer.getId()) && !projectService.canReviewProjects(reviewer.getId())))
+        if (reviewer == null||access.hasPlatformRole(reviewer.getId(),"PLATFORM_ADMIN")||!(access.hasAnyCompanyRole(reviewer.getId(),"COMPANY_ADMIN")||projectService.canManageProjects(reviewer.getId())||projectService.canReviewProjects(reviewer.getId())))
             throw new org.springframework.security.access.AccessDeniedException("Manager permission required");
         var result = new java.util.ArrayList<MissingTimesheet>();
-        var visibleProjects = projectService.visibleProjectIds(reviewer);
+        var visibleProjects = projectService.getProjects(reviewer).stream().map(project->project.getId()).collect(Collectors.toSet());
         for (var assignment : projectAssignmentRepository.findAll()) {
             var employee = assignment.getUser();
             var project = assignment.getProject();
             if (!visibleProjects.contains(project.getId()) || !Boolean.TRUE.equals(project.getIsActive())
                     || project.getStatus() != com.maxwell.chronos.enums.ProjectStatus.ACTIVE) continue;
-            if (!reviewer.isAdmin() && !access.mayManageProject(project.getId(),reviewer.getId())
+            if (!access.hasCompanyRole(project.getCompanyId(),reviewer.getId(),"COMPANY_ADMIN")&&!access.hasProjectRole(project.getId(),reviewer.getId(),"PROJECT_MANAGER")&&!access.mayManageProject(project.getId(),reviewer.getId())
                     && !access.mayReview(project.getId(),reviewer.getId(),employee.getId(),false,"Queue preview")) continue;
             if (!access.maySubmit(project.getId(), employee.getId()) || !Boolean.TRUE.equals(employee.getIsActive())
                     || (assignment.getStartDate() != null && assignment.getStartDate().isAfter(period.atEndOfMonth()))
@@ -162,6 +162,7 @@ public class TimesheetService {
     public TimesheetDTO getTimesheetById(Long timesheetId, Long requestingUserId, boolean isAdmin) {
         Timesheet timesheet = timesheetRepository.findForUpdate(timesheetId)
                 .orElseThrow(() -> new IllegalArgumentException("Timesheet not found"));
+        access.requireActiveCompanyAccess(timesheet.getCompanyId(),requestingUserId);
 
         if (!isAdmin && !timesheet.getUser().getId().equals(requestingUserId)
                 && !canReviewTimesheet(timesheet, requestingUserId)) {
@@ -180,7 +181,7 @@ public class TimesheetService {
                 .map(this::toTimeEntryDTO).collect(Collectors.toSet());
         return TimesheetDTO.builder()
                 .id(sheet.getId()).userId(sheet.getUser().getId()).companyId(sheet.getCompanyId()).userName(sheet.getUser().getFullName())
-                .userJobTitle(sheet.getUser().getJobTitle()).year(sheet.getYear()).month(sheet.getMonth())
+                .userJobTitle(access.employmentJobTitle(sheet.getCompanyId(),sheet.getUser().getId())).year(sheet.getYear()).month(sheet.getMonth())
                 .primaryProjectId(projectId).primaryProjectCode(submission.getProjectCode()).primaryProjectName(submission.getProjectName())
                 .status(submission.getStatus()).totalHours(entries.stream().map(TimeEntryDTO::getHours).reduce(BigDecimal.ZERO, BigDecimal::add))
                 .editable(false).pdfExportEligible(submission.getPdfExportEligible())
@@ -433,6 +434,7 @@ public class TimesheetService {
 
     public List<TimesheetDTO> getTimesheetsByUser(Long userId) {
         return timesheetRepository.findByUserId(userId).stream()
+                .filter(sheet->access.hasActiveCompanyAccess(sheet.getCompanyId(),userId))
                 .map(this::toDTO)
                 .collect(Collectors.toList());
     }
@@ -696,6 +698,7 @@ public class TimesheetService {
     }
 
     private boolean canViewProjectSubmission(Timesheet timesheet, Project project, User user) {
+        access.requireActiveCompanyAccess(timesheet.getCompanyId(),user.getId());
         if (timesheet.getUser().getId().equals(user.getId()) || access.hasPlatformRole(user.getId(), "PLATFORM_ADMIN")
                 || access.mayManageProject(project.getId(), user.getId())) return true;
         boolean belongsToProject = projectAssignmentRepository.findByProjectIdAndUserId(project.getId(), timesheet.getUser().getId()).isPresent()
@@ -715,8 +718,8 @@ public class TimesheetService {
     }
 
     private void requireCanSubmit(User user) {
-        if (user.isAdmin()) {
-            throw new org.springframework.security.access.AccessDeniedException("Admin cannot submit timesheets");
+        if (access.hasPlatformRole(user.getId(),"PLATFORM_ADMIN")) {
+            throw new org.springframework.security.access.AccessDeniedException("Platform Admin cannot submit timesheets");
         }
     }
 
@@ -965,7 +968,8 @@ public class TimesheetService {
     private List<VacationRequest> getVacationRequestsForMonth(Timesheet timesheet) {
         YearMonth yearMonth = YearMonth.of(timesheet.getYear(), timesheet.getMonth());
         return vacationRequestRepository.findByUserIdAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
-                timesheet.getUser().getId(), yearMonth.atEndOfMonth(), yearMonth.atDay(1));
+                timesheet.getUser().getId(), yearMonth.atEndOfMonth(), yearMonth.atDay(1)).stream()
+                .filter(vacation->Objects.equals(vacation.getCompanyId(),timesheet.getCompanyId())).toList();
     }
 
     private Set<VacationDayDTO> getVacationDaysForMonth(Timesheet timesheet) {
@@ -1041,7 +1045,7 @@ public class TimesheetService {
                 .userId(timesheet.getUser().getId())
                 .companyId(timesheet.getCompanyId())
                 .userName(timesheet.getUser().getFullName())
-                .userJobTitle(timesheet.getUser().getJobTitle())
+                .userJobTitle(access.employmentJobTitle(timesheet.getCompanyId(),timesheet.getUser().getId()))
                 .year(timesheet.getYear())
                 .month(timesheet.getMonth())
                 .status(submission.getStatus())
@@ -1071,9 +1075,10 @@ public class TimesheetService {
     private TimesheetDTO toDTO(Timesheet timesheet) {
         return TimesheetDTO.builder()
                 .id(timesheet.getId())
+                .companyId(timesheet.getCompanyId())
                 .userId(timesheet.getUser().getId())
                 .userName(timesheet.getUser().getFullName())
-                .userJobTitle(timesheet.getUser().getJobTitle())
+                .userJobTitle(access.employmentJobTitle(timesheet.getCompanyId(),timesheet.getUser().getId()))
                 .primaryProjectId(timesheet.getPrimaryProject() != null ? timesheet.getPrimaryProject().getId() : null)
                 .primaryProjectCode(timesheet.getPrimaryProject() != null ? timesheet.getPrimaryProject().getCode() : null)
                 .primaryProjectName(timesheet.getPrimaryProject() != null ? timesheet.getPrimaryProject().getName() : null)

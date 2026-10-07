@@ -1,0 +1,151 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Chronos | Provision and operate the platform",
+    "locale": "en",
+    "quality_profile": "showcase"
+  },
+  "lanes": [
+    {
+      "id": "journey",
+      "label": "User journey"
+    },
+    {
+      "id": "exceptions",
+      "label": "Exception / safeguard",
+      "variant": "exception"
+    }
+  ],
+  "mainPath": [
+    "s0",
+    "s1",
+    "s2",
+    "s3",
+    "s4",
+    "s5"
+  ],
+  "nodes": [
+    {
+      "id": "s0",
+      "lane": "journey",
+      "col": 0,
+      "type": "frontend",
+      "label": "Sign in",
+      "sublabel": "Active Platform Admin",
+      "width": 160
+    },
+    {
+      "id": "s1",
+      "lane": "journey",
+      "col": 1,
+      "type": "frontend",
+      "label": "Enter platform",
+      "sublabel": "Separate administration mode",
+      "width": 160
+    },
+    {
+      "id": "s2",
+      "lane": "journey",
+      "col": 2,
+      "type": "security",
+      "label": "Provision company",
+      "sublabel": "Invite initial Company Admin",
+      "width": 160
+    },
+    {
+      "id": "s3",
+      "lane": "journey",
+      "col": 3,
+      "type": "security",
+      "label": "Admin accepts",
+      "sublabel": "Company membership + role",
+      "width": 160
+    },
+    {
+      "id": "s4",
+      "lane": "journey",
+      "col": 4,
+      "type": "frontend",
+      "label": "Company operates",
+      "sublabel": "Operational company context",
+      "width": 160
+    },
+    {
+      "id": "s5",
+      "lane": "journey",
+      "col": 5,
+      "type": "frontend",
+      "label": "Platform oversight",
+      "sublabel": "Plans, availability and audit",
+      "width": 160
+    },
+    {
+      "id": "exception",
+      "lane": "exceptions",
+      "col": 1,
+      "type": "security",
+      "label": "Content denied",
+      "sublabel": "No operational bypass",
+      "width": 160
+    }
+  ],
+  "edges": [
+    {
+      "id": "e0",
+      "from": "s0",
+      "to": "s1",
+      "role": "main"
+    },
+    {
+      "id": "e1",
+      "from": "s1",
+      "to": "s2",
+      "role": "main"
+    },
+    {
+      "id": "e2",
+      "from": "s2",
+      "to": "s3",
+      "role": "main"
+    },
+    {
+      "id": "e3",
+      "from": "s3",
+      "to": "s4",
+      "role": "main"
+    },
+    {
+      "id": "e4",
+      "from": "s4",
+      "to": "s5",
+      "role": "main"
+    },
+    {
+      "id": "blocked",
+      "from": "s1",
+      "to": "exception",
+      "label": "company content",
+      "role": "error",
+      "variant": "security"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Scope and routing",
+      "items": [
+        "Platform role alone grants no company operations.",
+        "Initial onboarding ends once an admin is assigned."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Safeguards",
+      "items": [
+        "Support and restricted-field grants are future capabilities.",
+        "Deny until scoped authorization and audit exist."
+      ]
+    }
+  ]
+}
