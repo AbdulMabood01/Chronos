@@ -79,3 +79,11 @@
 .platform-page .company-field small { color: var(--text-secondary); font-size: 11px; font-weight: 400; line-height: 1.5; }
 .platform-page .button.button-secondary { background: var(--surface-color); color: var(--text-primary); border: 1px solid var(--border-color); }
 .platform-page .button.button-secondary:hover:not(:disabled) { background: var(--surface-muted); }
+
+.platform-account-filters { display: grid; grid-template-columns: minmax(180px, .85fr) minmax(0, 1.15fr); align-items: end; gap: 1rem; margin-bottom: 1rem; }
+.platform-account-filters .record-search { margin: 0; }
+.platform-account-companies { overflow-wrap: anywhere; }
+@media (max-width: 700px) { .platform-account-filters { grid-template-columns: 1fr; } }
+
+.platform-page .platform-account-filters .company-field { margin-bottom: 0; }
+.platform-page .platform-account-filters .record-search { height: 44px; padding-block: 8px; }
