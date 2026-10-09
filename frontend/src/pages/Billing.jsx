@@ -11,11 +11,11 @@ const message = error => error.response?.data?.message || 'The billing request c
 export function PlanCards({ catalog, months, selected, onSelect }) {
   const discount = catalog.discounts[String(months)] || 0;
   return <div className="billing-plans">{catalog.plans.map(plan => <article key={plan.key} className={`card billing-plan${selected === plan.key ? ' selected' : ''}`}>
-    <h2>{plan.name}</h2><p className="billing-price">{money(plan.monthlyCents)}<small> / company / month equivalent</small></p>
-    <p><strong>{plan.projects}</strong> open {plan.projects === 1 ? 'project' : 'projects'} · <strong>{plan.users}</strong> {plan.key === 'FREE' ? 'people including admins' : 'company employees'}</p>
-    <p>{plan.key === 'FREE' ? 'Free without an expiry date.' : <><strong>{money(plan.monthlyCents * months * (100 - discount) / 100)}</strong> prepaid for {months} months{discount > 0 ? ` (${discount}% discount)` : ''}.</>}</p>
+    <div className="billing-plan-heading"><h2>{plan.name}</h2>{selected === plan.key && <span className="billing-badge">Selected</span>}</div><p className="billing-price">{money(plan.monthlyCents)}<small> / company / month equivalent</small></p>
+    <p className="billing-plan-capacity"><strong>{plan.projects}</strong> open {plan.projects === 1 ? 'project' : 'projects'} · <strong>{plan.users}</strong> {plan.key === 'FREE' ? 'people including admins' : 'company employees'}</p>
+    <p className="billing-plan-total">{plan.key === 'FREE' ? 'Free without an expiry date.' : <><strong>{money(plan.monthlyCents * months * (100 - discount) / 100)}</strong> prepaid for {months} months{discount > 0 ? ` (${discount}% discount)` : ''}.</>}</p>
     <ul><li>Time tracking, expenses and independent approvals</li><li>PTO, reminders, standard reports and exports</li><li>Company and project roles; audit history</li><li>{plan.key === 'FREE' ? 'Upgrade to add capacity' : `${money(400 * (100 - discount) / 100)} per extra employee / month equivalent`}</li></ul>
-    {plan.key !== 'FREE' && <p>Admin-only accounts are free. One employee counts once across projects.</p>}
+    {plan.key !== 'FREE' && <p className="billing-plan-note">Admin-only accounts are free. One employee counts once across projects.</p>}
     {onSelect && plan.key !== 'FREE' && <button type="button" className="button" aria-pressed={selected === plan.key} onClick={() => onSelect(plan.key)}>Choose {plan.name}</button>}
   </article>)}</div>;
 }
@@ -23,14 +23,14 @@ export function PlanCards({ catalog, months, selected, onSelect }) {
 export function Pricing() {
   const [catalog, setCatalog] = useState(null), [months, setMonths] = useState(12), [error, setError] = useState('');
   useEffect(() => { let active = true; billingAPI.catalog().then(r => { if (active) setCatalog(r.data); }).catch(e => { if (active) setError(message(e)); }); return () => { active = false; }; }, []);
-  return <main className="page-container billing-page"><h1>Company plans</h1><p>One plan for your company. Grow your projects and team with predictable, prepaid pricing.</p>
-    <TermSelector months={months} setMonths={setMonths} /><p>One-off payments. No automatic renewal. Prices are in USD before applicable taxes.</p>
+  return <main className="page-container billing-page billing-pricing"><header className="billing-header"><div><span className="billing-eyebrow">Plans &amp; pricing</span><h1>Company plans</h1><p>One plan for your company. Grow your projects and team with predictable, prepaid pricing.</p></div><Link className="billing-header-link" to="/billing">Manage billing →</Link></header>
+    <div className="billing-plan-toolbar"><TermSelector months={months} setMonths={setMonths} /><p>One-off payments. No automatic renewal. Prices are in USD before applicable taxes.</p></div>
     {error && <p role="alert">{error}</p>}{catalog ? <PlanCards catalog={catalog} months={months} /> : !error && <p role="status">Loading plans…</p>}
     <section className="card"><h2>A complete workflow in every plan</h2><p>Approvals always require a different authorized reviewer. Standard exports and audit history stay available. Completed or archived projects release a slot and retain their records.</p><p>Try Pro Plus for 30 days without a card from your company Billing page.</p><p><Link to="/billing">Manage company billing</Link> · <Link to="/login">Sign in</Link></p><p>For custom capacity or rollout requirements, contact your Chronos administrator.</p></section>
   </main>;
 }
 function TermSelector({ months, setMonths, disabled = false }) {
-  return <label className="company-field">Prepaid term<select value={months} disabled={disabled} onChange={e => setMonths(Number(e.target.value))}><option value={3}>3 months</option><option value={6}>6 months — save 10%</option><option value={12}>12 months — save 20%</option></select></label>;
+  return <label className="company-field billing-term-selector">Prepaid term<select value={months} disabled={disabled} onChange={e => setMonths(Number(e.target.value))}><option value={3}>3 months</option><option value={6}>6 months — save 10%</option><option value={12}>12 months — save 20%</option></select></label>;
 }
 
 export default function Billing() {
@@ -76,7 +76,7 @@ export default function Billing() {
   const capacity = entitlement ? entitlement.includedUsers + entitlement.extraSeats : 0;
   const activeTerm = summary?.terms.find(t => t.id === entitlement?.termId);
   const cheaper = catalog?.plans.find(p => p.monthlyCents > 0 && p.users >= (entitlement?.activeUsers || 0) + (entitlement?.reservations || 0) && p.projects >= (entitlement?.openProjects || 0) && p.monthlyCents < (catalog.plans.find(p => p.key === entitlement?.plan)?.monthlyCents || 0) + 400 * (entitlement?.extraSeats || 0));
-  return <div className="page-container billing-page"><h1>Company billing</h1><p>{currentCompany.name} · One plan for the company, with employees pooled across projects.</p>
+  return <div className="page-container billing-page"><header className="billing-header"><div><span className="billing-eyebrow">Company workspace</span><h1>Company billing</h1><p>{currentCompany.name} · One plan for the company, with employees pooled across projects.</p></div><Link className="billing-header-link" to="/pricing">View all plans →</Link></header>
     {error && <p className="inline-alert" role="alert">{error} <button onClick={() => setReload(v => v + 1)}>Reload billing</button></p>}{notice && <p role="status">{notice}</p>}
     {!summary && !error && <p role="status">Loading company billing…</p>}
     {summary && catalog && <>
@@ -91,12 +91,12 @@ export default function Billing() {
         {!summary.profile.trial_used && entitlement.source !== 'PAID' && entitlement.source !== 'CONTRACT' && <button disabled={busy} className="button" onClick={() => act(() => billingAPI.trial(company), 'Your 30-day Pro Plus trial has started.')}>Start 30-day Pro Plus trial</button>}
         {cheaper && cheaper.key !== entitlement.plan && <p>A {cheaper.name} plan may cost less than your current plan plus seats. Review a quote before changing; upgrades never happen automatically.</p>}
       </section>
-      <section className="card"><h2>Billing details</h2><form onSubmit={e => { e.preventDefault(); act(() => billingAPI.profile(company, { ...profile, revision: summary.profile.revision }), 'Billing details saved. Existing receipts remain unchanged.'); }}><fieldset disabled={busy}>
+      <section className="card"><h2>Billing details</h2><form onSubmit={e => { e.preventDefault(); act(() => billingAPI.profile(company, { ...profile, revision: summary.profile.revision }), 'Billing details saved. Existing receipts remain unchanged.'); }}><fieldset className="billing-profile-fields" disabled={busy}>
         <label className="company-field">Company legal name<input required maxLength={200} value={profile.legalName} onChange={e => setProfile({ ...profile, legalName: e.target.value })} /></label>
         <label className="company-field">Billing email<input required type="email" maxLength={255} value={profile.email} onChange={e => setProfile({ ...profile, email: e.target.value })} /></label>
         <label className="company-field">Billing address<textarea required maxLength={1000} value={profile.address} onChange={e => setProfile({ ...profile, address: e.target.value })} /></label><button className="button">Save billing details</button>
       </fieldset></form></section>
-      <section><h2>Choose a plan or renew</h2><TermSelector months={months} setMonths={v => { setMonths(v); setQuote(null); }} /><PlanCards catalog={catalog} months={months} selected={plan} onSelect={v => { setPlan(v); setQuote(null); }} />
+      <section className="billing-plan-section"><div className="billing-section-heading"><div><span className="billing-eyebrow">Plan selection</span><h2>Choose a plan or renew</h2><p>Choose the capacity and prepaid term that fit your company.</p></div><TermSelector months={months} setMonths={v => { setMonths(v); setQuote(null); }} /></div><PlanCards catalog={catalog} months={months} selected={plan} onSelect={v => { setPlan(v); setQuote(null); }} />
         <form className="card" onSubmit={e => { e.preventDefault(); act(async () => setQuote((await billingAPI.quote(company, { plan, months, extraSeats: Number(extra), kind: 'PLAN' })).data)); }}><fieldset disabled={busy}><label className="company-field">Extra employee seats beyond the selected plan<input type="number" required min={0} max={100000} value={extra} onChange={e => { setExtra(e.target.value); setQuote(null); }} /></label><p>Same-tier early renewal starts at the current term's end. Higher-tier purchases carry remaining duration forward. Review exact dates below.</p><button className="button">Review prepaid quote</button></fieldset></form>
       </section>
       {entitlement.source === 'PAID' && <section className="card"><h2>Add employee seats to this term</h2><form onSubmit={e => { e.preventDefault(); act(async () => setQuote((await billingAPI.quote(company, { plan: entitlement.plan, months: activeTerm.term_months || summary.purchases.find(p => p.plan_key === entitlement.plan && p.kind === 'PLAN')?.term_months, extraSeats: Number(seatQuantity), kind: 'SEATS' })).data)); }}><fieldset disabled={busy}><label className="company-field">Additional seats<input required type="number" min={1} max={100000} value={seatQuantity} onChange={e => { setSeatQuantity(e.target.value); setQuote(null); }} /></label><p>Prorated for remaining term duration. Service still ends {date(entitlement.endsAt)}.</p><button className="button">Review prorated seat quote</button></fieldset></form></section>}
@@ -111,7 +111,7 @@ export default function Billing() {
           {['FULFILLED', 'RECONCILIATION', 'REFUND_FAILED'].includes(p.status) && p.paid_at && Date.now() <= new Date(p.paid_at).getTime() + 7 * 86400000 && <button disabled={busy || !refundReason.trim()} onClick={() => act(() => billingAPI.refund(company, p.id, refundReason), 'Refund requested. Capacity changes only after provider confirmation.')}>Request full refund and reverse capacity</button>}
           {p.status === 'RECONCILIATION' && <p role="alert">Payment recorded; contact billing support. Do not purchase again to resolve this.</p>}
         </article>)}{!summary.purchases.some(p => p.status !== 'QUOTED') && <p>No purchases yet.</p>}</section>
-      <section className="card"><h2>Billing activity</h2>{summary.activity.map((a, i) => <p key={i}>{date(a.created_at)} · {a.action.replaceAll('_', ' ')}{a.reason ? ` · ${a.reason}` : ''}</p>)}</section>
+      <section className="card"><h2>Billing activity</h2>{!summary.activity.length && <p className="billing-empty">No billing activity yet.</p>}{summary.activity.map((a, i) => <p key={i}>{date(a.created_at)} · {a.action.replaceAll('_', ' ')}{a.reason ? ` · ${a.reason}` : ''}</p>)}</section>
     </>}
   </div>;
 }
