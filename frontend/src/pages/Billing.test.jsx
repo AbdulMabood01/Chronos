@@ -71,3 +71,11 @@ it('supports billing-only suspended access without requesting the operational ro
   workspace.currentCompany.is_suspended = true; open(); await screen.findByText('Current plan: Free');
   expect(people).not.toHaveBeenCalled(); expect(screen.getByText(/Payment cannot lift suspension/i)).toBeInTheDocument();
 });
+
+it('shows a permanent complimentary plan without payment, trial or purchase prompts', async () => {
+  summary.entitlement={...summary.entitlement,plan:'PRO_PLUS',source:'COMPLIMENTARY',projects:7,includedUsers:175,endsAt:null};
+  open();await screen.findByText('Current plan: Pro Plus');expect(screen.getByText('No expiry')).toBeInTheDocument();
+  expect(screen.getByText(/Complimentary company plan. No payment or card/)).toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:'Review prepaid quote'})).not.toBeInTheDocument();expect(screen.queryByRole('button',{name:'Start 30-day Pro Plus trial'})).not.toBeInTheDocument();
+  expect(screen.queryByText('Billing details')).not.toBeInTheDocument();expect(api.checkout).not.toHaveBeenCalled();expect(api.quote).not.toHaveBeenCalled();
+});

@@ -500,6 +500,7 @@ export const platformAdministrationAPI={
  billing:id=>apiClient.get(`/platform/companies/${id}/billing-metadata`),
  retryBilling:(id,event,reason)=>apiClient.post(`/platform/companies/${id}/billing-events/${event}/retry`,{reason}),
  plan:(id,data)=>apiClient.put(`/platform/companies/${id}/plan`,data),
+ revokePlan:(id,data)=>apiClient.delete(`/platform/companies/${id}/plan`,{data}),
  status:(id,data)=>apiClient.put(`/platform/companies/${id}/status`,data),
  accounts:query=>apiClient.get('/platform/accounts',{params:{query}}),
  account:(id,data)=>apiClient.post(`/platform/accounts/${id}/actions`,data),

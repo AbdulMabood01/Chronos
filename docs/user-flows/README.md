@@ -1,6 +1,6 @@
 # Chronos user flows
 
-Company-owned plans, paid employee pools, extra seats, trials and billing recovery are described in [Company billing](../company-billing.md). Its implemented policy supersedes older plan/limit wording in the diagrams below.
+Company-owned plans, platform-admin complimentary plans, paid employee pools, extra seats, trials and billing recovery are described in [Company billing](../company-billing.md). Its implemented policy supersedes older plan/limit wording in the diagrams below.
 
 Seven Archify workflow diagrams based on the permission matrix. These are policy-oriented user journeys, not a claim that every target rule is already implemented. Consult the migration progress document for implementation status.
 

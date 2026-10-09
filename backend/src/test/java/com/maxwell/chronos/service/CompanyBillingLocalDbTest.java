@@ -182,5 +182,28 @@ class CompanyBillingLocalDbTest {
         assertFalse(after.state(company).grace());assertTrue(after.state(company).restricted());
         assertEquals(2,after.state(company).openProjects());
     });}
-}
 
+    @Test void complimentaryCompanyCannotPurchaseOrStartTrial(){run(()->{
+        db.update("INSERT INTO company_billing_terms(id,company_id,plan_key,source,starts_at,project_limit,included_users,catalog_version) VALUES (?,?,'PRO_PLUS','COMPLIMENTARY',now(),7,175,'test')",UUID.randomUUID(),company);
+        assertEquals("COMPLIMENTARY",entitlements.state(company).source());
+        assertThrows(ResponseStatusException.class,()->quote("PRO",3,0));
+        assertThrows(ResponseStatusException.class,()->billing.trial(company,email));
+        assertEquals(0,db.queryForObject("SELECT count(*) FROM company_billing_purchases WHERE company_id=?",Integer.class,company));
+    });}
+
+    @Test void complimentaryGrantSerializesPaymentConflictsAndInvalidatesUnpaidQuotes(){run(()->{
+        UUID purchase=quote("PRO",3,0);long operator=user(UUID.randomUUID()+"@example.com");String address=db.queryForObject("SELECT email FROM users WHERE id=?",String.class,operator);db.update("INSERT INTO role_assignments(user_id,role_key) VALUES (?,'PLATFORM_ADMIN')",operator);
+        var repository=mock(com.maxwell.chronos.repository.UserRepository.class);when(repository.findByEmail(address)).thenReturn(Optional.of(com.maxwell.chronos.domain.User.builder().id(operator).email(address).build()));
+        var platform=new PlatformAdministrationService(db,access,repository,mock(OnboardingService.class),mock(AuthSessionService.class));
+        for(String pending:List.of("CHECKOUT","REFUND_PENDING","RECONCILIATION","DISPUTED")){
+            db.update("UPDATE company_billing_purchases SET status=? WHERE id=?",pending,purchase);
+            assertThrows(ResponseStatusException.class,()->platform.plan(company,address,new PlatformAdministrationService.Plan("PRO_PLUS",7,175,0L,"Owned company","COMPLIMENTARY",null)));
+            assertEquals("FREE",entitlements.state(company).source());
+        }
+        db.update("UPDATE company_billing_purchases SET status='QUOTED' WHERE id=?",purchase);
+        platform.plan(company,address,new PlatformAdministrationService.Plan("PRO_PLUS",7,175,0L,"Owned company","COMPLIMENTARY",null));
+        when(stripe.checkoutEnabled()).thenReturn(true);
+        assertThrows(ResponseStatusException.class,()->billing.checkout(company,email,purchase));
+        assertEquals("COMPLIMENTARY",entitlements.state(company).source());verify(stripe,never()).checkout(anyMap(),anyString());
+    });}
+}
