@@ -31,11 +31,11 @@ async function fixture(page){
 }
 test('company admin can remove/reactivate membership without restoring previous roles',async({page})=>{
   const state=await fixture(page);await page.goto('/companies');const card=page.getByRole('group',{name:'Member member@example.com'});
-  await card.getByRole('button',{name:'Remove membership',exact:true}).click();
+  await card.getByText('Manage access',{exact:true}).click();await card.getByRole('button',{name:'Remove membership',exact:true}).click();
   await page.getByRole('dialog').getByRole('button',{name:'Remove access'}).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);await expect(card).toHaveCount(0);
   await page.getByLabel('Membership status',{exact:true}).selectOption('REMOVED');
-  await card.getByRole('button',{name:'Reactivate membership'}).click();
+  await card.getByText('Manage access',{exact:true}).click();await card.getByRole('button',{name:'Reactivate membership'}).click();
   await expect(page.getByRole('dialog')).toContainText('Previous company roles and project access stay revoked');
   await page.getByRole('dialog').getByRole('button',{name:'Reactivate access'}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
   expect(state.mutations[0].input).toEqual({status:'REMOVED',version:0});expect(state.mutations[1].input).toEqual({status:'ACTIVE',version:1});
@@ -43,6 +43,7 @@ test('company admin can remove/reactivate membership without restoring previous 
 });
 test('last-admin controls and scoped role changes are reflected immediately',async({page})=>{
   const state=await fixture(page);await page.goto('/companies');const admin=page.getByRole('group',{name:'Member admin@example.com'}),member=page.getByRole('group',{name:'Member member@example.com'});
+  await admin.getByText('Manage access',{exact:true}).click();await member.getByText('Manage access',{exact:true}).click();
   await expect(admin.getByRole('button',{name:'Remove membership',exact:true})).toBeDisabled();
   await member.getByLabel('Company role for member@example.com').selectOption('COMPANY_ADMIN');await member.getByRole('button',{name:'Assign role'}).click();
   await expect(admin.getByRole('button',{name:'Remove membership',exact:true})).toBeEnabled();
@@ -55,7 +56,7 @@ test('search, status filtering, and conflicting removal work on mobile',async({p
   const state=await fixture(page);await page.setViewportSize({width:390,height:844});await page.goto('/companies');
   await page.getByLabel('Search people',{exact:true}).fill('Engineer');await expect(page.getByRole('group',{name:'Member admin@example.com'})).toHaveCount(0);
   const member=page.getByRole('group',{name:'Member member@example.com'});await expect(member).toBeVisible();
-  state.setConflict();await member.getByRole('button',{name:'Remove membership',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'Remove access'}).click();
+  await member.getByText('Manage access',{exact:true}).click();state.setConflict();await member.getByRole('button',{name:'Remove membership',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'Remove access'}).click();
   await expect(page.getByRole('dialog').getByRole('alert')).toContainText('Transfer project ownership');
   await page.getByRole('dialog').getByRole('button',{name:'Cancel'}).click();expect(state.member(7).status).toBe('ACTIVE');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect(state.errors).toEqual([]);

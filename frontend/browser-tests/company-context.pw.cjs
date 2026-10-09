@@ -42,10 +42,10 @@ test('member chooses a company, shares selection with the company screen, and lo
   await expect(page.getByRole('heading', { name: 'Company A', exact:true })).toBeVisible();
   await page.getByLabel('Current company', { exact:true }).selectOption('13');
   await expect(page.getByRole('heading', { name: 'Company B', exact:true })).toBeVisible();
-  await expect(page.getByLabel('Switch company')).toHaveValue('13');
+  await expect(page.getByLabel('Current company',{exact:true})).toHaveValue('13');
   await page.reload();
   await expect(page.getByLabel('Current company', { exact:true })).toHaveValue('13');
-  await page.getByRole('button', { name: 'Sign out', exact:true }).click();
+  await page.getByRole('button', { name: 'Sign Out', exact:true }).click();
   await expect(page.getByRole('button', { name: 'Sign In', exact:true })).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem('chronos:company:5'))).toBeNull();
   expect(state.errors).toEqual([]);

@@ -45,9 +45,9 @@ test('member creates and submits leave in the selected company',async({page})=>{
 });
 test('company admin publishes defaults and reviews another member leave on mobile',async({page})=>{
   const state=await fixture(page);await page.setViewportSize({width:390,height:844});await page.goto('/leave-management');
-  await page.getByRole('button',{name:'Preview policy'}).click();await expect(page.getByRole('region',{name:'Annual policy preview'})).toContainText('personal overrides preserved');
+  await page.getByRole('button',{name:'Policy',exact:true}).click();await page.getByRole('button',{name:'Preview policy'}).click();await expect(page.getByRole('region',{name:'Annual policy preview'})).toContainText('Personal overrides preserved');
   await page.getByRole('button',{name:'Apply 2026 policy'}).click();await expect(page.getByText('Company leave policy applied.',{exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'Review leave'}).click();await page.getByRole('button',{name:'Approve leave'}).click();await expect(page.getByText('Leave approved.',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Requests',exact:true}).click();await page.getByRole('button',{name:'Review leave'}).click();await page.getByRole('button',{name:'Approve leave'}).click();await expect(page.getByText('Leave approved.',{exact:true})).toBeVisible();
   expect(state.writes).toEqual([{company:12,action:'policy',input:{year:2026,settingsVersion:3,policyVersion:-1,confirmed:true}},{company:12,action:'approve',id:7,input:{version:2,accountingType:null}}]);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);expect(state.errors).toEqual([]);
 });

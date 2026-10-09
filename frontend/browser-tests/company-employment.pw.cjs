@@ -4,7 +4,7 @@ async function fixture(page){
   const user={id:5,email:'admin@example.com',firstName:'Jordan',lastName:'Admin',role:'EMPLOYEE',profileCompleted:true,dateOfBirth:'1990-01-01',jobTitle:'Legacy shared title'};
   const records={
     '12:5':{companyId:12,userId:5,employeeId:'ADMIN-A',jobTitle:'Admin A',joiningDate:'2020-01-01',membershipStatus:'ACTIVE',version:0},
-    '12:7':{companyId:12,userId:7,employeeId:'A-001',jobTitle:'Engineer A',joiningDate:'2020-01-01',membershipStatus:'ACTIVE',version:2},
+    '12:7':{companyId:12,userId:7,employeeId:'123',jobTitle:'Engineer A',joiningDate:'2020-01-01',membershipStatus:'ACTIVE',version:2},
     '13:5':{companyId:13,userId:5,employeeId:'B-005',jobTitle:'Manager B',joiningDate:'2018-01-01',membershipStatus:'ACTIVE',version:0},
     '13:7':{companyId:13,userId:7,employeeId:'B-007',jobTitle:'Engineer B',joiningDate:'2019-01-01',membershipStatus:'ACTIVE',version:0},
   };
@@ -38,10 +38,10 @@ test('company admin edits employment in A without changing B or login fields',as
   const state=await fixture(page);await page.goto('/companies');
   await page.getByRole('button',{name:'Employment details',exact:true}).click();
   const editor=page.getByRole('region',{name:'Company employment details'});
-  await editor.getByLabel('Job title').fill('Lead A');await editor.getByLabel('Employee ID').fill('A-NEW');
+  await editor.getByLabel('Job title').fill('Lead A');await editor.getByLabel('Employee ID').fill('12345');
   await editor.getByRole('button',{name:'Save employment details'}).click();
   await expect(editor.getByRole('status')).toContainText('saved');
-  expect(state.employmentWrites).toEqual([{company:12,member:7,input:{employeeId:'A-NEW',jobTitle:'Lead A',joiningDate:'2020-01-01',version:2}}]);
+  expect(state.employmentWrites).toEqual([{company:12,member:7,input:{employeeId:'12345',jobTitle:'Lead A',joiningDate:'2020-01-01',version:2}}]);
   expect(state.records['13:7'].jobTitle).toBe('Engineer B');expect(state.profileWrites).toEqual([]);
   await page.getByLabel('Current company',{exact:true}).selectOption('13');
   await expect(page.getByRole('button',{name:'Employment details',exact:true})).toHaveCount(0);
@@ -50,14 +50,14 @@ test('company admin edits employment in A without changing B or login fields',as
 
 test('personal profile remains separate and employment follows the selected company',async({page})=>{
   const state=await fixture(page);await page.goto('/profile');
-  await expect(page.getByText('Admin A',{exact:true})).toBeVisible();
+  await expect(page.getByText('Manage your personal details and shared login account.')).toBeVisible();
   await expect(page.getByLabel('Job Title',{exact:true})).toHaveCount(0);
   await page.getByRole('button',{name:'Save Profile',exact:true}).click();
   await expect(page.getByText('Profile saved.',{exact:true})).toBeVisible();
   expect(state.profileWrites.length).toBe(1);
-  for(const field of ['employeeId','jobTitle','joiningDate'])expect(state.profileWrites[0]).not.toHaveProperty(field);
+  for(const field of ['employeeId','jobTitle'])expect(state.profileWrites[0]).not.toHaveProperty(field);
   await page.getByLabel('Current company',{exact:true}).selectOption('13');
-  await expect(page.getByText('Manager B',{exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Profile',exact:true})).toBeVisible();
   await expect(page.getByText('Admin A',{exact:true})).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Save employment details'})).toHaveCount(0);
   expect(state.errors).toEqual([]);

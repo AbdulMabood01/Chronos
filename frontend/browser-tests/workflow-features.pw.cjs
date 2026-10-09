@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./support/company-fixture.cjs');
 const fs = require('fs');
 const path = require('path');
 const output = path.resolve(__dirname, '../../backend/target/ui-preview');
@@ -26,7 +26,7 @@ async function setup(page, role = 'EMPLOYEE') {
     };
     else if (url.pathname.endsWith('/submission')) data = { id: 3, timesheetId: 2, projectId: 4, status, totalHours: 8, plannedHours: 160, rejectionReason: status === 'REJECTED' ? 'Please verify Monday hours.' : null, rejectedByName: 'Taylor Manager' };
     else if (url.pathname === '/api/timesheets' || url.pathname.includes('/timesheets/id/') || /\/timesheets\/\d{4}\/\d+$/.test(url.pathname)) data = sheet;
-    else if (url.pathname.endsWith('/leave-balance')) { const bucket = { allowanceDays: 10, extraDays: 0, usedDays: 2, remainingDays: 8, unpaidDays: 0 }; data = { configured: true, vacation: bucket, sick: bucket, bereavement: bucket }; }
+    else if (url.pathname.endsWith('/leave-balance') || url.pathname.includes('/leave/balance/')) { const bucket = { allowanceDays: 10, extraDays: 0, usedDays: 2, remainingDays: 8, unpaidDays: 0 }; data = { configured: true, vacation: bucket, sick: bucket, bereavement: bucket }; }
     else if (url.pathname.endsWith('/email-preferences')) {
       if (method === 'PUT') preferences = route.request().postDataJSON();
       data = preferences;
@@ -89,9 +89,9 @@ test('manager favorites a project and keeps the selection after reloading', asyn
 test('leave request shows balance preview before saving on mobile', async ({ page }) => {
   await setup(page);
   await page.goto('/vacation');
-  await page.getByRole('button', { name: /New request/ }).click();
-  await page.getByLabel('Start Date').fill('2026-09-14');
-  await page.getByLabel('End Date').fill('2026-09-15');
+  await page.getByRole('button', { name: 'New leave request' }).click();
+  await page.getByLabel('Start date').fill('2026-09-14');
+  await page.getByLabel('End date').fill('2026-09-15');
   await expect(page.getByRole('region', { name: 'Leave balance preview' })).toContainText('Balance after request');
   await expect(page.getByText('Balance after request', { exact: true }).locator('..')).toContainText('6');
   await page.setViewportSize({ width: 390, height: 844 });

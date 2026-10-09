@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./support/company-fixture.cjs');
 const path = require('path');
 const fs = require('fs');
 const preview = path.resolve(__dirname, '../../backend/target/ui-preview');
@@ -36,15 +36,15 @@ test('employee overview, keyboard navigation, theme and approved timesheet', asy
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await mockWorkspace(page);
   await page.goto('/dashboard');
-  await expect(page.getByRole('heading', { name: /A little focus/ })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Workspace summary' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Company overview' })).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Your workspace tools'})).toBeVisible();
   await expect(page.getByRole('link', { name: 'Overview', exact: true })).toHaveAttribute('aria-current', 'page');
   await screenshot(page, 'employee-desktop');
   await page.getByRole('button', { name: 'Switch to dark theme' }).click();
   await expect(page.locator('body')).toHaveClass('theme-dark');
   await screenshot(page, 'employee-dark');
   await page.getByRole('button', { name: 'Switch to light theme' }).click();
-  await page.getByRole('link', { name: 'Timesheets', exact: true }).click();
+  await page.getByRole('navigation',{name:'Main navigation'}).getByRole('link', { name: 'Timesheets', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Export PDF' })).toBeEnabled();
   await screenshot(page, 'timesheet-desktop');
   expect(errors).toEqual([]);
@@ -53,7 +53,7 @@ test('mobile navigation, responsive dashboard and calendar', async ({ page }) =>
   await page.setViewportSize({ width: 390, height: 844 });
   await mockWorkspace(page);
   await page.goto('/dashboard');
-  await expect(page.getByRole('heading', { name: /A little focus/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Company overview' })).toBeVisible();
   await screenshot(page, 'employee-mobile');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole('button', { name: 'Open navigation' }).click();
@@ -61,7 +61,7 @@ test('mobile navigation, responsive dashboard and calendar', async ({ page }) =>
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: 'Open navigation' })).toBeFocused();
   await page.getByRole('button', { name: 'Open navigation' }).click();
-  await page.getByRole('link', { name: 'Timesheets', exact: true }).click();
+  await page.getByRole('navigation',{name:'Main navigation'}).getByRole('link', { name: 'Timesheets', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Export PDF' })).toBeEnabled();
   await screenshot(page, 'timesheet-mobile');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -69,8 +69,8 @@ test('mobile navigation, responsive dashboard and calendar', async ({ page }) =>
 test('management navigation and approvals', async ({ page }) => {
   await mockWorkspace(page, 'ADMIN');
   await page.goto('/dashboard');
-  await expect(page.getByRole('heading', { name: /See the bigger picture/ })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'People', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Company overview' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'People & Access', exact: true })).toBeVisible();
   await screenshot(page, 'admin-desktop');
 });
 test('sign-in desktop and mobile', async ({ page }) => {
