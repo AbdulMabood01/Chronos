@@ -29,7 +29,8 @@ class AnnouncementDatabaseTest {
     @Autowired ObjectMapper json;
     @Autowired UserRepository users;
     User employee, admin;
-    @BeforeEach void setup() { org.mockito.Mockito.when(sessions.valid(org.mockito.ArgumentMatchers.nullable(String.class), org.mockito.ArgumentMatchers.anyLong())).thenReturn(true); employee=create("EMPLOYEE"); admin=create("ADMIN"); }
+    long companyId;
+    @BeforeEach void setup() { org.mockito.Mockito.when(sessions.valid(org.mockito.ArgumentMatchers.nullable(String.class), org.mockito.ArgumentMatchers.anyLong())).thenReturn(true); employee=create("EMPLOYEE"); admin=create("ADMIN"); companyId=CompanyTestFixture.company(db,admin,employee,admin); }
     User create(String role) {
         String unique=UUID.randomUUID().toString();
         db.update("INSERT INTO users(employee_id,first_name,last_name,email,role,is_active,entra_id,password_hash,profile_completed) VALUES (?,?,?,?,?::user_role_enum,true,?,?,true)",unique,"Person",unique,unique+"@example.invalid",role,unique,"hash");
@@ -42,18 +43,18 @@ class AnnouncementDatabaseTest {
         return in;
     }
     UUID save(Map<String,Object> in) throws Exception {
-        var result=mvc.perform(post("/announcements").with(token(admin)).contentType("application/json").content(json.writeValueAsString(in))).andExpect(status().isOk()).andReturn();
+        var result=mvc.perform(post("/companies/"+companyId+"/announcements").with(token(admin)).contentType("application/json").content(json.writeValueAsString(in))).andExpect(status().isOk()).andReturn();
         return UUID.fromString(json.readTree(result.getResponse().getContentAsString()).asText());
     }
     @Test void hiddenAnnouncementsCannotBeOpenedAcknowledgedOrDownloaded() throws Exception {
         LocalDate today=LocalDate.now(ZoneOffset.UTC);
         for(var in:List.of(input("DRAFT",today,null),input("ARCHIVED",today,null),input("PUBLISHED",today.plusDays(1),null),input("PUBLISHED",today.minusDays(2),today.minusDays(1)))) {
             UUID id=save(in);
-            mvc.perform(post("/announcements/"+id+"/open").with(token(employee))).andExpect(status().isNotFound());
-            mvc.perform(post("/announcements/"+id+"/acknowledge").param("version","0").with(token(employee))).andExpect(status().isNotFound());
-            mvc.perform(get("/announcements/"+id+"/attachment").with(token(employee))).andExpect(status().isNotFound());
-            mvc.perform(post("/announcements/"+id+"/open").param("management","true").with(token(admin))).andExpect(status().isOk());
-            var feed=mvc.perform(get("/announcements").with(token(employee))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+            mvc.perform(post("/companies/"+companyId+"/announcements/"+id+"/open").with(token(employee))).andExpect(status().isNotFound());
+            mvc.perform(post("/companies/"+companyId+"/announcements/"+id+"/acknowledge").param("version","0").with(token(employee))).andExpect(status().isNotFound());
+            mvc.perform(get("/companies/"+companyId+"/announcements/"+id+"/attachment").with(token(employee))).andExpect(status().isNotFound());
+            mvc.perform(post("/companies/"+companyId+"/announcements/"+id+"/open").param("management","true").with(token(admin))).andExpect(status().isOk());
+            var feed=mvc.perform(get("/companies/"+companyId+"/announcements").with(token(employee))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
             assertFalse(feed.contains(id.toString()));
             assertEquals(0,db.queryForObject("SELECT count(*) FROM announcement_receipts WHERE announcement_id=?",Integer.class,id));
         }
@@ -61,23 +62,23 @@ class AnnouncementDatabaseTest {
     @Test void lifecycleTracksUniqueEmployeesRejectsStaleChangesAndPreservesArchiveTracking() throws Exception {
         var in=input("PUBLISHED",LocalDate.now(ZoneOffset.UTC),LocalDate.now(ZoneOffset.UTC));
         UUID id=save(in);
-        mvc.perform(get("/announcements").with(token(employee))).andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store"));
+        mvc.perform(get("/companies/"+companyId+"/announcements").with(token(employee))).andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store"));
         assertEquals(0,db.queryForObject("SELECT count(*) FROM announcement_receipts WHERE announcement_id=?",Integer.class,id));
         for(int n=0;n<2;n++) {
-            mvc.perform(post("/announcements/"+id+"/open").with(token(employee))).andExpect(status().isOk());
-            mvc.perform(post("/announcements/"+id+"/acknowledge").param("version","0").with(token(employee))).andExpect(status().isOk());
+            mvc.perform(post("/companies/"+companyId+"/announcements/"+id+"/open").with(token(employee))).andExpect(status().isOk());
+            mvc.perform(post("/companies/"+companyId+"/announcements/"+id+"/acknowledge").param("version","0").with(token(employee))).andExpect(status().isOk());
         }
-        mvc.perform(get("/announcements/"+id+"/tracking").with(token(admin))).andExpect(jsonPath("$.viewed").value(1)).andExpect(jsonPath("$.acknowledged").value(1));
-        mvc.perform(get("/announcements/"+id+"/attachment").with(token(employee))).andExpect(content().bytes("Hello".getBytes())).andExpect(header().string("X-Content-Type-Options","nosniff"));
+        mvc.perform(get("/companies/"+companyId+"/announcements/"+id+"/tracking").with(token(admin))).andExpect(jsonPath("$.viewed").value(1)).andExpect(jsonPath("$.acknowledged").value(1));
+        mvc.perform(get("/companies/"+companyId+"/announcements/"+id+"/attachment").with(token(employee))).andExpect(content().bytes("Hello".getBytes())).andExpect(header().string("X-Content-Type-Options","nosniff"));
         in.put("content","Revised update"); in.remove("attachmentBase64");
-        mvc.perform(put("/announcements/"+id).with(token(admin)).contentType("application/json").content(json.writeValueAsString(in))).andExpect(status().isOk());
-        mvc.perform(post("/announcements/"+id+"/acknowledge").param("version","0").with(token(employee))).andExpect(status().isConflict());
-        mvc.perform(put("/announcements/"+id).with(token(admin)).contentType("application/json").content(json.writeValueAsString(in))).andExpect(status().isConflict());
-        mvc.perform(get("/announcements/"+id+"/tracking").with(token(admin))).andExpect(jsonPath("$.viewed").value(0)).andExpect(jsonPath("$.acknowledged").value(0));
-        mvc.perform(post("/announcements/"+id+"/acknowledge").param("version","1").with(token(employee))).andExpect(status().isOk());
-        mvc.perform(post("/announcements/"+id+"/status").param("version","1").param("status","ARCHIVED").with(token(admin))).andExpect(status().isOk());
-        mvc.perform(get("/announcements/"+id+"/tracking").with(token(admin))).andExpect(jsonPath("$.acknowledged").value(1));
-        mvc.perform(delete("/announcements/"+id).param("version","2").with(token(admin))).andExpect(status().isOk());
+        mvc.perform(put("/companies/"+companyId+"/announcements/"+id).with(token(admin)).contentType("application/json").content(json.writeValueAsString(in))).andExpect(status().isOk());
+        mvc.perform(post("/companies/"+companyId+"/announcements/"+id+"/acknowledge").param("version","0").with(token(employee))).andExpect(status().isConflict());
+        mvc.perform(put("/companies/"+companyId+"/announcements/"+id).with(token(admin)).contentType("application/json").content(json.writeValueAsString(in))).andExpect(status().isConflict());
+        mvc.perform(get("/companies/"+companyId+"/announcements/"+id+"/tracking").with(token(admin))).andExpect(jsonPath("$.viewed").value(0)).andExpect(jsonPath("$.acknowledged").value(0));
+        mvc.perform(post("/companies/"+companyId+"/announcements/"+id+"/acknowledge").param("version","1").with(token(employee))).andExpect(status().isOk());
+        mvc.perform(post("/companies/"+companyId+"/announcements/"+id+"/status").param("version","1").param("status","ARCHIVED").with(token(admin))).andExpect(status().isOk());
+        mvc.perform(get("/companies/"+companyId+"/announcements/"+id+"/tracking").with(token(admin))).andExpect(jsonPath("$.acknowledged").value(1));
+        mvc.perform(delete("/companies/"+companyId+"/announcements/"+id).param("version","2").with(token(admin))).andExpect(status().isOk());
         assertEquals(0,db.queryForObject("SELECT count(*) FROM announcement_receipts WHERE announcement_id=?",Integer.class,id));
     }
 }

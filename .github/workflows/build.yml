@@ -222,6 +222,8 @@ jobs:
           scanners: vuln,secret,misconfig
           severity: HIGH,CRITICAL
           ignore-unfixed: false
+          trivyignores: .trivyignore.yaml
+          show-suppressed: true
           exit-code: '1'
           format: json
           output: trivy-results.json
@@ -235,6 +237,8 @@ jobs:
           scanners: vuln
           severity: HIGH,CRITICAL
           ignore-unfixed: false
+          trivyignores: .trivyignore.yaml
+          show-suppressed: true
           exit-code: '1'
           format: json
           output: trivy-packaged-results.json
