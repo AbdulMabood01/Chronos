@@ -38,4 +38,48 @@ class PlatformCompletionLocalDbTest {
  @Test void platformPromotionRequiresNoActiveCompanyMembershipAndCannotReviveLegacyPrivileges(){assertEquals(409,assertThrows(ResponseStatusException.class,()->platform.account(member,platformEmail,new PlatformAdministrationService.AccountAction("PROMOTE",0L,"Cross scope"))).getStatusCode().value());long id=user();platform.account(id,platformEmail,new PlatformAdministrationService.AccountAction("PROMOTE",0L,"Platform responsibility"));assertTrue(access.hasPlatformRole(id,"PLATFORM_ADMIN"));platform.account(id,platformEmail,new PlatformAdministrationService.AccountAction("DEMOTE",1L,"Responsibility ended"));assertFalse(access.hasPlatformRole(id,"PLATFORM_ADMIN"));assertEquals("EMPLOYEE",db.queryForObject("SELECT role::text FROM users WHERE id=?",String.class,id));}
  @Test void platformAuditContainsOnlyPlatformEventsAndScopedCaAuditNeverReceivesPrivatePlatformNotes(){platform.status(a,platformEmail,new PlatformAdministrationService.Status(true,0L,"Platform availability review"));assertTrue(platform.audit(platformEmail,0).stream().anyMatch(r->r.get("reason")!=null&&r.get("reason").equals("Platform availability review")));platform.status(a,platformEmail,new PlatformAdministrationService.Status(false,1L,"Resume"));assertTrue(flows.audit(a,adminEmail,0).stream().noneMatch(r->r.toString().contains("Platform availability review")));assertThrows(AccessDeniedException.class,()->platform.audit(adminEmail,0));}
  @Test void platformCannotAppointOrManageAdditionalCompanyAdminsOnceOnboardingIsComplete(){assertThrows(AccessDeniedException.class,()->companies.invite(a,null,"backdoor@example.com","COMPANY_ADMIN",p));companies.invite(a,null,"legitimate@example.com","COMPANY_ADMIN",admin);assertTrue(platform.adminInvitations(a,platformEmail).isEmpty());long invitation=db.queryForObject("SELECT id FROM company_invitations WHERE company_id=?",Long.class,a);assertThrows(AccessDeniedException.class,()->companies.resendInvitation(a,invitation,p));assertThrows(AccessDeniedException.class,()->companies.revokePlatformAdminInvitation(a,invitation,p));assertEquals(1,companies.invitations(a,admin).size());}
+
+ @Test void complimentaryPlanHasNoExpiryPaymentAndUsesNormalEntitlements(){
+  platform.plan(a,platformEmail,new PlatformAdministrationService.Plan("PRO_PLUS",7,175,0L,"Owned company","COMPLIMENTARY",null));
+  var state=new CompanyEntitlements(db).state(a);assertEquals("COMPLIMENTARY",state.source());assertEquals("PRO_PLUS",state.plan());assertEquals(7,state.projects());assertEquals(175,state.includedUsers());assertNull(state.endsAt());
+  assertEquals("COMPLIMENTARY",new CompanyEntitlements(db,java.time.Clock.fixed(java.time.Instant.now().plus(java.time.Duration.ofDays(3650)),java.time.ZoneOffset.UTC)).state(a).source());
+  assertEquals(0,db.queryForObject("SELECT count(*) FROM company_billing_purchases WHERE company_id=?",Integer.class,a));assertEquals(0,db.queryForObject("SELECT count(*) FROM company_billing_receipts WHERE company_id=?",Integer.class,a));
+  assertEquals(1,db.queryForObject("SELECT count(*) FROM platform_activity WHERE company_id=? AND action='COMPANY_COMPLIMENTARY_PLAN_ASSIGNED' AND reason='Owned company'",Integer.class,a));
+  assertEquals(1,db.queryForObject("SELECT revision FROM company_billing_profiles WHERE company_id=?",Integer.class,a));
+ }
+ @Test void complimentaryExpiryReturnsToFreeAndRevocationRetainsHistory(){
+  var end=java.time.Instant.now().plusSeconds(3600);platform.plan(a,platformEmail,new PlatformAdministrationService.Plan("PRO",3,75,0L,"Temporary allowance","COMPLIMENTARY",end));
+  assertEquals(end.toEpochMilli(),new CompanyEntitlements(db).state(a).endsAt().toEpochMilli());
+  var expired=new CompanyEntitlements(db,java.time.Clock.fixed(end.plusSeconds(1),java.time.ZoneOffset.UTC)).state(a);assertEquals("FREE",expired.source());assertEquals(1,expired.projects());assertEquals(7,expired.includedUsers());
+  platform.revokeGrant(a,platformEmail,new PlatformAdministrationService.GrantRevocation(1L,"Allowance ended"));assertEquals("FREE",new CompanyEntitlements(db).state(a).source());
+  assertEquals(2,db.queryForObject("SELECT count(*) FROM company_memberships WHERE company_id=?",Integer.class,a));assertEquals("SUPERSEDED",db.queryForObject("SELECT status FROM company_billing_terms WHERE company_id=?",String.class,a));
+  assertEquals(1,db.queryForObject("SELECT count(*) FROM platform_activity WHERE company_id=? AND action='COMPANY_COMPLIMENTARY_PLAN_REVOKED'",Integer.class,a));
+ }
+ @Test void complimentaryChangesRequirePlatformPermissionCurrentRevisionAndCatalogLimits(){
+  assertThrows(AccessDeniedException.class,()->platform.plan(a,adminEmail,new PlatformAdministrationService.Plan("PRO",3,75,0L,"Forged","COMPLIMENTARY",null)));
+  assertThrows(IllegalArgumentException.class,()->platform.plan(a,platformEmail,new PlatformAdministrationService.Plan("PRO",30,750,0L,"Wrong limits","COMPLIMENTARY",null)));
+  assertThrows(IllegalArgumentException.class,()->platform.plan(a,platformEmail,new PlatformAdministrationService.Plan("PRO",3,75,0L,"Expired","COMPLIMENTARY",java.time.Instant.now().minusSeconds(1))));
+  platform.plan(a,platformEmail,new PlatformAdministrationService.Plan("PRO",3,75,0L,"Owned company","COMPLIMENTARY",null));
+  assertThrows(ResponseStatusException.class,()->platform.revokeGrant(a,platformEmail,new PlatformAdministrationService.GrantRevocation(0L,"Stale")));
+  assertThrows(AccessDeniedException.class,()->platform.revokeGrant(a,adminEmail,new PlatformAdministrationService.GrantRevocation(1L,"Forged")));
+ }
+ @Test void complimentaryDowngradeAndRevocationCountAdminOnlyPeopleAndInvitations(){
+  for(int i=0;i<6;i++){long u=user();db.update("INSERT INTO company_memberships(company_id,user_id,status,workforce_enabled) VALUES (?,?,'ACTIVE',FALSE)",a,u);}
+  platform.plan(a,platformEmail,new PlatformAdministrationService.Plan("PRO",3,75,0L,"Owned company","COMPLIMENTARY",null));
+  assertThrows(ResponseStatusException.class,()->platform.plan(a,platformEmail,new PlatformAdministrationService.Plan("FREE",1,7,1L,"Too many people","COMPLIMENTARY",null)));
+  assertThrows(ResponseStatusException.class,()->platform.revokeGrant(a,platformEmail,new PlatformAdministrationService.GrantRevocation(1L,"Too many people")));
+  db.update("UPDATE company_memberships SET status='REMOVED' WHERE company_id=? AND workforce_enabled=FALSE",a);
+  for(int i=0;i<6;i++)companies.invite(a,null,"admin-reservation-"+i+"-"+UUID.randomUUID()+"@example.com","COMPANY_ADMIN",admin);
+  assertThrows(ResponseStatusException.class,()->platform.revokeGrant(a,platformEmail,new PlatformAdministrationService.GrantRevocation(1L,"Reserved people")));
+ }
+ @Test void complimentaryGrantCannotReplaceActiveOrScheduledPaidTerms(){
+  db.update("INSERT INTO company_billing_terms(id,company_id,plan_key,source,starts_at,ends_at,project_limit,included_users,catalog_version) VALUES (?,?,'PRO','PAID',now()+interval '1 day',now()+interval '90 days',3,75,'test')",UUID.randomUUID(),a);
+  assertThrows(ResponseStatusException.class,()->platform.plan(a,platformEmail,new PlatformAdministrationService.Plan("PRO_PLUS",7,175,0L,"Owned company","COMPLIMENTARY",null)));
+ }
+
+ @Test void complimentaryPlanDoesNotLiftAdministrativeSuspension(){
+  platform.status(a,platformEmail,new PlatformAdministrationService.Status(true,0L,"Paused"));
+  platform.plan(a,platformEmail,new PlatformAdministrationService.Plan("PRO_PLUS",7,175,1L,"Owned company","COMPLIMENTARY",null));
+  assertTrue(db.queryForObject("SELECT is_suspended FROM companies WHERE id=?",Boolean.class,a));assertFalse(access.hasCompanyRole(a,admin,"COMPANY_ADMIN"));assertEquals("COMPLIMENTARY",new CompanyEntitlements(db).state(a).source());
+ }
 }

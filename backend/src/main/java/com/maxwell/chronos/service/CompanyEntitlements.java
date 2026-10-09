@@ -20,7 +20,7 @@ public class CompanyEntitlements {
         public long available(){return Math.max(0,capacity()-activeUsers-reservations-refundPendingSeats);}
     }
     public static Instant instant(Object value){if(value==null)return null;if(value instanceof Instant i)return i;if(value instanceof OffsetDateTime d)return d.toInstant();return ((java.sql.Timestamp)value).toInstant();}
-    public Map<String,Object> term(long company){return db.queryForList("SELECT * FROM company_billing_terms WHERE company_id=? AND status='ACTIVE' AND starts_at<=? AND (ends_at IS NULL OR ends_at>?) ORDER BY CASE source WHEN 'PAID' THEN 0 WHEN 'CONTRACT' THEN 1 WHEN 'TRIAL' THEN 2 ELSE 3 END,starts_at DESC LIMIT 1",company,java.sql.Timestamp.from(clock.instant()),java.sql.Timestamp.from(clock.instant())).stream().findFirst().orElse(null);}
+    public Map<String,Object> term(long company){return db.queryForList("SELECT * FROM company_billing_terms WHERE company_id=? AND status='ACTIVE' AND starts_at<=? AND (ends_at IS NULL OR ends_at>?) ORDER BY CASE source WHEN 'PAID' THEN 0 WHEN 'COMPLIMENTARY' THEN 1 WHEN 'CONTRACT' THEN 2 WHEN 'TRIAL' THEN 3 ELSE 4 END,starts_at DESC LIMIT 1",company,java.sql.Timestamp.from(clock.instant()),java.sql.Timestamp.from(clock.instant())).stream().findFirst().orElse(null);}
     public State state(long company){
         var t=term(company);String plan=t==null?"FREE":(String)t.get("plan_key"),source=t==null?"FREE":(String)t.get("source");
         boolean all=plan.equals("FREE")||source.equals("LEGACY");

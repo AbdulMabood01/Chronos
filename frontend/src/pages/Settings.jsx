@@ -5,6 +5,7 @@ import ScreenTitle from '../components/ScreenTitle';
 import {LoadingIndicator} from '../components/Hourglass';
 import '../styles.css';
 import './LeavePolicy.css';
+import './PlatformAdministration.css';
 
 const companyFields=[
   {key:'company_name',title:'Company display name',type:'text',description:'Used on company timesheet PDFs. Your workspace ID stays the same.'},
@@ -54,13 +55,12 @@ export default function Settings({platform=false}) {
     finally{if(ticket===generation.current&&scope.current===target)setSaving(false);}
   };
   if(!allowed)return <div className="page-container"><p role="alert">You do not have permission to access these settings.</p></div>;
-  return <div className="page-container settings-page">
-    <ScreenTitle title={platform?'Platform settings':'Company settings'} icon="settings" eyebrow={platform?'PLATFORM CONFIGURATION':currentCompany.name}/>
-    <p className="page-subtitle">{platform?'Manage shared reminder delivery.':'Manage defaults for this company.'}</p>
+  return <div className={`page-container settings-page${platform?' platform-page highlighted-workspace':''}`}>
+    <ScreenTitle title={platform?'Platform settings':'Company settings'} icon="settings" eyebrow={platform?'PLATFORM ADMINISTRATION':currentCompany.name} description={platform?'Manage shared reminder delivery.':'Manage defaults for this company.'}/>
     {error&&<div className="error-message" role="alert">{error}</div>}
     {saved&&<p className="success-message" role="status">Setting updated.</p>}
     {loading?<LoadingIndicator label="Loading settings..."/>:<>
-      <button className="button button-secondary" disabled={saving} onClick={()=>setAttempt(value=>value+1)}>Reload settings</button>
+      <div className={platform?'platform-settings-toolbar':undefined}><button className="button button-secondary" disabled={saving} onClick={()=>setAttempt(value=>value+1)}>Reload settings</button></div>
       {stale&&<p>Another administrator changed these settings. Reload settings before saving again.</p>}
       {record&&<>
         {!platform&&<p>Save leave defaults here, then preview and apply the annual policy in Leave management. Personal overrides and extra grants are preserved.</p>}

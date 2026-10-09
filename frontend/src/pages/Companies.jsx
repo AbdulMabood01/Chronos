@@ -6,6 +6,7 @@ import { companyAPI, projectAPI } from '../api';
 import Icon from '../components/Icon';
 import ScreenTitle from '../components/ScreenTitle';
 import './Companies.css';
+import './PlatformAdministration.css';
 import CompanyEmploymentDetails from '../components/CompanyEmploymentDetails';
 import {PlatformCompanyTools} from './PlatformAdministration';
 
@@ -279,13 +280,9 @@ export default function Companies() {
     setMessage(`Choose a project and role for ${request.email}, then send the invitation.`);
   };
 
-  return <div className={`page-container companies-page${!platformAdmin ? ' people-access-page' : ''}`}>
+  return <div className={`page-container companies-page${!platformAdmin ? ' people-access-page' : ' platform-page highlighted-workspace'}`}>
     <header className="company-header">
-      {platformAdmin ? <div>
-        <span className="company-eyebrow">Workspace administration</span>
-        <h1>Companies</h1>
-        <p>{platformAdmin ? 'Manage company workspaces and initial admin invitations.' : 'Manage the people, project roles, and approval access in your company.'}</p>
-      </div> : <ScreenTitle title={companyAdmin ? 'People & access' : 'Workspace'} icon="users" eyebrow="MANAGEMENT" description="Manage your team, invitations, and access in one place." />}
+      {platformAdmin ? <ScreenTitle title="Companies" icon="briefcase" eyebrow="PLATFORM ADMINISTRATION" description="Manage company workspaces, complimentary plans and initial admin invitations." /> : <ScreenTitle title={companyAdmin ? 'People & access' : 'Workspace'} icon="users" eyebrow="MANAGEMENT" description="Manage your team, invitations, and access in one place." />}
       <div className="company-header-actions">
         <Link className="button button-secondary" to="/company-invite">My invitations</Link>
         {platformCapabilities?.canCreateCompanies === true && <button type="button" className="button button-secondary" onClick={() => setShowCreate(value => !value)}>

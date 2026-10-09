@@ -28,4 +28,12 @@ class PlatformAdministrationControllerTest {
  @Test void forgedGlobalAdminClaimsDoNotBypassScopedServiceDenial() throws Exception {when(platform.accounts(actor.getEmail(),null)).thenThrow(new AccessDeniedException("Platform Admin permission required"));mvc.perform(get("/platform/accounts").with(token())).andExpect(status().isForbidden());mvc.perform(get("/platform/audit")).andExpect(status().isUnauthorized());}
  @Test void accountMutationUsesServerIdentityAndExpectedRevision() throws Exception {mvc.perform(post("/platform/accounts/8/actions").with(token()).contentType("application/json").content("{\"action\":\"LOCK\",\"version\":2,\"reason\":\"Security review\"}")).andExpect(status().isOk());verify(platform).account(eq(8L),eq(actor.getEmail()),argThat(in->in.action().equals("LOCK")&&in.version()==2));}
  @Test void adminInvitationManagementIsASeparateProvisioningPath() throws Exception {mvc.perform(post("/platform/companies/12/admin-invitations/4/resend").with(token())).andExpect(status().isOk());verify(platform).company(12,actor.getEmail());verify(companies).resendInvitation(12,4,7);}
+
+ @Test void complimentaryGrantAndRevocationUsePathIdentityAndValidateInput() throws Exception {
+  mvc.perform(put("/platform/companies/12/plan").with(token()).contentType("application/json").content("{\"tier\":\"PRO_PLUS\",\"projectLimit\":7,\"teamLimit\":175,\"version\":3,\"reason\":\"Owned company\",\"grantType\":\"COMPLIMENTARY\",\"endsAt\":null}")).andExpect(status().isOk());
+  verify(platform).plan(eq(12L),eq(actor.getEmail()),argThat(in->in.grantType().equals("COMPLIMENTARY")&&in.endsAt()==null));
+  mvc.perform(delete("/platform/companies/12/plan").with(token()).contentType("application/json").content("{\"version\":4,\"reason\":\"Allowance ended\"}")).andExpect(status().isOk());
+  verify(platform).revokeGrant(eq(12L),eq(actor.getEmail()),argThat(in->in.version()==4L));
+  mvc.perform(delete("/platform/companies/12/plan").with(token()).contentType("application/json").content("{\"reason\":\"Missing revision\"}")).andExpect(status().isBadRequest());
+ }
 }
