@@ -29,7 +29,7 @@ public class CompanyMembershipService {
     private void admin(long company,long actor){access.requireCompanyCapability(company,actor,"canManageCompanyPeople");}
     private Map<String,Object> target(long company,long user,Long version){
         if(version==null||version<0)throw new IllegalArgumentException("Reload the member before changing access");
-        var rows=db.queryForList("SELECT m.id,m.status,m.membership_version,u.email, " +
+        var rows=db.queryForList("SELECT m.id,m.status,m.membership_version,m.workforce_enabled,u.email, " +
             "(u.is_active AND u.password_hash IS NOT NULL AND NOT u.admin_locked) AS account_available, " +
             "EXISTS(SELECT 1 FROM role_assignments r WHERE r.user_id=u.id AND r.role_key='PLATFORM_ADMIN' " +
             "AND r.company_id IS NULL AND r.project_id IS NULL AND r.removed_at IS NULL) AS platform_account " +
@@ -84,6 +84,7 @@ public class CompanyMembershipService {
             record(actor,AuditAction.COMPANY_MEMBERSHIP_REMOVED,member,company,user);
         }else if("ACTIVE".equals(input.status())){
             if(!"REMOVED".equals(member.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"Only removed memberships can be reactivated");
+            access.requirePersonCapacity(company,(String)member.get("email"),Boolean.TRUE.equals(member.get("workforce_enabled")));
             requireAvailableAccount(member);revokeAccess(company,user); // Never revive legacy roles or grants.
             db.update("UPDATE company_memberships SET status='ACTIVE',removed_at=NULL,joined_at=COALESCE(joined_at,now()), " +
                 "membership_version=membership_version+1 WHERE company_id=? AND user_id=?",company,user);

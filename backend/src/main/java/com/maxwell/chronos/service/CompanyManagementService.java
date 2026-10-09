@@ -71,7 +71,7 @@ public class CompanyManagementService {
             return db.queryForList("SELECT id, name, slug, plan_tier, project_limit, team_limit,is_suspended,platform_version FROM companies ORDER BY name");
         return db.queryForList("SELECT c.id, c.name, c.slug, c.plan_tier, c.project_limit, c.team_limit " +
                 "FROM companies c JOIN company_memberships m ON m.company_id = c.id " +
-                "WHERE m.user_id = ? AND m.status = 'ACTIVE' AND NOT c.is_suspended ORDER BY c.name", actorId);
+                "WHERE m.user_id = ? AND m.status = 'ACTIVE' AND (NOT c.is_suspended OR EXISTS(SELECT 1 FROM role_assignments r WHERE r.company_id=c.id AND r.user_id=m.user_id AND r.role_key='COMPANY_ADMIN' AND r.project_id IS NULL AND r.removed_at IS NULL)) ORDER BY c.name", actorId);
     }
 
     public record CompanyContext(boolean platformAdmin, List<Map<String, Object>> memberships,
@@ -79,9 +79,9 @@ public class CompanyManagementService {
 
     public CompanyContext companyContext(long actorId) {
         boolean platform = access.hasPlatformRole(actorId, "PLATFORM_ADMIN");
-        var memberships = db.queryForList("SELECT c.id, c.name, c.slug, c.plan_tier, c.project_limit, c.team_limit " +
+        var memberships = db.queryForList("SELECT c.id, c.name, c.slug, c.plan_tier, c.project_limit, c.team_limit,c.is_suspended " +
                 "FROM companies c JOIN company_memberships m ON m.company_id=c.id " +
-                "WHERE m.user_id=? AND m.status='ACTIVE' AND NOT c.is_suspended ORDER BY c.name, c.id", actorId);
+                "WHERE m.user_id=? AND m.status='ACTIVE' AND (NOT c.is_suspended OR EXISTS(SELECT 1 FROM role_assignments r WHERE r.company_id=c.id AND r.user_id=m.user_id AND r.role_key='COMPANY_ADMIN' AND r.project_id IS NULL AND r.removed_at IS NULL)) ORDER BY c.name, c.id", actorId);
         return new CompanyContext(platform, memberships, platform ? myCompanies(actorId) : memberships, access.platformPermissions(actorId));
     }
 
@@ -90,7 +90,7 @@ public class CompanyManagementService {
         boolean platform = access.hasPlatformRole(actorId, "PLATFORM_ADMIN");
         var rows = platform
                 ? db.queryForList("SELECT id, name, slug, plan_tier, project_limit, team_limit,is_suspended,platform_version FROM companies WHERE id=?", companyId)
-                : db.queryForList("SELECT c.id, c.name, c.slug, c.plan_tier, c.project_limit, c.team_limit " +
+                : db.queryForList("SELECT c.id, c.name, c.slug, c.plan_tier, c.project_limit, c.team_limit,c.is_suspended " +
                     "FROM companies c JOIN company_memberships m ON m.company_id=c.id " +
                     "WHERE c.id=? AND m.user_id=? AND m.status='ACTIVE'", companyId, actorId);
         if (rows.isEmpty()) throw new org.springframework.security.access.AccessDeniedException(
@@ -135,7 +135,7 @@ public class CompanyManagementService {
         if(!admin && !coordinator && managed.isEmpty())
             throw new AccessDeniedException("Company roster permission required");
         var members = db.queryForList("SELECT m.user_id, u.email, u.first_name, u.last_name, m.status, " +
-                "m.employee_id,m.job_title,m.joining_date,m.employment_version,m.membership_version, " +
+                "m.employee_id,m.job_title,m.joining_date,m.employment_version,m.membership_version,m.workforce_enabled, " +
                 "(u.is_active AND u.password_hash IS NOT NULL AND NOT u.admin_locked) AS account_available, " +
                 "EXISTS(SELECT 1 FROM role_assignments platform WHERE platform.user_id=u.id AND platform.role_key='PLATFORM_ADMIN' " +
                 "AND platform.company_id IS NULL AND platform.project_id IS NULL AND platform.removed_at IS NULL) AS platform_account, " +
@@ -203,7 +203,7 @@ public class CompanyManagementService {
                     Boolean.class, accessRequestId, companyId, normalized)))
                 throw new IllegalArgumentException("Pending access request not found for this email");
         }
-        if ("USER".equals(role)) requireTeamCapacity(companyId, projectId);
+        access.requirePersonCapacity(companyId,normalized,Set.of("USER","PROJECT_MANAGER","MODERATOR").contains(role));
         if(Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS(SELECT 1 FROM users u JOIN role_assignments r ON r.user_id=u.id " +
                 "WHERE lower(u.email)=? AND r.role_key='PLATFORM_ADMIN' AND r.company_id IS NULL AND r.project_id IS NULL AND r.removed_at IS NULL)",Boolean.class,normalized)))
             throw new IllegalArgumentException("Choose an email address for a company member account");
@@ -299,7 +299,7 @@ public class CompanyManagementService {
         if(access.hasPlatformRole(actor,"PLATFORM_ADMIN"))requireInitialCompanyOnboarding(company);
         else if(!access.hasCompanyRole(company,actor,"COMPANY_ADMIN")&&(project==null||!access.mayManageProject(project,actor)||role.equals("PROJECT_ADMIN")))throw new AccessDeniedException("Invitation management permission required");
         if(Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS(SELECT 1 FROM invitation_delivery WHERE company_invitation_id=? AND created_at>now()-interval '1 minute')",Boolean.class,invitation)))throw new IllegalArgumentException("Please wait one minute before resending an invitation");
-        if(project!=null&&role.equals("USER")&&Boolean.TRUE.equals(db.queryForObject("SELECT expires_at<=now() FROM company_invitations WHERE id=?",Boolean.class,invitation)))requireTeamCapacity(company,project);
+        access.requirePersonCapacity(company,(String)row.get("invitee_email"),Set.of("USER","PROJECT_MANAGER","MODERATOR").contains(role));
         byte[] bytes=new byte[32];random.nextBytes(bytes);String token=Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
         db.update("UPDATE company_invitations SET token_hash=?,expires_at=now()+interval '30 days' WHERE id=?",hash(token),invitation);delivery.company(invitation,token);
         if(access.hasPlatformRole(actor,"PLATFORM_ADMIN"))db.update("INSERT INTO platform_activity(user_id,company_id,action) VALUES (?,?,'ADMIN_INVITATION_RESENT')",actor,company);
@@ -372,11 +372,13 @@ public class CompanyManagementService {
         String role = (String) invitation.get("role_key");
         if (projectId != null && access.companyId(projectId) != companyId)
             throw new IllegalArgumentException("Invitation project does not belong to its company");
-        // A pending invitation already reserves this team slot.
-        int activated=db.update("INSERT INTO company_memberships(company_id, user_id, status, joined_at) " +
-                "VALUES (?, ?, 'ACTIVE', now()) ON CONFLICT (company_id, user_id) " +
+        boolean workforce=Set.of("USER","PROJECT_MANAGER","MODERATOR").contains(role);
+        access.requirePersonCapacity(companyId,actor.getEmail(),workforce);
+        int activated=db.update("INSERT INTO company_memberships(company_id, user_id, status, joined_at,workforce_enabled) " +
+                "VALUES (?, ?, 'ACTIVE', now(),?) ON CONFLICT (company_id, user_id) " +
                 "DO UPDATE SET status = 'ACTIVE', joined_at = COALESCE(company_memberships.joined_at,now()), removed_at = NULL, " +
-                "membership_version=company_memberships.membership_version+1 WHERE company_memberships.status<>'REMOVED'", companyId, actorId);
+                "workforce_enabled=company_memberships.workforce_enabled OR EXCLUDED.workforce_enabled, " +
+                "membership_version=company_memberships.membership_version+1 WHERE company_memberships.status<>'REMOVED'", companyId, actorId,workforce);
         if(activated==0)throw new AccessDeniedException("A Company Admin must reactivate your membership before you can accept a role invitation");
         if (projectId != null)
             db.update("INSERT INTO project_memberships(project_id, user_id, status, joined_at) " +
@@ -486,17 +488,6 @@ public class CompanyManagementService {
         if (at < 1 || at != email.lastIndexOf('@')) return false;
         int dot = email.indexOf('.', at + 2);
         return dot > at + 1 && dot < email.length() - 1;
-    }
-
-    private void requireTeamCapacity(long companyId, long projectId) {
-        db.queryForObject("SELECT id FROM companies WHERE id=? FOR UPDATE", Long.class, companyId);
-        Integer limit = db.queryForObject("SELECT team_limit FROM companies WHERE id = ?", Integer.class, companyId);
-        Integer active = db.queryForObject("SELECT count(*) FROM project_memberships WHERE project_id = ? " +
-                "AND status = 'ACTIVE'", Integer.class, projectId);
-        Integer pending = db.queryForObject("SELECT count(*) FROM company_invitations WHERE project_id = ? " +
-                "AND role_key = 'USER' AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > now()",
-                Integer.class, projectId);
-        if (active + pending >= limit) throw new IllegalArgumentException("Team size limit reached for this company tier");
     }
 
     private String hash(String token) {

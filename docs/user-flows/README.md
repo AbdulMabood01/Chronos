@@ -1,5 +1,7 @@
 # Chronos user flows
 
+Company-owned plans, paid employee pools, extra seats, trials and billing recovery are described in [Company billing](../company-billing.md). Its implemented policy supersedes older plan/limit wording in the diagrams below.
+
 Seven Archify workflow diagrams based on the permission matrix. These are policy-oriented user journeys, not a claim that every target rule is already implemented. Consult the migration progress document for implementation status.
 
 Open an HTML link below in a browser. Each standalone diagram supports themes, search, zoom, presentation and export. PA means Project Admin; company PA means company-scoped Project Admin. The platform flow includes a handoff to a different actor, the initial Company Admin.
@@ -32,3 +34,5 @@ Main-path arrows are unlabeled because adjacent actions fully express their sequ
 All seven delivered diagrams passed 9/9 showcase checks with zero composition errors or warnings. Automated Chrome evidence passed at 1440x900, 1600x1000, 1920x1080 and 2048x1320, with light/dark captures at the endpoint sizes. Rendered light and dark screenshots were separately inspected for readability, routing and clipping. Viewer interactions and exported files were not separately exercised.
 
 [Complete handoff receipts and SHA-256 hashes](handoff.json).
+
+Timesheet and pricing regression coverage, validation results, and remaining test boundaries are documented in [timesheet/pricing validation](../../reports/timesheet-pricing-edge-validation.md). Reproduction commands are in the [E2E README](../../frontend/e2e/README.md).

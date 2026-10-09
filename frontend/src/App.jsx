@@ -32,6 +32,7 @@ import { FeedbackPage, PerformanceReviewsPage } from './pages/FeedbackReviews';
 import Profile from './pages/Profile';
 import { MissingTimesheetsPage, TeamLeaveCalendarPage } from './pages/TeamManagement';
 import NotFound from './pages/NotFound';
+import Billing, { Pricing } from './pages/Billing';
 import './styles.css';
 import './workspace.css';
 import Layout from './components/WorkspaceLayout';
@@ -62,6 +63,7 @@ function ProtectedRoute({ children }) {
   if (!canOpenWorkspaceRoute(location.pathname, company)) {
     return <Navigate to="/dashboard" replace />;
   }
+  if(company.currentCompany?.is_suspended && !company.platformAdmin && location.pathname !== '/billing')return <Navigate to="/billing" replace />;
   return <Fragment key={`${user.id}:${company.currentCompany?.id || 'platform'}`}>{children}</Fragment>;
 }
 
@@ -74,6 +76,8 @@ function AppContent({ darkBackground, onToggleBackground }) {
 
   return (
     <Routes>
+      <Route path="/pricing" element={<Pricing />} />
+      <Route path="/billing" element={<ProtectedRoute><Layout darkBackground={darkBackground} onToggleBackground={onToggleBackground}><Billing /></Layout></ProtectedRoute>} />
       <Route path="/announcements" element={<ProtectedRoute><Layout darkBackground={darkBackground} onToggleBackground={onToggleBackground}><Announcements /></Layout></ProtectedRoute>} />
       <Route path="/feedback" element={<ProtectedRoute><Layout darkBackground={darkBackground} onToggleBackground={onToggleBackground}><FeedbackPage /></Layout></ProtectedRoute>} />
       <Route path="/performance-reviews" element={<ProtectedRoute><Layout darkBackground={darkBackground} onToggleBackground={onToggleBackground}><PerformanceReviewsPage /></Layout></ProtectedRoute>} />

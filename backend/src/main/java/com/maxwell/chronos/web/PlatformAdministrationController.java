@@ -12,10 +12,13 @@ public class PlatformAdministrationController {
     private final PlatformAdministrationService service;
     private final CompanyManagementService companies;
     private final UserService users;
+    private final org.springframework.beans.factory.ObjectProvider<CompanyBillingService> billing;
     private String email(Jwt jwt){return jwt.getClaimAsString("preferred_username");}
     private ResponseEntity<?> response(Object data){return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(data);}
     @GetMapping("/companies") public ResponseEntity<?> list(@AuthenticationPrincipal Jwt jwt){return response(service.companies(email(jwt)));}
     @GetMapping("/companies/{id}/usage") public ResponseEntity<?> usage(@AuthenticationPrincipal Jwt jwt,@PathVariable long id){return response(service.usage(id,email(jwt)));}
+    @GetMapping("/companies/{id}/billing-metadata") public ResponseEntity<?> billing(@AuthenticationPrincipal Jwt jwt,@PathVariable long id){return response(service.billingMetadata(id,email(jwt)));}
+    @PostMapping("/companies/{id}/billing-events/{event}/retry") public ResponseEntity<?> retry(@AuthenticationPrincipal Jwt jwt,@PathVariable long id,@PathVariable String event,@Valid @RequestBody CompanyBillingService.Refund input){service.authorizeBillingRetry(id,email(jwt),event,input.reason());billing.getObject().processEvent(event);return response(service.billingMetadata(id,email(jwt)));}
     @PutMapping("/companies/{id}/plan") public ResponseEntity<?> plan(@AuthenticationPrincipal Jwt jwt,@PathVariable long id,@Valid @RequestBody PlatformAdministrationService.Plan input){service.plan(id,email(jwt),input);return response(null);}
     @PutMapping("/companies/{id}/status") public ResponseEntity<?> status(@AuthenticationPrincipal Jwt jwt,@PathVariable long id,@Valid @RequestBody PlatformAdministrationService.Status input){service.status(id,email(jwt),input);return response(null);}
     @GetMapping("/companies/{id}/admin-invitations") public ResponseEntity<?> invitations(@AuthenticationPrincipal Jwt jwt,@PathVariable long id){return response(service.adminInvitations(id,email(jwt)));}

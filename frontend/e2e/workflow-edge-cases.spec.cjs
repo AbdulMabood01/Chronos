@@ -75,13 +75,13 @@ test('submitted hours cannot be edited and grant revocation applies to existing 
 });
 
 for (const daysAgo of [7, 8, 30, 31]) {
-  test(`daily historical period enforces the ${daysAgo}-day editing/opening boundary`, async ({ request }) => {
+  test(`daily draft ${daysAgo} days old remains editable and cannot request an opening`, async ({ request }) => {
     const employee = await apiAs(request, 'employee'); const date = offsetDate(-daysAgo);
     await sheet(employee, date);
     const current = await json(await employee.get('/api/timesheet-periods', { params: { projectId: f.dailyProjectId, date } }));
-    expect(current.editable).toBe(daysAgo === 7);
+    expect(current.editable).toBe(true);
     const response = await employee.post('/api/timesheet-periods/opening', { params: { projectId: f.dailyProjectId, date }, data: { reason: 'Deadline boundary test' } });
-    expect(response.status()).toBe(daysAgo === 8 || daysAgo === 30 ? 200 : 400);
+    expect(response.status()).toBe(400);
   });
 }
 

@@ -116,7 +116,7 @@ it('keeps past draft days editable after the former seven-day cutoff', async () 
   timesheetAPI.getTimesheetById.mockResolvedValue({ data: septemberSheet });
   timesheetAPI.getProjectSubmission.mockResolvedValue({ data: { ...approval, status: 'DRAFT', plannedHours: 160 } });
   projectAPI.getAssignedProjects.mockResolvedValue({ data: [{ id: 4, companyId: 1, code: 'ATLAS', name: 'Atlas',
-    status: 'ACTIVE', isActive: true, assignments: [{ userId: 1, isActive: false,
+    status: 'ACTIVE', isActive: true, assignments: [{ userId: 1,
       startDate: '2026-09-01', endDate: '2026-09-30', plannedHours: 160, isActive:true }] }] });
   const view = open();
   const input = await screen.findByLabelText('Hours for 2026-09-03');

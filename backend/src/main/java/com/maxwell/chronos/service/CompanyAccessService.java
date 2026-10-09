@@ -19,6 +19,10 @@ import java.util.stream.Collectors;
 public class CompanyAccessService {
     private final JdbcTemplate db;
 
+    public void requireProjectCapacity(long company){new CompanyEntitlements(db).requireProjectSlot(company);}
+    public void requirePersonCapacity(long company,String email,boolean workforce){new CompanyEntitlements(db).requirePerson(company,email,workforce);}
+    public void requireEmployeeWork(long company,long user){new CompanyEntitlements(db).requireWork(company,user);}
+
     private boolean exists(String sql, Object... args) {
         return Boolean.TRUE.equals(db.queryForObject(sql, Boolean.class, args));
     }
@@ -105,6 +109,13 @@ public class CompanyAccessService {
         // Platform context permits metadata administration only, even if an operational role was also assigned.
         if (hasPlatformRole(userId, "PLATFORM_ADMIN"))
             return new ScopedPermissions.Company(companyId, List.of(), companyCapabilities(false, false, List.of()), List.of());
+        if(exists("SELECT EXISTS(SELECT 1 FROM companies WHERE id=? AND is_suspended)",companyId)){
+            boolean billingAdmin=exists("SELECT EXISTS(SELECT 1 FROM role_assignments r JOIN company_memberships m ON m.user_id=r.user_id AND m.company_id=r.company_id WHERE r.company_id=? AND r.user_id=? AND r.role_key='COMPANY_ADMIN' AND r.project_id IS NULL AND r.removed_at IS NULL AND m.status='ACTIVE')",companyId,userId);
+            if(!billingAdmin)throw new AccessDeniedException("This company is suspended. Contact your administrator.");
+            var billing=new LinkedHashMap<>(companyCapabilities(false,false,List.of()));
+            for(String key:List.of("canViewCompanyBilling","canViewBillingReceipts","canRequestBillingRefund","canReissueBillingReceipts"))billing.put(key,true);
+            return new ScopedPermissions.Company(companyId,List.of("COMPANY_ADMIN"),Map.copyOf(billing),List.of());
+        }
         requireCompanyAvailable(companyId);
         if (!exists("SELECT EXISTS (SELECT 1 FROM company_memberships WHERE company_id=? AND user_id=? AND status='ACTIVE')",
                 companyId, userId)) throw new AccessDeniedException("Active company membership is required");
@@ -180,7 +191,8 @@ public class CompanyAccessService {
         Map<String, Boolean> capabilities = new LinkedHashMap<>();
         for (String key : List.of("canManageCompanyPeople", "canAssignCompanyRoles", "canManageCompanySettings",
                 "canManageLeavePolicy", "canManageCompanyAnnouncements", "canReviewLeaveAndLetters",
-                "canViewCompanyReports", "canViewCompanyAudit")) capabilities.put(key, admin);
+                "canViewCompanyReports", "canViewCompanyAudit", "canViewCompanyBilling", "canPurchaseCompanyPlan",
+                "canManageCompanySeats", "canViewBillingReceipts", "canRequestBillingRefund", "canReissueBillingReceipts")) capabilities.put(key, admin);
         capabilities.put("canCreateProjects", admin || creator);
         capabilities.put("canViewProjects", admin || creator || !projects.isEmpty());
         capabilities.put("canManageProjects", creator || projects.stream().anyMatch(p -> p.capabilities().get("canManageProject")));
@@ -271,6 +283,7 @@ public class CompanyAccessService {
         if (!maySubmit(projectId, userId))
             throw new AccessDeniedException("An active User role is required to submit " + kind +
                     "; Project Admins cannot submit on projects they administer");
+        requireEmployeeWork(companyId(projectId),userId);
     }
 
     public boolean hasModeratorGrant(long projectId, long userId, boolean expense) {
@@ -322,6 +335,7 @@ public class CompanyAccessService {
         if(!exists("SELECT EXISTS(SELECT 1 FROM company_memberships WHERE company_id=? AND user_id=? AND status='ACTIVE')",companyId,userId))
             throw new AccessDeniedException("An active company membership is required before assigning project access");
         if(companyId(projectId)!=companyId)throw new IllegalArgumentException("Project company mismatch");
+        if(java.util.Set.of("USER","PROJECT_MANAGER").contains(role))new CompanyEntitlements(db).enroll(companyId,userId);
         db.update("INSERT INTO project_memberships(project_id,user_id,status,joined_at) VALUES (?,?,'ACTIVE',now()) " +
                 "ON CONFLICT (project_id,user_id) DO UPDATE SET status='ACTIVE',removed_at=NULL", projectId, userId);
         db.update("INSERT INTO role_assignments(user_id,role_key,company_id,project_id,assigned_by_user_id) " +

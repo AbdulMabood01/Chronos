@@ -4,6 +4,8 @@ Date: October 6, 2026
 
 Status: planning document only. No application code, configuration, migration, database, Stripe account, or deployment changes are authorized by this document. Prices remain launch proposals until approved for implementation.
 
+Implementation follow-up (October 7, 2026): the user subsequently authorized local implementation and confirmed Free admin counting, the 30-day Pro Plus trial and seven-day grace defaults. See [implemented company billing](company-billing.md) for current behavior and remaining Stripe configuration checks. The original planning context below is retained.
+
 ## 1. Objective and decision history
 
 Introduce company-owned Free, Pro, Pro Plus and Pro Max plans, optional extra-user capacity, prepaid purchases, and Stripe payments while preserving current company/project authorization and the universal never-self-approve policy.

@@ -102,9 +102,7 @@ public class ProjectService {
                 throw new org.springframework.security.access.AccessDeniedException("Company Admin or company Project Admin role required");
             jdbc.queryForObject("SELECT id FROM companies WHERE id=? FOR UPDATE", Long.class, companyId);
             if(!access.mayCreateProject(companyId,requester.getId()))throw new org.springframework.security.access.AccessDeniedException("Company project creation permission required");
-            Integer max = jdbc.queryForObject("SELECT project_limit FROM companies WHERE id=?", Integer.class, companyId);
-            Integer count = jdbc.queryForObject("SELECT count(*) FROM projects WHERE company_id=?", Integer.class, companyId);
-            if (count >= max) throw new IllegalArgumentException("Project limit reached for this company tier");
+            access.requireProjectCapacity(companyId);
             project.setCompanyId(companyId);
             long owner=request.getOwnerUserId()==null?requester.getId():request.getOwnerUserId();
             if(owner!=requester.getId()&&!access.hasCompanyRole(companyId,requester.getId(),"COMPANY_ADMIN"))throw new org.springframework.security.access.AccessDeniedException("Company Admin permission required to appoint another project owner");
@@ -165,6 +163,8 @@ public class ProjectService {
                 && Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS (SELECT 1 FROM timesheet_approval_periods WHERE project_id=? AND status='SUBMITTED') OR EXISTS (SELECT 1 FROM time_entries e JOIN timesheets t ON t.id=e.timesheet_id WHERE e.project_id=? AND e.hours>0 AND NOT EXISTS (SELECT 1 FROM timesheet_approval_periods a WHERE a.project_id=e.project_id AND a.user_id=t.user_id AND e.entry_date BETWEEN a.period_start AND a.period_end AND a.status='APPROVED'))", Boolean.class, projectId, projectId))) {
             throw new IllegalArgumentException("This project has unfinalized hours. Submit draft hours, correct and resubmit rejected hours, and approve pending timesheets before completing or archiving. Remove logged hours only if they were entered in error.");
         }
+        if(projectId!=null && previousStatus!=null && java.util.Set.of(ProjectStatus.COMPLETED,ProjectStatus.ARCHIVED).contains(previousStatus)
+                && !java.util.Set.of(ProjectStatus.COMPLETED,ProjectStatus.ARCHIVED).contains(status))access.requireProjectCapacity(project.getCompanyId());
         project.setStatus(status);
         project.setIsActive(ProjectStatus.ACTIVE.equals(status));
         project.setTotalAllocatedHours(request.getTotalAllocatedHours());

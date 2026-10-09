@@ -2,6 +2,8 @@
 
 Date: 2026-10-05
 
+Billing extension (October 7, 2026): Company Admins have explicit company-scoped billing, purchase, seat, receipt, refund and reissue capabilities. Project roles and Moderator grants do not inherit them. A suspended company exposes only billing history/refund capabilities to its Company Admins. Platform tools expose payment metadata and audited verified-event retries without operational/private access. See [company billing](company-billing.md); manual grants are separate from verified purchases. Never-self-approval remains universal.
+
 Status: implementation baseline for the migration. This document specifies target behavior; it does not describe permissions already enforced by the application. No application or database changes are part of Chunk 1.
 
 ## Role definitions

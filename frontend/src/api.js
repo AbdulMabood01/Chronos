@@ -2,6 +2,22 @@ import axios from 'axios';
 
 const API_BASE_URL = '/api';
 
+export const billingAPI = {
+  catalog: () => apiClient.get('/billing/catalog', { background: true }),
+  summary: company => apiClient.get(`/companies/${company}/billing`, { background: true }),
+  profile: (company, data) => apiClient.put(`/companies/${company}/billing/profile`, data),
+  quote: (company, data) => apiClient.post(`/companies/${company}/billing/quotes`, data),
+  checkout: (company, id) => apiClient.post(`/companies/${company}/billing/purchases/${id}/checkout`),
+  cancelCheckout: (company, id) => apiClient.post(`/companies/${company}/billing/purchases/${id}/cancel`),
+  purchase: (company, id) => apiClient.get(`/companies/${company}/billing/purchases/${id}`, { background: true }),
+  trial: company => apiClient.post(`/companies/${company}/billing/trial`),
+  renewalPreference: (company, data) => apiClient.put(`/companies/${company}/billing/renewal-preference`, data),
+  employeeAccess: (company, user, data) => apiClient.put(`/companies/${company}/billing/members/${user}/employee-access`, data),
+  receipt: (company, id) => apiClient.get(`/companies/${company}/billing/receipts/${id}`, { responseType: 'blob' }),
+  reissue: (company, id) => apiClient.post(`/companies/${company}/billing/receipts/${id}/reissue`),
+  refund: (company, id, reason) => apiClient.post(`/companies/${company}/billing/purchases/${id}/refund`, { reason }),
+};
+
 export const announcementAPI = {
   list: (management = false) => apiClient.get('/announcements', { params: { management }, background: true }),
   open: (id, management = false) => apiClient.post(`/announcements/${id}/open`, null, { params: { management } }),
@@ -481,6 +497,8 @@ export const companyGovernanceAPI = company => ({
 export const platformAdministrationAPI={
  companies:()=>apiClient.get('/platform/companies'),
  usage:id=>apiClient.get(`/platform/companies/${id}/usage`),
+ billing:id=>apiClient.get(`/platform/companies/${id}/billing-metadata`),
+ retryBilling:(id,event,reason)=>apiClient.post(`/platform/companies/${id}/billing-events/${event}/retry`,{reason}),
  plan:(id,data)=>apiClient.put(`/platform/companies/${id}/plan`,data),
  status:(id,data)=>apiClient.put(`/platform/companies/${id}/status`,data),
  accounts:query=>apiClient.get('/platform/accounts',{params:{query}}),

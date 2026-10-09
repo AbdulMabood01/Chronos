@@ -40,15 +40,15 @@ class CompanyEmploymentLocalDbTest {
     @Test void editInADoesNotChangeBOrGlobalIdentity(){run(f->{
         var identity=db.queryForMap("SELECT * FROM users WHERE id=?",f.employee);
         var beforeB=service.get(f.b,f.employee,f.employee);
-        var updated=service.update(f.a,f.employee,f.admin,f.input("A-001","Engineer",0));
-        assertEquals("A-001",updated.employeeId());assertEquals("Engineer",updated.jobTitle());assertEquals(1,updated.version());
+        var updated=service.update(f.a,f.employee,f.admin,f.input("101","Engineer",0));
+        assertEquals("101",updated.employeeId());assertEquals("Engineer",updated.jobTitle());assertEquals(1,updated.version());
         assertEquals(beforeB,service.get(f.b,f.employee,f.employee));assertEquals(identity,db.queryForMap("SELECT * FROM users WHERE id=?",f.employee));
         verify(audit).logRequiredAction(eq(f.admin),eq(com.maxwell.chronos.enums.AuditAction.USER_PROFILE_UPDATED),eq("CompanyMembership"),anyLong(),contains("company "+f.a));
     });}
     @Test void companyAAdminCannotEditOrInspectOtherUsersInB(){run(f->{
-        assertThrows(AccessDeniedException.class,()->service.update(f.b,f.employee,f.admin,f.input("B-001","Changed",0)));
+        assertThrows(AccessDeniedException.class,()->service.update(f.b,f.employee,f.admin,f.input("201","Changed",0)));
         assertThrows(AccessDeniedException.class,()->service.get(f.b,f.employee,f.admin));
-        assertNull(service.get(f.b,f.employee,f.employee).employeeId());
+        assertEquals("1",service.get(f.b,f.employee,f.employee).employeeId());
     });}
     @Test void selfReadDoesNotPermitSelfEditWithoutCompanyAdminRole(){run(f->{
         assertNotNull(service.get(f.a,f.employee,f.employee));
@@ -56,41 +56,41 @@ class CompanyEmploymentLocalDbTest {
         assertThrows(AccessDeniedException.class,()->service.get(f.a,f.other,f.employee));
     });}
     @Test void employeeIdsAreUniquePerCompanyButCanBeReusedAcrossCompanies(){run(f->{
-        service.update(f.a,f.employee,f.admin,f.input("SHARED-ID","Engineer A",0));
+        service.update(f.a,f.employee,f.admin,f.input("103","Engineer A",0));
         db.update("INSERT INTO role_assignments(user_id,company_id,role_key) VALUES (?,?,'COMPANY_ADMIN')",f.admin,f.b);
-        service.update(f.b,f.employee,f.admin,f.input("SHARED-ID","Engineer B",0));
+        service.update(f.b,f.employee,f.admin,f.input("103","Engineer B",0));
         assertEquals("Engineer A",service.get(f.a,f.employee,f.admin).jobTitle());
         assertEquals("Engineer B",service.get(f.b,f.employee,f.admin).jobTitle());
     });}
     @Test void staleEditsAreRejectedAndDoNotOverwriteEmployment(){run(f->{
-        service.update(f.a,f.employee,f.admin,f.input("A-001","First",0));
-        assertEquals(409,assertThrows(ResponseStatusException.class,()->service.update(f.a,f.employee,f.admin,f.input("A-002","Stale",0))).getStatusCode().value());
+        service.update(f.a,f.employee,f.admin,f.input("101","First",0));
+        assertEquals(409,assertThrows(ResponseStatusException.class,()->service.update(f.a,f.employee,f.admin,f.input("102","Stale",0))).getStatusCode().value());
         assertEquals("First",service.get(f.a,f.employee,f.admin).jobTitle());
     });}
     @Test void duplicateEmployeeIdIsRejectedByTheDatabaseConstraint(){
         new TransactionTemplate(new DataSourceTransactionManager(datasource)).executeWithoutResult(status->{
             status.setRollbackOnly();var f=new Fixture();
-            service.update(f.a,f.employee,f.admin,f.input("A-001","First",0));
+            service.update(f.a,f.employee,f.admin,f.input("101","First",0));
             Object savepoint=status.createSavepoint();
-            var ex=assertThrows(ResponseStatusException.class,()->service.update(f.a,f.other,f.admin,f.input("A-001","Duplicate",0)));
+            var ex=assertThrows(ResponseStatusException.class,()->service.update(f.a,f.other,f.admin,f.input("101","Duplicate",0)));
             assertEquals(409,ex.getStatusCode().value());status.rollbackToSavepoint(savepoint);status.releaseSavepoint(savepoint);
-            assertNull(service.get(f.a,f.other,f.admin).employeeId());
+            assertEquals("3",service.get(f.a,f.other,f.admin).employeeId());
         });
     }
     @Test void removalRetainsEmploymentButRevokesFormerMemberAccess(){run(f->{
-        service.update(f.a,f.employee,f.admin,f.input("A-001","Retained",0));
+        service.update(f.a,f.employee,f.admin,f.input("101","Retained",0));
         db.update("UPDATE company_memberships SET status='REMOVED' WHERE company_id=? AND user_id=?",f.a,f.employee);
         assertThrows(AccessDeniedException.class,()->service.get(f.a,f.employee,f.employee));
         assertEquals("Retained",service.get(f.a,f.employee,f.admin).jobTitle());
-        assertThrows(AccessDeniedException.class,()->service.update(f.a,f.employee,f.admin,f.input("A-002","Changed",1)));
+        assertThrows(AccessDeniedException.class,()->service.update(f.a,f.employee,f.admin,f.input("102","Changed",1)));
     });}
     @Test void newMembershipsDoNotCopyFrozenGlobalEmployment(){run(f->{
-        assertNull(service.get(f.a,f.employee,f.employee).employeeId());
+        assertEquals("2",service.get(f.a,f.employee,f.employee).employeeId());
         assertNull(service.get(f.a,f.employee,f.employee).jobTitle());
         assertNull(service.get(f.a,f.employee,f.employee).joiningDate());
     });}
     @Test void companyRosterUsesEmploymentFieldsAndSerializableRoleLists(){run(f->{
-        service.update(f.a,f.employee,f.admin,f.input("A-001","Engineer A",0));
+        service.update(f.a,f.employee,f.admin,f.input("101","Engineer A",0));
         var companies=new CompanyManagementService(db,access,mock(com.maxwell.chronos.repository.UserRepository.class),
                 mock(InvitationDeliveryService.class),audit,mock(OnboardingService.class),mock(org.springframework.security.crypto.password.PasswordEncoder.class));
         var members=companies.members(f.a,f.admin);
@@ -101,7 +101,7 @@ class CompanyEmploymentLocalDbTest {
     @Test void platformAdminHasNoCompanyEmploymentBypass(){run(f->{
         db.update("INSERT INTO role_assignments(user_id,role_key) VALUES (?,'PLATFORM_ADMIN')",f.admin);
         assertThrows(AccessDeniedException.class,()->service.get(f.a,f.employee,f.admin));
-        assertThrows(AccessDeniedException.class,()->service.update(f.a,f.employee,f.admin,f.input("A-001","Changed",0)));
+        assertThrows(AccessDeniedException.class,()->service.update(f.a,f.employee,f.admin,f.input("101","Changed",0)));
     });}
     @Test void migrationPreservesLegacyValuesAndNewMembershipsStartBlank(){
         new TransactionTemplate(new DataSourceTransactionManager(datasource)).executeWithoutResult(status->{

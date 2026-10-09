@@ -31,7 +31,7 @@ class CompanyOperationsLocalDbTest {
             db.update("INSERT INTO project_memberships(project_id,user_id,status) VALUES (?,?,'ACTIVE')",pa,manager);
         }
         long user(){String key="ops-"+UUID.randomUUID();return db.queryForObject("INSERT INTO users(employee_id,email,first_name,last_name,password_hash,entra_id) VALUES (?,?,'Operations','Test','test-hash',?) RETURNING id",Long.class,key,key+"@example.com",UUID.randomUUID().toString());}
-        long company(){return db.queryForObject("INSERT INTO companies(name,slug) VALUES ('Operations Test',?) RETURNING id",Long.class,"ops-"+UUID.randomUUID());}
+        long company(){long id=db.queryForObject("INSERT INTO companies(name,slug) VALUES ('Operations Test',?) RETURNING id",Long.class,"ops-"+UUID.randomUUID());db.update("INSERT INTO company_billing_terms(id,company_id,plan_key,source,starts_at,ends_at,project_limit,included_users,catalog_version,reason) VALUES (?,?,'CUSTOM','CONTRACT',now(),now()+interval '1 day',10,50,'test-fixture','Explicit capacity for operation-permission tests')",UUID.randomUUID(),id);return id;}
         long project(long company){return db.queryForObject("INSERT INTO projects(company_id,code,name,status,is_active) VALUES (?,'OPS','Operations project','ACTIVE',true) RETURNING id",Long.class,company);}
         void role(long company,long user,String role,Long project){db.update("INSERT INTO role_assignments(user_id,company_id,project_id,role_key) VALUES (?,?,?,?)",user,company,project,role);}
         CompanyLeaveService.RequestInput input(){return new CompanyLeaveService.RequestInput(LocalDate.of(2026,10,6),LocalDate.of(2026,10,6),com.maxwell.chronos.enums.VacationType.VACATION,"test",null,null);}

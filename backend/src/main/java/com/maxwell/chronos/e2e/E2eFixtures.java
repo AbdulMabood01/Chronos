@@ -135,7 +135,9 @@ public class E2eFixtures implements ApplicationRunner {
     }
 
     private long company(String name,String slug) {
-        return jdbc.queryForObject("INSERT INTO companies(name,slug,project_limit,team_limit) VALUES (?,?,20,50) RETURNING id",Long.class,name,slug);
+        long id=jdbc.queryForObject("INSERT INTO companies(name,slug,plan_tier,project_limit,team_limit) VALUES (?,?,'CUSTOM',20,50) RETURNING id",Long.class,name,slug);
+        jdbc.update("INSERT INTO company_billing_terms(id,company_id,plan_key,source,starts_at,ends_at,project_limit,included_users,catalog_version,reason) VALUES (?,?,'CUSTOM','CONTRACT',now(),now()+interval '1 day',20,50,'e2e-fixture','Explicit isolated workflow-test capacity; no payment')",java.util.UUID.randomUUID(),id);
+        return id;
     }
     private void member(long company,User user) {
         jdbc.update("INSERT INTO company_memberships(company_id,user_id,status,joined_at,employee_id,job_title,joining_date) VALUES (?,?,'ACTIVE',now(),?,'Software Engineer',?)",company,user.getId(),user.getEmployeeId(),LocalDate.now().minusYears(2));

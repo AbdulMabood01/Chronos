@@ -30,6 +30,8 @@ public class SecurityConfig {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(authz -> authz
+                        .requestMatchers(org.springframework.http.HttpMethod.GET,"/billing/catalog").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.POST,"/billing/stripe/webhook").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.POST, "/auth/login", "/auth/invitations/validate", "/auth/activate", "/auth/forgot-password", "/auth/reset-password", "/auth/reset-password/validate", "/companies/invitations/preview", "/companies/invitations/claim", "/companies/access-requests").permitAll()
                         // Only the two endpoints used by local monitoring are anonymous.
                         // All other Actuator endpoints remain unexposed and unauthorized.

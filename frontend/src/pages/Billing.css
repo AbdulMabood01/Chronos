@@ -1,0 +1,17 @@
+.billing-page { max-width: 1440px; margin: 0 auto; }
+.billing-page section { margin: 1.25rem 0; }
+.billing-plans { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
+.billing-plan { padding: 1.25rem; border: 2px solid transparent; }
+.billing-plan.selected { border-color: #6574cd; }
+.billing-price { font-size: 1.8rem; font-weight: 650; }
+.billing-price small { display: block; font-size: .85rem; font-weight: 400; }
+.billing-plan ul { padding-left: 1.2rem; line-height: 1.8; }
+.billing-usage { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+.billing-usage dd { margin: .4rem 0; font-size: 1.4rem; font-weight: 650; }
+.billing-person, .billing-purchase { padding: .8rem 0; border-top: 1px solid #9b9bb54d; }
+.billing-person { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.billing-page button { margin: .25rem .5rem .25rem 0; }
+.billing-page input, .billing-page select, .billing-page textarea { max-width: 100%; }
+.billing-quote { border: 2px solid #6574cd; scroll-margin-top: 5rem; }
+@media(max-width: 1100px) { .billing-plans { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media(max-width: 600px) { .billing-plans, .billing-usage { grid-template-columns: 1fr; } .billing-person { flex-direction: column; align-items: flex-start; } }

@@ -334,7 +334,7 @@ export default function Companies() {
       </div>
       {active && canViewRoster && <div className="company-stats">
         <div><span>Team members</span><strong>{members.filter(member=>member.status==='ACTIVE').length}</strong><small>Active in this company</small></div>
-        <div><span>Projects</span><strong>{companyProjects.length}</strong><small>{active.project_limit != null ? `of ${active.project_limit} allowed` : 'In this company'}</small></div>
+        <div><span>Open projects</span><strong>{companyProjects.filter(p=>!['COMPLETED','ARCHIVED'].includes(p.status)).length}</strong><small>{active.project_limit != null ? `of ${active.project_limit} allowed` : 'In this company'}</small></div>
         <div><span>Pending invites</span><strong>{pendingInvitations}</strong><small>Waiting to join</small></div>
       </div>}
     </section>}

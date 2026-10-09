@@ -113,6 +113,8 @@ class ScopedPermissionsLocalDbTest {
     @Test void moderatorGrantIsLimitedByWorkTypeProjectCompanyAndDates() {
         run(f -> {
             f.role(f.a,null,"MODERATOR"); f.role(f.b,null,"MODERATOR");
+            f.role(f.a,f.a1,"USER");
+            db.update("INSERT INTO project_assignments(project_id,user_id,is_active,start_date,end_date) VALUES (?,?,TRUE,CURRENT_DATE-1,CURRENT_DATE+1)",f.a1,f.user);
             f.grant(f.a,f.a1,false,true,"2000-01-01","2100-01-01");
             f.grant(f.a,f.a2,true,false,"2000-01-01","2001-01-01");
             f.grant(f.b,f.b1,true,false,"2099-01-01","2100-01-01");

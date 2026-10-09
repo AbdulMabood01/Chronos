@@ -46,6 +46,8 @@ test('company admin creates a project with explicit owner without inheriting edi
 });
 
 test('company project admin creates for self; project-only roles and platform cannot create', async ({ request }) => {
+  const admin = await apiAs(request, 'companyAdmin');
+  const before = await json(await admin.get('/api/projects', { params: { companyId: fixture.companyId } }));
   const creator = await apiAs(request, 'creator');
   const input = { companyId: fixture.companyId, code: 'E2E-CREATOR', name: 'Creator project', status: 'DRAFT' };
   const created = await json(await creator.post('/api/projects', { data: input }));
@@ -57,8 +59,8 @@ test('company project admin creates for self; project-only roles and platform ca
     const actor = await apiAs(request, role);
     expect((await actor.post('/api/projects', { data: { ...input, code: `E2E-${role}`, ownerUserId: fixture.projectAdminId } })).status()).toBe(403);
   }
-  const admin = await apiAs(request, 'companyAdmin');
-  expect((await json(await admin.get('/api/projects', { params: { companyId: fixture.companyId } }))).length).toBe(3);
+
+  expect((await json(await admin.get('/api/projects', { params: { companyId: fixture.companyId } }))).length).toBe(before.length + 1);
 });
 
 test('company admin invites user; user creates account, joins project and signs in', async ({ page, request, browser }) => {

@@ -56,12 +56,12 @@ class CompanyInvitationAcceptanceTest {
         when(db.queryForList(anyString(), eq(8L), eq("alice@example.com")))
                 .thenReturn(List.of(invitation("alice@example.com")));
         when(db.queryForObject(anyString(), eq(Boolean.class), eq(8L))).thenReturn(true);
-        when(db.update(org.mockito.ArgumentMatchers.startsWith("INSERT INTO company_memberships"),eq(12L),eq(5L))).thenReturn(1);
+        when(db.update(org.mockito.ArgumentMatchers.startsWith("INSERT INTO company_memberships"),eq(12L),eq(5L),eq(false))).thenReturn(1);
 
         service.acceptById(8L, 5L);
 
         verify(db).update(org.mockito.ArgumentMatchers.startsWith("INSERT INTO company_memberships"),
-                eq(12L), eq(5L));
+                eq(12L), eq(5L),eq(false));
         verify(db).update(org.mockito.ArgumentMatchers.startsWith("INSERT INTO role_assignments"),
                 eq(5L), eq("COMPANY_ADMIN"), eq(12L), eq(null), eq(3L));
         verify(db).update(org.mockito.ArgumentMatchers.startsWith("UPDATE company_invitations"), eq(8L));

@@ -56,6 +56,7 @@ public class CompanyLetterRequestService {
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
         flow.lockMember(companyId,user.getEmail(),false);
+        access.requireEmployeeWork(companyId,userId);
         request.setRequestedFullName((user.getFirstName()+" "+user.getLastName()).trim());
         validateRequest(request);
         templates.resolve(companyId,request.getRequestType(),null);

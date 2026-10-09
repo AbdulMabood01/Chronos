@@ -3,9 +3,12 @@ import {canOpenWorkspaceRoute,canCreateProjectNow,workspaceNavigation} from './w
 const company={currentCompany:{id:12},companyCapabilities:{canManageCompanyPeople:true,canViewProjects:true,canCreateProjects:true,
   canManageCompanySettings:true,canManageLeavePolicy:true,canViewCompanyReports:true,canViewCompanyAudit:true},companyRoles:['COMPANY_ADMIN']};
 it('enables migrated personal workflows but denies sensitive workflows without grants',()=>{
-  for(const path of ['/audit','/requests','/feedback','/performance-reviews','/workplace-reports'])
+  for(const path of ['/audit','/requests','/feedback','/performance-reviews'])
     expect(canOpenWorkspaceRoute(path,company)).toBe(true);
   for(const path of ['/sensitive-access','/confidential-reports'])expect(canOpenWorkspaceRoute(path,company)).toBe(false);
+  expect(canOpenWorkspaceRoute('/workplace-reports',company)).toBe(false);
+  expect(canOpenWorkspaceRoute('/billing',company)).toBe(false);
+  expect(canOpenWorkspaceRoute('/billing',{...company,companyCapabilities:{canViewCompanyBilling:true}})).toBe(true);
   expect(canOpenWorkspaceRoute('/companies',company)).toBe(true);
   expect(canOpenWorkspaceRoute('/settings',company)).toBe(true);
   expect(canOpenWorkspaceRoute('/platform-settings',company)).toBe(false);

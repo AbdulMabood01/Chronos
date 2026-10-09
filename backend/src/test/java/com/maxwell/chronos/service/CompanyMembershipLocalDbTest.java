@@ -98,7 +98,8 @@ class CompanyMembershipLocalDbTest {
         service.assignRole(f.a,f.member,f.a1,new CompanyMembershipService.RoleInput("PROJECT_ADMIN",0L));
         assertTrue(access.hasCompanyRole(f.a,f.member,"PROJECT_ADMIN"));
         assertEquals(409,assertThrows(ResponseStatusException.class,()->service.changeStatus(f.a,f.member,f.a1,status("REMOVED",0))).getStatusCode().value());
-        service.removeRole(f.a,f.member,f.a1,"MODERATOR",1L);
+        service.removeRole(f.a,f.member,f.a1,"PROJECT_ADMIN",1L);
+        companies.revokeModerator(f.a,db.queryForObject("SELECT id FROM moderator_grants WHERE company_id=? AND moderator_user_id=? AND revoked_at IS NULL LIMIT 1",Long.class,f.a,f.member),f.a1);
         assertFalse(access.hasModeratorGrant(f.pa,f.member,true));assertEquals(identity,db.queryForMap("SELECT * FROM users WHERE id=?",f.member));
     });}
     @Test void unavailableOrPendingAccountsCannotBeReactivatedOrPromoted(){run(f->{
