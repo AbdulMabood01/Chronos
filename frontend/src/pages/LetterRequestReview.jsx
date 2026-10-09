@@ -207,7 +207,7 @@ export default function LetterRequestReview() {
               <strong>{employerLines[0]}</strong>
               {employerLines.slice(1).map((line, index) => (
                 <span key={`${line}-${index}`}>
-                  <strong>{index===0?'Company':index===1?'Address':line.includes('@')?'Email':/^https?:|www\./i.test(line)?'Website':'Contact details'}</strong><span>{line}</span>
+                  <strong>{index===0?'Company':index===1?'Address':line.includes('@')?'Email':/^(?:https?:|www\.)/i.test(line)?'Website':'Contact details'}</strong><span>{line}</span>
 
                 </span>
               ))}

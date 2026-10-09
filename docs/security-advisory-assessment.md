@@ -10,3 +10,9 @@ The dependency remains on an affected version. These are narrowly scoped, expiri
 SecurityAdvisoryApplicabilityTest checks registered application handlers and view beans in the running Spring context. Adding a server-rendered or SSE endpoint requires removing/reviewing the corresponding assessment. CI also exports suppressed findings in its security artifacts.
 
 Spring lists 6.2.20 as an enterprise-only fix and 7.0.9 as the open-source fix. Plan a separately validated Spring Boot 4 / Framework 7 migration or obtain the supported 6.2 patch before the assessment expires. Do not override Spring 7 underneath Boot 3 without a compatible platform migration.
+
+## Automated review findings on PR 4
+
+- The website-label regular expression now anchors both alternatives; embedded www. text no longer identifies an entire line as a website.
+- Invitation ciphertext allocation uses Math.addExact instead of unchecked integer addition. The current callers also generate fixed-size tokens from 32 random bytes; they do not encrypt client-supplied payloads.
+- CodeQL flagged confidential report list/detail and leave balance GET handlers as possible CSRF mutations. These handlers use stateless JWT bearer authentication (SecurityConfig); no cookie or HTTP session authentication is configured. A cross-site request cannot supply the bearer token automatically. The report handlers record authorized reads in audit history; leave balance handlers initialize/cache authorized allowance records. They do not submit, approve, reject, or change a policy. Actual workflow mutations use POST/PUT/PATCH/DELETE and independently enforce company access. These assessments must be revisited if cookie authentication is introduced.
