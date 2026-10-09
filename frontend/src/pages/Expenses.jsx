@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { format } from 'date-fns';
 import { expenseAPI, projectAPI } from '../api';
 import { useAuth } from '../AuthContext';
+import { useCompany } from '../CompanyContext';
 import Icon from '../components/Icon';
 import { hasActiveAssignment } from '../utils/projectAssignments';
 import './Expenses.css';
@@ -78,6 +79,7 @@ function ExpenseDetail({ id, onClose }) {
 
 export default function Expenses() {
   const { user } = useAuth();
+  const { currentCompany, projectPermissions, permissionsForProject } = useCompany();
   const [projects, setProjects] = useState([]);
   const [projectsLoaded, setProjectsLoaded] = useState(false);
   const [mine, setMine] = useState([]);
@@ -92,10 +94,13 @@ export default function Expenses() {
   const load = async () => {
     const [myRes, projectRes] = await Promise.all([expenseAPI.mine(), projectAPI.getAssignedProjects()]);
     const today = format(new Date(), 'yyyy-MM-dd');
-    setMine([...(myRes.data || [])].sort((a, b) => String(b.submitted_at || b.created_at || '').localeCompare(String(a.submitted_at || a.created_at || '')))); setProjects((projectRes.data || []).filter(p => hasActiveAssignment(p, user?.id, today)));
+    const projectIds = new Set(projectPermissions.map(project => String(project.projectId)));
+    setMine((myRes.data || []).filter(row => projectIds.has(String(row.project_id))).sort((a, b) => String(b.submitted_at || b.created_at || '').localeCompare(String(a.submitted_at || a.created_at || ''))));
+    setProjects((projectRes.data || []).filter(p => String(p.companyId) === String(currentCompany?.id)
+      && permissionsForProject(p.id)?.capabilities.canSubmitWork && hasActiveAssignment(p, user?.id, today)));
     setProjectsLoaded(true);
   };
-  useEffect(() => { load().catch(e => setError(message(e))); }, [user?.id]);
+  useEffect(() => { load().catch(e => setError(message(e))); }, [user?.id, currentCompany?.id]);
   useEffect(() => {
     if (!form.projectId || !Number(form.amount)) { setBudgetWarning(false); return; }
     let cancelled = false;
@@ -117,7 +122,7 @@ export default function Expenses() {
     <header className="expense-page-hero"><div><span className="expense-kicker">PROJECT REIMBURSEMENT</span><h1>Expenses</h1><p>Track your claims and submit project expenses for approval.</p></div><div className="expense-hero-mark" aria-hidden="true"><Icon name="file" size={30}/></div></header>
     <div className="expense-overview" aria-label="Expense summary"><div><span>Total claims</span><strong>{mine.length}</strong></div><div><span>Awaiting approval</span><strong>{pendingCount}</strong></div><div><span>Approved amount</span><strong>{money(approvedTotal)}</strong></div></div>
     {error && <p role="alert" className="error-message">{error}</p>}
-    {user?.role === 'EMPLOYEE' && projectsLoaded && projects.length === 0 && <div className="empty-state" role="status"><h2>No projects assigned</h2><p>You aren't currently assigned to any active projects. Contact your Project Admin if you believe this is incorrect.</p></div>}
+    {projectsLoaded && projects.length === 0 && <div className="empty-state" role="status"><h2>No projects assigned</h2><p>You aren't currently assigned to any active projects. Contact your Project Admin if you believe this is incorrect.</p></div>}
     <div className="expense-workspace-grid">
     <section className="admin-panel expense-panel expense-my-panel"><div className="expense-panel-heading"><div><span className="expense-kicker">YOUR CLAIMS</span><h2>My expenses</h2><p>Most recent submissions first</p></div><span className="expense-count">{mine.length}</span></div>
       {mine.length === 0 ? <div className="expense-list-empty"><Icon name="file" size={26}/><h3>No expenses yet</h3><p>Your submitted expenses will appear here.</p></div> : <div className="expense-card-list">{mine.map(row => <article className="expense-item" key={row.id}><div className="expense-item-top"><span className="expense-item-category">{label(row.category)}</span><span className={'status-badge status-' + String(row.status).toLowerCase()}>{label(row.status)}</span></div><div className="expense-item-title"><h3>{row.project_code || 'Project expense'}</h3><strong>{money(row.amount)}</strong></div><p>{row.description}</p><div className="expense-item-footer"><span>{date(row.expense_date)}</span><span>{row.submitted_at ? `Submitted ${date(row.submitted_at)}` : 'Draft'}</span><button className="button button-secondary button-small" type="button" onClick={() => setSelected(row)}>View details <Icon name="arrow" size={15}/></button></div></article>)}</div>}

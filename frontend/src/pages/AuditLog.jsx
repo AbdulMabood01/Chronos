@@ -1,92 +1,12 @@
-import ScreenTitle, { RecordSearch } from '../components/ScreenTitle';
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '../AuthContext';
-import { auditAPI } from '../api';
-import { format } from 'date-fns';
-import { LoadingIndicator } from '../components/Hourglass';
-import '../styles.css';
-
-export default function AuditLog() {
-  const { user } = useAuth();
-  const [logs, setLogs] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [search, setSearch] = useState('');
-  const visibleRecords = logs.filter(record => [record.userName,record.action,record.entityType,record.details].join(' ').toLowerCase().includes(search.toLowerCase()));
-
-  useEffect(() => {
-    if (user?.role !== 'ADMIN') {
-      return;
-    }
-    loadLogs();
-  }, [user]);
-
-  const loadLogs = async () => {
-    try {
-      const response = await auditAPI.getAuditLogs();
-      setLogs(response.data || []);
-      setError('');
-    } catch (err) {
-      setError('Failed to load audit logs');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (user?.role !== 'ADMIN') {
-    return (
-      <div className="page-container">
-        <div className="error-message">You do not have permission to access this page.</div>
-      </div>
-    );
-  }
-
-  if (loading) {
-    return <div className="page-container"><div className="loading-panel"><LoadingIndicator label="Loading audit logs..." /></div></div>;
-  }
-
-  return (
-    <div className="page-container">
-      <ScreenTitle title="Audit Log" icon="file" eyebrow="ACTIVITY & ACCOUNTABILITY" />
-
-      <RecordSearch value={search} onChange={setSearch} placeholder="Search activity, people or details" label="Search activity, people or details" />
-      {search && <p className="filter-count">{visibleRecords.length} matching records</p>}
-      {error && <div className="error-message" role="alert">{error}</div>}
-
-      {logs.length === 0 ? (
-        <div className="empty-state">
-          <p>No audit log entries yet.</p>
-        </div>
-      ) : (
-        <div className="table-container">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>User</th>
-                <th>Action</th>
-                <th>Entity</th>
-                <th>Details</th>
-              </tr>
-            </thead>
-            <tbody>
-              {logs
-                .slice()
-                .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-                .map((log) => (
-                  <tr key={log.id}>
-                    <td>{format(new Date(log.createdAt), 'MMM dd, yyyy HH:mm')}</td>
-                    <td>{log.userName || 'System'}</td>
-                    <td>{log.action}</td>
-                    <td>{log.entityType}{log.entityId ? ` #${log.entityId}` : ''}</td>
-                    <td>{log.details?.message || '-'}</td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
+import ScreenTitle, {RecordSearch} from '../components/ScreenTitle';
+import {LoadingIndicator} from '../components/Hourglass';
+import './CompanyManagement.css';
+import {useEffect,useState} from 'react';
+import {useCompany} from '../CompanyContext';
+import {companyGovernanceAPI} from '../api';
+export default function AuditLog(){
+ const {currentCompany,companyCapabilities}=useCompany();const [rows,setRows]=useState([]),[page,setPage]=useState(0),[loading,setLoading]=useState(true),[error,setError]=useState(''),[search,setSearch]=useState(''),[revision,setRevision]=useState(0);
+ useEffect(()=>{let active=true;setRows([]);setLoading(true);setError('');companyGovernanceAPI(currentCompany.id).audit(page).then(r=>{if(active)setRows(r.data);}).catch(e=>{if(active)setError(e.response?.data?.message||'Unable to load activity.');}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;};},[currentCompany.id,page,revision]);
+ const visible=rows.filter(r=>[r.userName,r.action,r.entityType,r.entityId].join(' ').toLowerCase().includes(search.toLowerCase()));
+ return <div className="page-container company-management-page"><div className="header-bar"><ScreenTitle title={companyCapabilities.canViewCompanyAudit?'Company audit':'My activity'} icon="file" eyebrow={companyCapabilities.canViewCompanyAudit?'MANAGEMENT':'WORKSPACE'}/></div><p className="management-help">Activity in {currentCompany.name}. Private feedback, review content, confidential cases, and personal details are excluded.</p>{error&&<p className="error-message" role="alert">{error}</p>}<div className="management-toolbar"><RecordSearch label="Search this page" placeholder="Search this page" value={search} onChange={setSearch}/><button className="button button-secondary" disabled={loading} onClick={()=>setRevision(v=>v+1)}>Reload activity</button></div>{loading?<LoadingIndicator label="Loading activity..."/>:<div className="table-container"><table className="data-table"><thead><tr><th>Date</th><th>Actor</th><th>Action</th><th>Record</th></tr></thead><tbody>{visible.map(r=><tr key={r.id}><td>{new Date(r.createdAt).toLocaleString()}</td><td>{r.userName||'System'}</td><td>{r.action.replaceAll('_',' ')}</td><td>{r.entityType} {r.entityId}</td></tr>)}</tbody></table>{!visible.length&&<div className="management-empty"><h2>No matching activity.</h2><p>Try another search or reload the activity.</p></div>}</div>}<nav className="management-pagination" aria-label="Activity pages"><button className="button button-secondary" disabled={!page||loading} onClick={()=>setPage(p=>p-1)}>Previous page</button><span> Page {page+1} </span><button className="button button-secondary" disabled={loading||rows.length<100} onClick={()=>setPage(p=>p+1)}>Next page</button></nav></div>;
 }

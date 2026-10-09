@@ -9,8 +9,14 @@ import java.util.Map;
 @RestController
 @Profile("e2e")
 public class E2eHealthController {
+    private volatile boolean ready;
+
+    @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
+    public void ready() { ready = true; }
+
     @GetMapping("/health")
-    public Map<String, String> health() {
-        return Map.of("status", "UP", "profile", "e2e");
+    public org.springframework.http.ResponseEntity<Map<String, String>> health() {
+        return org.springframework.http.ResponseEntity.status(ready ? 200 : 503)
+                .body(Map.of("status", ready ? "UP" : "STARTING", "profile", "e2e"));
     }
 }

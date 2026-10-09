@@ -1,0 +1,13 @@
+# Application-specific assessments, not patched dependency versions.
+# See docs/security-advisory-assessment.md and SecurityAdvisoryApplicabilityTest.
+vulnerabilities:
+  - id: CVE-2026-47884
+    purls:
+      - pkg:maven/org.springframework/spring-webmvc@6.2.19
+    expired_at: 2026-11-08
+    statement: Chronos exposes REST response bodies only, has no XsltView or XSLT view resolver, and does not perform implicit view rendering. The vulnerable code path is absent. See docs/security-advisory-assessment.md.
+  - id: CVE-2026-47890
+    purls:
+      - pkg:maven/org.springframework/spring-webmvc@6.2.19
+    expired_at: 2026-11-08
+    statement: Chronos does not stream view fragments over Server-Sent Events. All application handlers are REST handlers and no SSE or fragment return types are registered. See docs/security-advisory-assessment.md.

@@ -41,6 +41,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
+import java.util.Objects;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.Month;
@@ -71,20 +72,26 @@ public class ReportService {
     private final JdbcTemplate db;
 
     public List<Map<String,Object>> approvalPeriods(int year,int month,long requesterId) {
+        return approvalPeriods(null,year,month,requesterId);
+    }
+    public List<Map<String,Object>> approvalPeriods(Long companyId,int year,int month,long requesterId) {
+        if(companyId!=null)companyAccess.requireActiveCompanyAccess(companyId,requesterId);
         YearMonth selected=YearMonth.of(year,month);
         return db.queryForList("SELECT a.id,a.user_id,a.project_id,a.period_start,a.period_end,a.frequency,a.status,a.is_late," +
-                "p.code AS project_code,p.name AS project_name,u.employee_id,concat_ws(' ',u.first_name,u.last_name) AS user_name," +
+                "p.company_id,p.code AS project_code,p.name AS project_name,m.employee_id,concat_ws(' ',u.first_name,u.last_name) AS user_name," +
                 "COALESCE((SELECT sum(e.hours) FROM time_entries e JOIN timesheets t ON t.id=e.timesheet_id " +
                 "WHERE t.user_id=a.user_id AND e.project_id=a.project_id AND e.entry_date BETWEEN a.period_start AND a.period_end " +
                 "AND e.entry_date BETWEEN ? AND ?),0) AS total_hours " +
                 "FROM timesheet_approval_periods a JOIN projects p ON p.id=a.project_id JOIN users u ON u.id=a.user_id " +
-                "WHERE a.period_start<=? AND a.period_end>=? ORDER BY p.code,u.last_name,a.period_start",
-                selected.atDay(1),selected.atEndOfMonth(),selected.atEndOfMonth(),selected.atDay(1)).stream()
-                .filter(row->companyAccess.hasPlatformRole(requesterId,"PLATFORM_ADMIN")
-                        || companyAccess.mayManageProject(((Number)row.get("project_id")).longValue(),requesterId))
+                "LEFT JOIN company_memberships m ON m.company_id=p.company_id AND m.user_id=a.user_id " +
+                "WHERE a.period_start<=? AND a.period_end>=? AND (?::bigint IS NULL OR p.company_id=?) ORDER BY p.code,u.last_name,a.period_start",
+                selected.atDay(1),selected.atEndOfMonth(),selected.atEndOfMonth(),selected.atDay(1),companyId,companyId).stream()
+                .filter(row->row.get("company_id") instanceof Number company && companyAccess.hasActiveCompanyAccess(company.longValue(),requesterId))
+                .filter(row->canReadProjectReport(((Number)row.get("project_id")).longValue(),requesterId))
                 .map(row->{
                     var result=new LinkedHashMap<String,Object>();
                     result.put("id",row.get("id")); result.put("projectId",row.get("project_id"));
+                    result.put("companyId",row.get("company_id"));
                     result.put("projectCode",row.get("project_code")); result.put("projectName",row.get("project_name"));
                     result.put("userId",row.get("user_id")); result.put("userName",row.get("user_name"));
                     result.put("employeeId",row.get("employee_id")); result.put("periodStart",row.get("period_start"));
@@ -106,13 +113,18 @@ public class ReportService {
             zip.finish(); return out.toByteArray();
         } catch(IOException ex) { throw new UncheckedIOException(ex); }
     }
+    public boolean canReadProjectReport(long project,long actor){
+        long company=companyAccess.companyId(project);
+        return companyAccess.hasActiveCompanyAccess(company,actor)&&(companyAccess.hasCompanyRole(company,actor,"COMPANY_ADMIN")
+            ||companyAccess.mayManageProject(project,actor)||companyAccess.hasProjectRole(project,actor,"PROJECT_MANAGER"));
+    }
 
     public byte[] exportApprovalPeriodPdf(long periodId, long requesterId) {
         Map<String,Object> row=db.queryForMap("SELECT * FROM timesheet_approval_periods WHERE id=?",periodId);
         long userId=((Number)row.get("user_id")).longValue();
         long projectId=((Number)row.get("project_id")).longValue();
-        if(requesterId!=userId && !companyAccess.mayReview(projectId,requesterId,userId,false,"PDF preview")
-                && !companyAccess.mayManageProject(projectId,requesterId))
+        companyAccess.requireActiveCompanyAccess(companyAccess.companyId(projectId),requesterId);
+        if(requesterId!=userId && !canReadProjectReport(projectId,requesterId))
             throw new org.springframework.security.access.AccessDeniedException("Timesheet access denied");
         Object correction=row.get("correction_until");
         java.time.Instant correctionUntil=correction instanceof java.sql.Timestamp stamp ? stamp.toInstant()
@@ -124,11 +136,12 @@ public class ReportService {
         var employee=userRepository.findById(userId).orElseThrow();
         var project=projectRepository.findById(projectId).orElseThrow();
         var entries=timeEntryRepository.findPeriodEntries(userId,projectId,start,end);
-        try(TimesheetPdf pdf=new TimesheetPdf("PERIOD-"+periodId,start+" to "+end)) {
+        try(TimesheetPdf pdf=new TimesheetPdf("PERIOD-"+periodId,start+" to "+end,companyAccess.companyDisplayName(project.getCompanyId()))) {
             pdf.section("Employee & reporting period");
+            pdf.field("Company",companyAccess.companyDisplayName(project.getCompanyId()));
             pdf.field("Employee",employee.getFullName());
-            pdf.field("Employee ID",employee.getEmployeeId());
-            pdf.field("Designation",employee.getJobTitle());
+            pdf.field("Employee ID",companyAccess.employmentEmployeeId(project.getCompanyId(),employee.getId()));
+            pdf.field("Designation",companyAccess.employmentJobTitle(project.getCompanyId(),employee.getId()));
             pdf.field("Project",project.getCode()+" - "+project.getName());
             pdf.field("Status","APPROVED");
             pdf.section("Approval record");
@@ -229,8 +242,9 @@ public class ReportService {
     public byte[] exportTimesheetById(Long timesheetId, Long requestingUserId, boolean isAdmin) {
         Timesheet timesheet = timesheetRepository.findById(timesheetId)
                 .orElseThrow(() -> new IllegalArgumentException("Timesheet not found"));
+        companyAccess.requireActiveCompanyAccess(timesheet.getCompanyId(),requestingUserId);
 
-        if (!isAdmin && !timesheet.getUser().getId().equals(requestingUserId)) {
+        if (!timesheet.getUser().getId().equals(requestingUserId)&&!companyAccess.hasCompanyRole(timesheet.getCompanyId(),requestingUserId,"COMPANY_ADMIN")) {
             throw new org.springframework.security.access.AccessDeniedException("Not authorized to export this timesheet");
         }
 
@@ -240,8 +254,9 @@ public class ReportService {
     public byte[] exportTimesheetPdfById(Long timesheetId, Long requestingUserId, boolean isAdmin) {
         Timesheet timesheet = timesheetRepository.findById(timesheetId)
                 .orElseThrow(() -> new IllegalArgumentException("Timesheet not found"));
+        companyAccess.requireActiveCompanyAccess(timesheet.getCompanyId(),requestingUserId);
 
-        if (!isAdmin && !timesheet.getUser().getId().equals(requestingUserId)) {
+        if (!timesheet.getUser().getId().equals(requestingUserId)&&!companyAccess.hasCompanyRole(timesheet.getCompanyId(),requestingUserId,"COMPANY_ADMIN")) {
             throw new org.springframework.security.access.AccessDeniedException("Not authorized to export this timesheet");
         }
         if (!com.maxwell.chronos.enums.TimesheetStatus.APPROVED.equals(timesheet.getStatus())
@@ -256,8 +271,9 @@ public class ReportService {
         TimesheetProjectSubmission submission = projectSubmissionRepository.findById(submissionId)
                 .orElseThrow(() -> new IllegalArgumentException("Project timesheet not found"));
         Timesheet timesheet = submission.getTimesheet();
+        companyAccess.requireActiveCompanyAccess(timesheet.getCompanyId(),requestingUserId);
 
-        if (!isAdmin && !timesheet.getUser().getId().equals(requestingUserId)) {
+        if (!timesheet.getUser().getId().equals(requestingUserId)&&!canReadProjectReport(submission.getProject().getId(),requestingUserId)) {
             throw new org.springframework.security.access.AccessDeniedException("Not authorized to export this timesheet");
         }
         if (!submission.isPdfExportEligible()) {
@@ -278,11 +294,12 @@ public class ReportService {
                     .filter(TimesheetProjectSubmission::isPdfExportEligible)
                     .sorted(Comparator.comparing(s -> s.getProject().getCode())).toList();
         String reference = "TS-" + timesheet.getId() + (submission == null ? "" : " / PRJ-" + submission.getId());
-        try (TimesheetPdf pdf = new TimesheetPdf(reference, period)) {
+        try (TimesheetPdf pdf = new TimesheetPdf(reference, period,companyAccess.companyDisplayName(timesheet.getCompanyId()))) {
             pdf.section("Employee & reporting period");
+            pdf.field("Company",companyAccess.companyDisplayName(timesheet.getCompanyId()));
             pdf.field("Employee", timesheet.getUser().getFullName());
-            pdf.field("Employee ID", timesheet.getUser().getEmployeeId());
-            pdf.field("Designation", timesheet.getUser().getJobTitle());
+            pdf.field("Employee ID", companyAccess.employmentEmployeeId(timesheet.getCompanyId(),timesheet.getUser().getId()));
+            pdf.field("Designation", companyAccess.employmentJobTitle(timesheet.getCompanyId(),timesheet.getUser().getId()));
             pdf.field("Project", submission != null
                     ? submission.getProject().getCode() + " - " + submission.getProject().getName()
                     : "All projects for this reporting period");
@@ -707,8 +724,9 @@ public class ReportService {
         }
 
         String baseName = filename.substring(0, filename.length() - ".pdf".length());
-        String suffix = timesheet.getUser().getEmployeeId() != null && !timesheet.getUser().getEmployeeId().isBlank()
-                ? timesheet.getUser().getEmployeeId()
+        String employeeId=companyAccess.employmentEmployeeId(timesheet.getCompanyId(),timesheet.getUser().getId());
+        String suffix = employeeId != null && !employeeId.isBlank()
+                ? employeeId
                 : "timesheet_" + timesheet.getId();
         String candidate = baseName + "_" + suffix.replaceAll("[^A-Za-z0-9]+", "_") + ".pdf";
 
@@ -870,6 +888,7 @@ public class ReportService {
                 timesheet.getUser().getId(), period.atEndOfMonth(), period.atDay(1));
 
         for (VacationRequest vacation : requests) {
+            if(!Objects.equals(vacation.getCompanyId(),timesheet.getCompanyId()))continue;
             vacation.getStartDate().datesUntil(vacation.getEndDate().plusDays(1))
                     .filter(date -> !date.isBefore(period.atDay(1)) && !date.isAfter(period.atEndOfMonth()))
                     .forEach(date -> statuses.put(date, vacation.getVacationType().name() + " - " + vacation.getStatus().name()));

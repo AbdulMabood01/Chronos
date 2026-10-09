@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "deliver",
+  "type": "workflow",
+  "input": "C:\\Users\\maboo\\Chronos\\docs\\user-flows\\confidential-reports.json",
+  "output": "C:\\Users\\maboo\\Chronos\\docs\\user-flows\\confidential-reports.html",
+  "specification": {
+    "sha256": "df4a815af3743a7dd02d7bd63accdf206386d1e8c2efbe0b42f9b1935572373a",
+    "bytes": 2936
+  },
+  "artifact": {
+    "sha256": "252c361a3160fd455b25bfa092ccd4b2cbd993e0049cee66e0cfde996e6fc270",
+    "bytes": 803311
+  },
+  "validation": {
+    "checksPassed": 9,
+    "checkCount": 9,
+    "compositionProfile": "showcase",
+    "compositionStatus": "pass",
+    "errors": 0,
+    "warnings": 0
+  }
+}

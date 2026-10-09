@@ -4,9 +4,10 @@ const { apiAs, resetFixtures } = require('./support/api.cjs');
 
 test('project chart labels fit at desktop and mobile widths', async ({ page, request }, testInfo) => {
   const fixture = await resetFixtures(request);
-  const manager = await apiAs(request, 'projectAdmin');
+  const owner = await apiAs(request, 'projectAdmin');
+  const manager = await apiAs(request, 'manager');
   const project = (await (await manager.get('/api/projects')).json()).find(p => p.id === fixture.projectId);
-  expect((await manager.put(`/api/projects/${fixture.projectId}`, { data: {
+  expect((await owner.put(`/api/projects/${fixture.projectId}`, { data: {
     code: project.code, name: project.name, description: project.description, status: project.status,
     projectManagerId: project.projectManagerId, projectManagerHoursApproverId: project.projectManagerHoursApproverId,
     expenseBudget: 123456789.99,
@@ -19,7 +20,7 @@ test('project chart labels fit at desktop and mobile widths', async ({ page, req
     })) },
     receipt: { name: 'receipt.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') },
   } });
-  expect(submitted.ok()).toBeTruthy();
+  expect(submitted.ok(), `Expense submission failed: ${submitted.status()} ${await submitted.text()}`).toBeTruthy();
   const expense = await submitted.json();
   expect((await manager.post(`/api/expenses/${expense.id}/decision`, { data: { status: 'APPROVED' } })).ok()).toBeTruthy();
   const pending = await employee.post('/api/expenses', { multipart: {
@@ -31,7 +32,7 @@ test('project chart labels fit at desktop and mobile widths', async ({ page, req
   } });
   expect(pending.ok()).toBeTruthy();
 
-  await authenticatePage(page, request, 'projectAdmin');
+  await authenticatePage(page, request, 'projectAdmin', fixture.companyId);
   for (const width of [1440, 1024, 390, 320]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/projects');

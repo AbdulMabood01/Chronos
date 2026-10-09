@@ -14,7 +14,9 @@ class AccountSecurityServiceTest {
         UserRepository users = mock(UserRepository.class);
         AuditService audit = mock(AuditService.class);
         AuthSessionService sessions = mock(AuthSessionService.class);
-        UserService service = new UserService(users, audit, sessions);
+        var jdbc=mock(org.springframework.jdbc.core.JdbcTemplate.class);when(jdbc.queryForObject(org.mockito.ArgumentMatchers.contains("role_key = ?"),org.mockito.ArgumentMatchers.eq(Boolean.class),org.mockito.ArgumentMatchers.eq(1L),org.mockito.ArgumentMatchers.eq("PLATFORM_ADMIN"))).thenReturn(true);
+        when(jdbc.queryForList(org.mockito.ArgumentMatchers.contains("SELECT id FROM users"),org.mockito.ArgumentMatchers.eq(Long.class),org.mockito.ArgumentMatchers.eq(2L))).thenReturn(java.util.List.of(2L));
+        UserService service = new UserService(users, audit, sessions,jdbc);
         User admin = User.builder().id(1L).role(UserRole.ADMIN).build();
         User employee = User.builder().id(2L).role(UserRole.EMPLOYEE).build();
         when(users.findById(1L)).thenReturn(Optional.of(admin));

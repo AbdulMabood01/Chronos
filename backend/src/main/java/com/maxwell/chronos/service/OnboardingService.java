@@ -18,14 +18,14 @@ public class OnboardingService {
     private final UserRepository users;
     private final EmployeeInvitationRepository invitations;
     private final PasswordEncoder passwords;
-    private final InvitationEmailService email;
+    private final InvitationDeliveryService delivery;
     private final long hours;
     private final SecureRandom random = new SecureRandom();
     public OnboardingService(UserRepository users, EmployeeInvitationRepository invitations,
-            PasswordEncoder passwords, InvitationEmailService email,
+            PasswordEncoder passwords, InvitationDeliveryService delivery,
             @Value("${chronos.invitation.hours:72}") long hours) {
         if (hours < 1 || hours > 720) throw new IllegalArgumentException("Invitation expiry must be 1–720 hours");
-        this.users=users; this.invitations=invitations; this.passwords=passwords; this.email=email; this.hours=hours;
+        this.users=users; this.invitations=invitations; this.passwords=passwords; this.delivery=delivery; this.hours=hours;
     }
     public User create(String firstName, String lastName, String address) {
         String normalized=address.trim().toLowerCase(Locale.ROOT);
@@ -51,7 +51,7 @@ public class OnboardingService {
         invitation.setEmployeeId(id); invitation.setTokenHash(hash(token)); invitation.setCreatedAt(Instant.now());
         invitation.setExpiresAt(Instant.now().plus(Duration.ofHours(hours))); invitation.setUsedAt(null); invitation.setRevokedAt(null);
         invitations.saveAndFlush(invitation);
-        email.send(user,token,invitation.getExpiresAt());
+        delivery.account(user.getId(),token);
     }
     public record InvitationInfo(String firstName, String lastName, String email) {}
     public InvitationInfo validate(String token) {

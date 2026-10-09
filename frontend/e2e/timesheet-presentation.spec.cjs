@@ -1,0 +1,30 @@
+const {test,expect}=require('@playwright/test');
+const {apiAs,resetFixtures}=require('./support/api.cjs');
+const {authenticatePage}=require('./support/auth.cjs');
+const {json,monthOffset}=require('./support/workflows.cjs');
+
+test('timesheet remains usable on desktop, mobile and dark theme',async({page,request},testInfo)=>{
+ const f=await resetFixtures(request), actor=await apiAs(request,'employee'), period=monthOffset(f.today,0);
+ const sheet=await json(await actor.post('/api/timesheets',{params:{year:period.year,month:period.month,companyId:f.companyId}}));
+ await json(await actor.post(`/api/timesheets/${sheet.id}/time-entries`,{data:{projectId:f.projectId,entryDate:period.date,hours:'8',notes:'Project planning and implementation'}}));
+ await authenticatePage(page,request,'employee',f.companyId);
+ await page.setViewportSize({width:1440,height:1000});
+ await page.goto(`/timesheet/${sheet.id}?projectId=${f.projectId}`);
+ await expect(page.getByRole('button',{name:'Submit for Approval',exact:true})).toBeEnabled();
+ await expect(page.getByRole('meter',{name:'Monthly hours against project plan'})).toHaveAttribute('aria-valuenow','8');
+ await page.screenshot({path:testInfo.outputPath('desktop.png'),fullPage:true});
+ await page.setViewportSize({width:390,height:844});
+ await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+ const hours=page.getByRole('spinbutton',{name:`Hours for ${period.date}`,exact:true});
+ await expect(hours).toBeEnabled();
+ await hours.scrollIntoViewIfNeeded();
+ await page.screenshot({path:testInfo.outputPath('mobile.png')});
+ await hours.fill('7'); await hours.blur();
+ await expect.poll(async()=> (await json(await actor.get('/api/timesheet-periods',{params:{projectId:f.projectId,date:period.date}}))).totalHours).toBe(7);
+ await page.setViewportSize({width:1440,height:1000});
+ await page.getByRole('button',{name:'Switch to dark theme',exact:true}).click();
+ await page.evaluate(()=>window.scrollTo(0,0));
+ await page.screenshot({path:testInfo.outputPath('dark.png'),fullPage:true});
+ await page.getByRole('button',{name:'Submit for Approval',exact:true}).click();
+ await expect.poll(async()=> (await json(await actor.get('/api/timesheet-periods',{params:{projectId:f.projectId,date:period.date}}))).status).toBe('SUBMITTED');
+});

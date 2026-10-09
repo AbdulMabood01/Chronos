@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./support/company-fixture.cjs');
 const path = require('path');
 const project = { id: 10, code: 'ATL-001', name: 'Atlas Platform', description: 'A unified platform for the next chapter of customer delivery.', status: 'ACTIVE', totalAllocatedHours: 1200, projectManagerId: 3, projectManagerName: 'Taylor Morgan', projectManagerHoursApproverId: 4, projectManagerHoursApproverName: 'Alex Chen', assignments: [{ id: 5, userId: 3, userName: 'Taylor Morgan', email: 'taylor@example.com', jobTitle: 'Project Manager', isActive: true, startDate: '2026-09-01', endDate: '2026-12-31', billRate: 85, plannedHours: 240 }] };
 test('project control tabs, reporting period, themes and mobile layouts', async ({ page }) => {

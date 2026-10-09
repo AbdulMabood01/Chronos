@@ -14,7 +14,7 @@ import static org.mockito.Mockito.*;
 class OnboardingServiceTest {
     UserRepository users=mock(UserRepository.class);
     EmployeeInvitationRepository invitations=mock(EmployeeInvitationRepository.class);
-    InvitationEmailService email=mock(InvitationEmailService.class);
+    InvitationDeliveryService email=mock(InvitationDeliveryService.class);
     BCryptPasswordEncoder encoder=new BCryptPasswordEncoder(4);
     OnboardingService service=new OnboardingService(users,invitations,encoder,email,72);
     User user;
@@ -49,7 +49,7 @@ class OnboardingServiceTest {
         assertEquals(UserRole.EMPLOYEE, created.getValue().getRole());
         assertEquals("alice@example.com", created.getValue().getEmail());
         assertNull(created.getValue().getPasswordHash());
-        verify(email).send(eq(user), anyString(), any());
+        verify(email).account(eq(user.getId()), anyString());
     }
     @Test void registrationDoesNotReplaceAnExistingAccount() {
         when(users.findByEmailIgnoreCase(user.getEmail())).thenReturn(Optional.of(user));
@@ -60,7 +60,7 @@ class OnboardingServiceTest {
     @Test void invitationIsRandomHashedAndExpiresAfterConfiguredPeriod() {
         service.invite(1L);
         ArgumentCaptor<String> raw=ArgumentCaptor.forClass(String.class);
-        verify(email).send(eq(user),raw.capture(),eq(invitation.getExpiresAt()));
+        verify(email).account(eq(user.getId()),raw.capture());
         assertEquals(43,raw.getValue().length()); assertNotEquals(raw.getValue(),invitation.getTokenHash());
         assertEquals(OnboardingService.hash(raw.getValue()),invitation.getTokenHash());
         assertTrue(invitation.getExpiresAt().isAfter(Instant.now().plusSeconds(71*3600)));

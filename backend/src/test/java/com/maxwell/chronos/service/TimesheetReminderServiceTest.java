@@ -32,6 +32,7 @@ class TimesheetReminderServiceTest {
 
     @BeforeEach void setup() {
         when(db.queryForList(anyString())).thenReturn(List.of(Map.of("user_id", 1L, "project_id", 4L, "code", "ATLAS")));
+        when(db.queryForList(anyString(),eq(1L),eq(4L))).thenReturn(List.of(Map.of("user_id",1L,"project_id",4L,"code","ATLAS")));
         when(users.findForUpdate(1L)).thenReturn(Optional.of(employee));
         when(periods.period(eq(4L), any(LocalDate.class))).thenAnswer(call -> {
             LocalDate day = call.getArgument(1);
@@ -66,9 +67,14 @@ class TimesheetReminderServiceTest {
     }
 
     @Test void disabledRemindersDoNotQueryAssignmentsOrSendEmail() {
-        when(settings.findBySettingKey("timesheet.reminders.enabled"))
+        when(settings.findBySettingKey(PlatformSettingsService.REMINDERS))
                 .thenReturn(Optional.of(SystemSetting.builder().settingValue("false").build()));
         service.sendTimesheetReminders(Instant.parse("2026-09-18T17:00:00Z"));
         verifyNoInteractions(db, email, periods);
+    }
+    @Test void accessOrCompanySettingChangedBeforeDeliverySkipsReminder() {
+        when(db.queryForList(anyString(),eq(1L),eq(4L))).thenReturn(List.of());
+        service.sendTimesheetReminders(Instant.parse("2026-09-18T17:00:00Z"));
+        verifyNoInteractions(email,periods,notifications);
     }
 }

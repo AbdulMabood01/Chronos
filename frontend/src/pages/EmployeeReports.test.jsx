@@ -4,11 +4,11 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import EmployeeReports from './EmployeeReports';
 import { employeeReportsAPI } from '../api';
-vi.mock('../api', () => ({ employeeReportsAPI: { mine: vi.fn(), myDetail: vi.fn(), submit: vi.fn(), list: vi.fn(), detail: vi.fn(), review: vi.fn(), download: vi.fn() } }));
+vi.mock('../api',()=>{const api={ mine: vi.fn(), myDetail: vi.fn(), submit: vi.fn(), list: vi.fn(), detail: vi.fn(), review: vi.fn(), download: vi.fn() };return {employeeReportsAPI:api,companyEmployeeReportsAPI:()=>api,companyFeedbackReviewsAPI:()=>({employees:vi.fn().mockResolvedValue({data:[]})}),companyGovernanceAPI:()=>({configuration:vi.fn().mockResolvedValue({data:{handlerConfigured:true}}),recuse:vi.fn().mockResolvedValue({data:null})})};});
 const user = { role: 'EMPLOYEE' };
 vi.mock('../AuthContext', () => ({ useAuth: () => ({ user }) }));
 afterEach(() => { cleanup(); vi.useRealTimers(); });
-beforeEach(() => { vi.clearAllMocks(); employeeReportsAPI.mine.mockResolvedValue({ data: [] }); user.role = 'EMPLOYEE'; });
+beforeEach(() => { vi.clearAllMocks(); employeeReportsAPI.mine.mockResolvedValue({ data: [] }); user.scopedAccess=false; });
 it('explains anonymous retention and submits a receipt without exposing stored data', async () => {
   employeeReportsAPI.submit.mockResolvedValue({ data: { reportId: 'private-reference', status: 'SUBMITTED' } });
   render(<EmployeeReports />);
@@ -17,7 +17,7 @@ it('explains anonymous retention and submits a receipt without exposing stored d
   fireEvent.change(screen.getByLabelText('Report title / subject'), { target: { value: 'Concern' } });
   fireEvent.change(screen.getByLabelText('Incident description'), { target: { value: 'Details' } });
   fireEvent.click(screen.getByLabelText('Report Anonymously'));
-  expect(screen.getByText(/will not store a link to your account/)).toBeTruthy();
+  expect(screen.getByText(/will not store your account ID/)).toBeTruthy();
   expect(screen.getByText(/Original filenames are replaced/)).toBeTruthy();
   fireEvent.click(screen.getByLabelText('I understand what information is retained.'));
   fireEvent.click(screen.getByRole('button', { name: 'Submit confidential report' }));
@@ -27,12 +27,12 @@ it('explains anonymous retention and submits a receipt without exposing stored d
   expect(screen.queryByLabelText('Incident description')).toBeNull();
 });
 it.each(['EMPLOYEE','PROJECT_ADMIN'])('does not load management data for %s', role => {
-  user.role = role; render(<EmployeeReports management />);
+  user.scopedAccess=false; render(<EmployeeReports management />);
   expect(employeeReportsAPI.list).not.toHaveBeenCalled();
-  expect(screen.getByText(/Only HR Admins/)).toBeTruthy();
+  expect(screen.getByText(/Only designated confidential handlers/)).toBeTruthy();
 });
 it('loads HR filters and displays anonymous reports without identity', async () => {
-  user.role = 'ADMIN';
+  user.scopedAccess=true;
   employeeReportsAPI.list.mockResolvedValue({ data: [{ id: 'one', subject: 'Concern', category: 'SEXUAL_HARASSMENT', status: 'SUBMITTED', submitted_at: '2026-09-21T12:00:00Z' }] });
   employeeReportsAPI.detail.mockResolvedValue({ data: { id: 'one', subject: 'Concern', description: 'Details', anonymous: true, category: 'SEXUAL_HARASSMENT', status: 'SUBMITTED', submitted_at: '2026-09-21T12:00:00Z', attachments: [], history: [] } });
   render(<EmployeeReports management />);
@@ -47,7 +47,7 @@ it('loads HR filters and displays anonymous reports without identity', async () 
 });
 
 it('loads new reports only when manually refreshed', async () => {
-  vi.useFakeTimers(); user.role = 'ADMIN';
+  vi.useFakeTimers(); user.scopedAccess=true;
   employeeReportsAPI.list.mockResolvedValueOnce({ data: [] }).mockResolvedValue({ data: [{ id: 'new-report', subject: 'New case', category: 'SAFETY_CONCERN', anonymous: true, status: 'SUBMITTED', submitted_at: '2026-09-21T12:00:00Z' }] });
   render(<EmployeeReports management />);
   await act(async () => { await Promise.resolve(); });
@@ -100,7 +100,7 @@ it('refreshes Submitted Reports immediately after an identified submission', asy
 });
 
 it('saves internal notes and renders status, administrator, and time in the tracker', async () => {
-  user.role = 'ADMIN';
+  user.scopedAccess=true;
   const report = { id: 'case', subject: 'Case subject', anonymous: true, category: 'SAFETY_CONCERN', status: 'SUBMITTED', submitted_at: '2026-09-21T12:00:00Z', attachments: [], history: [] };
   employeeReportsAPI.list.mockResolvedValue({ data: [report] });
   employeeReportsAPI.detail.mockResolvedValueOnce({ data: report }).mockResolvedValue({ data: { ...report, status: 'UNDER_REVIEW', history: [{ id: 1, action: 'SUBMITTED → UNDER_REVIEW', status: 'UNDER_REVIEW', note: 'Confidential interview', first_name: 'HR', last_name: 'Reviewer', created_at: '2026-09-21T13:00:00Z' }] } });
@@ -115,3 +115,5 @@ it('saves internal notes and renders status, administrator, and time in the trac
   expect(employeeReportsAPI.review).toHaveBeenCalledWith('case', { status: 'UNDER_REVIEW', note: 'Confidential interview', actionsTaken: '', resolution: '', shareWithEmployee: false });
   expect(screen.getByText('Confidential interview')).toBeTruthy();
 });
+
+vi.mock('../CompanyContext',()=>({useCompany:()=>({currentCompany:{id:12,name:'Company A'},companyCapabilities:{canHandleConfidentialReports:user.scopedAccess===true}})}));

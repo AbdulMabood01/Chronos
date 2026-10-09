@@ -54,6 +54,7 @@ public class ExpenseService {
         return projects.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Project not found"));
     }
     private boolean reviewer(User user, Project project) {
+        if(access.hasPlatformRole(user.getId(),"PLATFORM_ADMIN"))return false;
         return access.hasProjectRole(project.getId(), user.getId(), "PROJECT_MANAGER")
                 || access.hasProjectRole(project.getId(), user.getId(), "PROJECT_ADMIN")
                 || access.hasModeratorGrant(project.getId(), user.getId(), true);
@@ -78,11 +79,14 @@ public class ExpenseService {
                 .stream().findFirst().orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Expense not found"));
     }
     private void requireView(User user, Map<String,Object> expense) {
+        access.requireActiveCompanyAccess(project(((Number)expense.get("project_id")).longValue()).getCompanyId(),user.getId());
         if (!Objects.equals(((Number)expense.get("employee_id")).longValue(), user.getId()) && !reviewer(user, project(((Number)expense.get("project_id")).longValue())))
             throw new AccessDeniedException("Expense access denied");
     }
     public List<Map<String,Object>> mine(String email) {
-        return db.queryForList("SELECT e.id,e.project_id,e.employee_id,e.category,e.amount,e.expense_date,e.description,e.receipt_name,e.status,e.over_budget_at_submission,e.submitted_at,e.reviewer_id,e.reviewed_at,e.reviewer_comments,p.code AS project_code,p.name AS project_name FROM project_expenses e JOIN projects p ON p.id=e.project_id WHERE e.employee_id=? ORDER BY e.submitted_at DESC,e.id DESC", user(email).getId());
+        User actor=user(email);
+        if(access.hasPlatformRole(actor.getId(),"PLATFORM_ADMIN"))return List.of();
+        return db.queryForList("SELECT e.id,e.project_id,e.employee_id,e.category,e.amount,e.expense_date,e.description,e.receipt_name,e.status,e.over_budget_at_submission,e.submitted_at,e.reviewer_id,e.reviewed_at,e.reviewer_comments,p.code AS project_code,p.name AS project_name FROM project_expenses e JOIN projects p ON p.id=e.project_id JOIN company_memberships m ON m.company_id=p.company_id AND m.user_id=e.employee_id AND m.status='ACTIVE' WHERE e.employee_id=? ORDER BY e.submitted_at DESC,e.id DESC", actor.getId());
     }
     public List<Map<String,Object>> projectExpenses(String email, Long projectId) {
         User actor = user(email);
@@ -104,7 +108,8 @@ public class ExpenseService {
                 .toList();
     }
     public Map<String,Object> totals(String email, Long projectId) {
-        requireReviewer(user(email), project(projectId));
+        User actor=user(email);Project p=project(projectId);access.requireActiveCompanyAccess(p.getCompanyId(),actor.getId());
+        if(!access.hasCompanyRole(p.getCompanyId(),actor.getId(),"COMPANY_ADMIN"))requireReviewer(actor,p);
         return db.queryForMap("SELECT p.expense_budget AS budget, COALESCE(sum(e.amount) FILTER (WHERE e.status='APPROVED'),0) AS approved, COALESCE(sum(e.amount) FILTER (WHERE e.status='PENDING_APPROVAL'),0) AS pending, p.expense_budget-COALESCE(sum(e.amount) FILTER (WHERE e.status='APPROVED'),0) AS remaining FROM projects p LEFT JOIN project_expenses e ON e.project_id=p.id WHERE p.id=? GROUP BY p.id", projectId);
     }
     public Map<String,Object> budgetCheck(String email, Long projectId, BigDecimal amount, Long excludeExpenseId) {
@@ -114,7 +119,7 @@ public class ExpenseService {
             throw new AccessDeniedException("An active project assignment is required");
         if (amount == null || amount.signum() < 0) throw new IllegalArgumentException("Amount must be nonnegative");
         BigDecimal budget = project(projectId).getExpenseBudget();
-        BigDecimal committed = db.queryForObject("SELECT COALESCE(sum(amount),0) FROM project_expenses WHERE project_id=? AND status IN ('APPROVED','PENDING_APPROVAL') AND (? IS NULL OR id<>?)", BigDecimal.class, projectId, excludeExpenseId, excludeExpenseId);
+        BigDecimal committed = db.queryForObject("SELECT COALESCE(sum(amount),0) FROM project_expenses WHERE project_id=? AND status IN ('APPROVED','PENDING_APPROVAL') AND (CAST(? AS BIGINT) IS NULL OR id<>?)", BigDecimal.class, projectId, excludeExpenseId, excludeExpenseId);
         BigDecimal projected = committed.add(amount);
         return Map.of("committed", committed, "projected", projected, "overBudget", budget != null && projected.compareTo(budget) > 0,
                 "budget", budget == null ? "" : budget);

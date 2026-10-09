@@ -27,11 +27,10 @@ public class ProjectHealthService {
     private final TimesheetProjectSubmissionRepository submissions;
 
     public List<ProjectHealthDTO> overview(User requester) {
-        if (requester == null || !(requester.isProjectAdmin() || requester.isAdmin()
-                || projectService.canReviewProjects(requester.getId()))) {
+        if (requester == null||!(projectService.canViewProjects(requester.getId())||projectService.canManageProjects(requester.getId())||projectService.canReviewProjects(requester.getId()))) {
             throw new AccessDeniedException("Project review permission required");
         }
-        Set<Long> visible = projectService.visibleProjectIds(requester);
+        Set<Long> visible = projectService.getProjects(requester).stream().map(p->p.getId()).collect(Collectors.toSet());
         if (visible.isEmpty()) return List.of();
         var projectList = projects.findAllById(visible);
         var team = assignments.findForHealth(visible);

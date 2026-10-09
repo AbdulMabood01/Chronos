@@ -42,12 +42,12 @@
 
 /* Personal expenses workspace */
 .workspace-content .expenses-page { width: 100%; max-width: 1440px; margin: 0 auto; }
-.expense-page-hero { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 26px; overflow: hidden; margin-bottom: 18px; padding: clamp(28px, 4vw, 46px); border: 1px solid color-mix(in srgb, var(--primary-color) 19%, var(--border-color)); border-radius: 20px; background: linear-gradient(115deg, color-mix(in srgb, var(--primary-color) 12%, var(--surface-color)), var(--surface-color) 72%); }
-.expense-page-hero::after { content: ''; position: absolute; width: 260px; height: 260px; right: -90px; top: -155px; border: 1px solid color-mix(in srgb, var(--primary-color) 13%, transparent); border-radius: 50%; box-shadow: 0 0 0 38px color-mix(in srgb, var(--primary-color) 3%, transparent), 0 0 0 76px color-mix(in srgb, var(--primary-color) 3%, transparent); pointer-events: none; }
+.expense-page-hero { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 26px; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.expense-page-hero::after { display: none; }
 .expense-kicker { display: block; color: var(--primary-color); font-size: 10px; font-weight: 800; letter-spacing: .16em; line-height: 1.5; }
-.expenses-page .expense-page-hero h1 { margin: 7px 0 10px; font-size: clamp(29px, 3vw, 40px); line-height: 1.13; letter-spacing: -.045em; }
+.expenses-page .expense-page-hero h1 { margin: 7px 0 10px; font-size: 27px; line-height: 1.13; letter-spacing: -.045em; }
 .expense-page-hero p { margin: 0; color: var(--text-secondary); font-size: 14px; line-height: 1.65; }
-.expense-hero-mark { position: relative; z-index: 1; display: grid; place-items: center; flex: 0 0 72px; height: 72px; border: 1px solid color-mix(in srgb, var(--primary-color) 20%, var(--border-color)); border-radius: 18px; background: var(--surface-color); color: var(--primary-color); box-shadow: var(--shadow-soft); }
+.expense-hero-mark { display: none; }
 .expense-overview { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 22px; }
 .expense-overview > div { display: grid; gap: 5px; min-width: 0; padding: 16px 20px; border: 1px solid var(--border-color); border-radius: 13px; background: var(--surface-color); }
 .expense-overview span { color: var(--text-secondary); font-size: 12px; }
@@ -83,4 +83,4 @@
 .expense-resubmit { margin-top: 14px; }
 .expenses-page .expense-detail { border-radius: 12px; background: var(--surface-muted); font-size: 13px; }
 @media (max-width: 1150px) { .expense-workspace-grid { grid-template-columns: minmax(0, 1fr); } .expense-entry-panel { position: static; } }
-@media (max-width: 680px) { .expense-page-hero { padding: 27px; } .expense-hero-mark { display: none; } .expense-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); } .expense-overview > div:last-child { grid-column: 1 / -1; } .expenses-page .expense-form { grid-template-columns: minmax(0, 1fr); } .expense-item-footer button { width: 100%; margin: 4px 0 0; } }
+@media (max-width: 680px) { .expense-page-hero { padding: 0; } .expense-hero-mark { display: none; } .expense-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); } .expense-overview > div:last-child { grid-column: 1 / -1; } .expenses-page .expense-form { grid-template-columns: minmax(0, 1fr); } .expense-item-footer button { width: 100%; margin: 4px 0 0; } }

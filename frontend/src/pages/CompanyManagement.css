@@ -1,0 +1,59 @@
+.company-management-page { display: grid; gap: 20px; }
+.company-management-page .header-bar { margin: 0; gap: 20px; flex-wrap: wrap; }
+.company-management-page .screen-title { margin: 0; min-width: 0; }
+.management-actions, .management-toolbar, .management-pagination { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.management-toolbar { justify-content: space-between; }
+.management-section { display: grid; gap: 18px; min-width: 0; }
+.company-management-page .management-section { margin: 0; }
+.management-section h2, .management-section h3 { margin: 0; color: var(--text-primary); }
+.management-section h2 { font-size: 18px; }
+.management-section h3 { font-size: 14px; }
+.management-section p, .management-help { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.65; overflow-wrap: anywhere; }
+.management-help { padding: 16px 20px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--surface-muted); }
+.management-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; border: 0; padding: 0; margin: 0; min-width: 0; }
+.management-field { display: grid; gap: 8px; min-width: 0; color: var(--text-primary); font-size: 12px; font-weight: 650; }
+.management-field input, .management-field select, .management-field textarea { width: 100%; min-width: 0; box-sizing: border-box; min-height: 42px; padding: 11px 12px; color: var(--text-primary); background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 7px; font: inherit; font-size: 13px; font-weight: 400; }
+.management-field textarea { min-height: 100px; resize: vertical; }
+.management-field input:focus, .management-field select:focus, .management-field textarea:focus { outline: none; border-color: var(--primary-color); box-shadow: var(--focus-ring); }
+.management-full-width { grid-column: 1 / -1; }
+.management-form-grid > .button, .management-section > .button { justify-self: start; }
+.management-record-list { display: grid; gap: 12px; }
+.management-record { display: grid; gap: 12px; padding: 18px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--surface-muted); }
+.management-record > .button, .management-record > .status-badge { justify-self: start; }
+.management-empty { padding: 28px 18px; text-align: center; background: var(--surface-muted); border-radius: 10px; }
+.management-empty h3 { margin-bottom: 8px; }
+.management-toolbar .record-search { margin: 0; flex: 0 1 340px; min-width: 0; }
+.management-toolbar .record-search { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 7px; background: var(--surface-color); color: var(--text-secondary); }
+.management-toolbar .record-search input { width: 100%; min-width: 0; border: 0; outline: none; background: transparent; color: var(--text-primary); font: inherit; font-size: 13px; }
+.management-toolbar .record-search:focus-within { border-color: var(--primary-color); box-shadow: var(--focus-ring); }
+.management-pagination { justify-content: flex-end; color: var(--text-secondary); font-size: 12px; }
+.company-management-page .table-container { max-width: 100%; overflow-x: auto; }
+.company-management-page .data-table { width: 100%; }
+.company-management-page .leave-policy-preview { max-width: none; }
+.letter-settings-fields { display: grid; gap: 20px; padding: 0; margin: 0; border: 0; min-width: 0; }
+@media (max-width: 640px) {
+  .management-form-grid { grid-template-columns: minmax(0, 1fr); }
+  .management-toolbar .record-search { flex: 1 1 100%; }
+  .management-pagination { justify-content: center; }
+  .company-management-page .card { padding: 18px; }
+}
+
+.company-management-page .management-page-header { align-items: center; gap: 20px; flex-wrap: wrap; }
+.company-management-page .management-page-header .management-actions { margin: 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.company-management-page .management-section-tabs { display: flex; gap: 10px; flex-wrap: wrap; padding-bottom: 20px; margin-bottom: 24px; border-bottom: 1px solid var(--border-color); }
+.company-management-page .management-section-heading { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 20px; }
+.company-management-page .management-section-heading h2 { margin: 0 0 8px; }
+.company-management-page .management-section-heading p { margin: 0; color: var(--text-secondary); }
+.company-management-page .management-field { max-width: 480px; }
+.company-management-page .leave-request-filters { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+
+.vacation-page.company-management-page { gap: 28px; }
+.vacation-page.company-management-page .management-section { padding: 28px; gap: 22px; }
+.vacation-page.company-management-page .management-section-tabs { margin-bottom: 0; }
+.vacation-page.company-management-page .leave-policy-preview { padding: 24px; gap: 18px; }
+.vacation-page.company-management-page .leave-policy-preview dl { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px; }
+.vacation-page.company-management-page .leave-policy-preview dl div { padding: 18px; }
+.vacation-page.company-management-page .leave-policy-preview dd { margin-top: 8px; font-size: 24px; }
+.vacation-page.company-management-page .leave-history { padding: 28px; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 10px; }
+.vacation-page.company-management-page .leave-history-item { padding: 22px; gap: 24px; }
+@media(max-width:700px) { .vacation-page.company-management-page .leave-policy-preview dl { grid-template-columns: 1fr; } .vacation-page.company-management-page .management-section, .vacation-page.company-management-page .leave-history { padding: 20px; } }

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "deliver",
+  "type": "workflow",
+  "input": "C:\\Users\\maboo\\Chronos\\docs\\user-flows\\people-administration.json",
+  "output": "C:\\Users\\maboo\\Chronos\\docs\\user-flows\\people-administration.html",
+  "specification": {
+    "sha256": "1dcb7554c0fb85208bc3af58b0503ecc9471aaf757ff81f2056846607aceb20f",
+    "bytes": 2931
+  },
+  "artifact": {
+    "sha256": "bb1e84d5f95c24544651ef577a40fb8eec820380b3edcf66a71537534478151c",
+    "bytes": 803266
+  },
+  "validation": {
+    "checksPassed": 9,
+    "checkCount": 9,
+    "compositionProfile": "showcase",
+    "compositionStatus": "pass",
+    "errors": 0,
+    "warnings": 0
+  }
+}

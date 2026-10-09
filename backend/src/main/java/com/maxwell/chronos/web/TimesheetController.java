@@ -24,6 +24,7 @@ import java.math.BigDecimal;
 public class TimesheetController {
     private final TimesheetService timesheetService;
     private final UserService userService;
+    private final com.maxwell.chronos.service.CompanyAccessService access;
 
     @GetMapping("/{timesheetId}/projects/{projectId}/history")
     public ResponseEntity<List<com.maxwell.chronos.dto.AuditLogDTO>> history(@PathVariable Long timesheetId,
@@ -34,9 +35,11 @@ public class TimesheetController {
 
     @GetMapping("/missing")
     public ResponseEntity<List<TimesheetService.MissingTimesheet>> missing(@RequestParam int year, @RequestParam int month,
+                                                                          @RequestParam Long companyId,
                                                                           @AuthenticationPrincipal Jwt jwt) {
         var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        return ResponseEntity.ok(timesheetService.getMissingTimesheets(year, month, user));
+        access.requireActiveCompanyAccess(companyId,user.getId());
+        return ResponseEntity.ok(timesheetService.getMissingTimesheets(year, month, user).stream().filter(row->companyId.equals(access.companyId(row.projectId()))).toList());
     }
 
     @PostMapping
@@ -68,7 +71,7 @@ public class TimesheetController {
 
         try {
             TimesheetDTO timesheet = projectId == null
-                    ? timesheetService.getTimesheetById(timesheetId, user.getId(), user.isAdmin())
+                    ? timesheetService.getTimesheetById(timesheetId, user.getId(), false)
                     : timesheetService.getProjectTimesheet(timesheetId, projectId, user);
             return ResponseEntity.ok(timesheet);
         } catch (IllegalArgumentException e) {

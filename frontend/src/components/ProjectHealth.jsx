@@ -5,7 +5,7 @@ import './ProjectHealth.css';
 const labels = { HEALTHY: 'Healthy', ATTENTION_NEEDED: 'Attention Needed', AT_RISK: 'At Risk' };
 const number = (value) => value == null ? 'Not set' : Number(value).toLocaleString(undefined, { maximumFractionDigits: 1 });
 
-export function useProjectHealth(enabled = true, revision = null) {
+export function useProjectHealth(enabled = true, revision = null,companyId=null) {
   const [state, setState] = useState({ projects: [], loading: true, error: '' });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -14,7 +14,7 @@ export function useProjectHealth(enabled = true, revision = null) {
     const load = async () => {
       setState({ projects: [], loading: true, error: '' });
       try {
-        const response = await projectAPI.getHealth();
+        const response = await projectAPI.getHealth(companyId);
         if (!Array.isArray(response?.data)) throw new Error('Invalid health response');
         if (alive) setState({ projects: response.data, loading: false, error: '' });
       } catch {
@@ -25,7 +25,7 @@ export function useProjectHealth(enabled = true, revision = null) {
     const refresh = () => setAttempt(value => value + 1);
     window.addEventListener('focus', refresh);
     return () => { alive = false; window.removeEventListener('focus', refresh); };
-  }, [enabled, revision, attempt]);
+  }, [enabled, revision, attempt,companyId]);
   return { ...state, refresh: () => setAttempt(value => value + 1) };
 }
 

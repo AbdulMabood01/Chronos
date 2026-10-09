@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "deliver",
+  "type": "workflow",
+  "input": "C:\\Users\\maboo\\Chronos\\docs\\user-flows\\work-approval.json",
+  "output": "C:\\Users\\maboo\\Chronos\\docs\\user-flows\\work-approval.html",
+  "specification": {
+    "sha256": "b02af8643ee2bc5db656dbe1b57e0be57b9f3b2ec805561181adaed73f0ec149",
+    "bytes": 2982
+  },
+  "artifact": {
+    "sha256": "c3092b0df5ca8165618380a54df06c97d98e5f34892ee1edde48ec7e2202eae1",
+    "bytes": 803446
+  },
+  "validation": {
+    "checksPassed": 9,
+    "checkCount": 9,
+    "compositionProfile": "showcase",
+    "compositionStatus": "pass",
+    "errors": 0,
+    "warnings": 0
+  }
+}

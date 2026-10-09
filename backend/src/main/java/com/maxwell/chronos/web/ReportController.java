@@ -27,48 +27,18 @@ public class ReportController {
     public ResponseEntity<byte[]> exportTimesheets(@RequestParam int year, @RequestParam int month,
                                                     @RequestParam(required = false) String userIds,
                                                     @AuthenticationPrincipal Jwt jwt) {
-        var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        if (user == null || !user.isAdmin()) {
-            return ResponseEntity.status(403).build();
-        }
-
-        byte[] reports = reportService.exportTimesheets(year, month, parseUserIds(userIds));
-        String filename = "timesheets-" + year + "-" + month + ".zip";
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType("application/zip"))
-                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(filename).build().toString())
-                .body(reports);
+        throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.GONE,"Use company reports");
     }
 
     @GetMapping("/project-timesheets/export")
     public ResponseEntity<byte[]> exportProjectTimesheets(@RequestParam String submissionIds,
                                                           @AuthenticationPrincipal Jwt jwt) {
-        var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        if (user == null || !user.isAdmin()) {
-            return ResponseEntity.status(403).build();
-        }
-
-        byte[] reports = reportService.exportProjectTimesheets(parseUserIds(submissionIds));
-        String filename = "project-timesheets.zip";
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType("application/zip"))
-                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(filename).build().toString())
-                .body(reports);
+        throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.GONE,"Use company reports");
     }
 
     @GetMapping("/vacation/export")
     public ResponseEntity<byte[]> exportVacationRequests(@RequestParam int year, @AuthenticationPrincipal Jwt jwt) {
-        var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        if (user == null || !user.isAdmin()) {
-            return ResponseEntity.status(403).build();
-        }
-
-        byte[] excel = reportService.exportVacationRequests(year);
-        String filename = "vacation-requests-" + year + ".xlsx";
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
-                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(filename).build().toString())
-                .body(excel);
+        throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.GONE,"Use company reports");
     }
 
     @GetMapping("/timesheets/{timesheetId}/export")
@@ -80,7 +50,7 @@ public class ReportController {
         }
 
         try {
-            byte[] excel = reportService.exportTimesheetById(timesheetId, user.getId(), user.isAdmin());
+            byte[] excel = reportService.exportTimesheetById(timesheetId, user.getId(), false);
             String filename = "timesheet-" + timesheetId + ".xlsx";
             return ResponseEntity.ok()
                     .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
@@ -94,12 +64,7 @@ public class ReportController {
     @GetMapping("/summary")
     public ResponseEntity<List<Map<String, Object>>> getMonthlySummary(@RequestParam int year, @RequestParam int month,
                                                                         @AuthenticationPrincipal Jwt jwt) {
-        var user = userService.findUserEntityByEmail(jwt.getClaimAsString("preferred_username"));
-        if (user == null || !user.isAdmin()) {
-            return ResponseEntity.status(403).build();
-        }
-
-        return ResponseEntity.ok(reportService.getMonthlySummary(year, month));
+        throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.GONE,"Use company reports");
     }
 
     @GetMapping("/timesheets/{timesheetId}/pdf")
@@ -111,7 +76,7 @@ public class ReportController {
         }
 
         try {
-            byte[] pdf = reportService.exportTimesheetPdfById(timesheetId, user.getId(), user.isAdmin());
+            byte[] pdf = reportService.exportTimesheetPdfById(timesheetId, user.getId(), false);
             String filename = "timesheet-" + timesheetId + ".pdf";
             return ResponseEntity.ok()
                     .contentType(MediaType.APPLICATION_PDF)
@@ -131,7 +96,7 @@ public class ReportController {
         }
 
         try {
-            byte[] pdf = reportService.exportProjectTimesheetPdfById(submissionId, user.getId(), user.isAdmin());
+            byte[] pdf = reportService.exportProjectTimesheetPdfById(submissionId, user.getId(), false);
             String filename = "project-timesheet-" + submissionId + ".pdf";
             return ResponseEntity.ok()
                     .contentType(MediaType.APPLICATION_PDF)

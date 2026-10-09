@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./support/company-fixture.cjs');
 
 test('Admin Reports opens incident cases, filters, and saves the private tracker on desktop and mobile', async ({ page }) => {
   const errors = []; page.on('pageerror', error => errors.push(error.message));
@@ -21,8 +21,8 @@ test('Admin Reports opens incident cases, filters, and saves the private tracker
     }
     await route.fulfill({ json: data });
   });
-  await page.goto('/reports');
-  await expect(page.getByRole('link', { name: 'Reports', exact: true })).toHaveAttribute('href', '/reports');
+  await page.goto('/confidential-reports');
+  await expect(page.getByRole('link', { name: 'Confidential Cases', exact: true })).toHaveAttribute('href', '/confidential-reports');
   await expect(page.getByRole('heading', { name: 'Workplace safety concern' })).toBeVisible();
   await expect(page.locator('.report-case-meta')).toContainText('Updated');
   await page.getByRole('button', { name: 'Show filters' }).click();

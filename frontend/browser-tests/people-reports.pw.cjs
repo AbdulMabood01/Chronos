@@ -1,5 +1,5 @@
-const { test, expect } = require('@playwright/test');
-test('people and reports fit mobile and expose import', async ({ page }) => {
+const { test, expect } = require('./support/company-fixture.cjs');
+test('company people and reports fit mobile and use scoped invitations', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('authToken', 'layout-test'));
   await page.route('**/api/**', async route => {
     const pathname = new URL(route.request().url()).pathname;
@@ -12,13 +12,13 @@ test('people and reports fit mobile and expose import', async ({ page }) => {
   await page.goto('/users');
   await expect(page.getByRole('heading', { name: 'People', exact: true })).toBeVisible();
   await expect(page.getByLabel('First name')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Import employees', exact: true }).click();
-  await expect(page.getByLabel('Excel spreadsheet')).toBeVisible();
+  await page.getByRole('button', {name:'Invite a person',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Send invitation',exact:true})).toBeVisible();
   await page.screenshot({ path: '../backend/target/ui-preview/people-import-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.goto('/reports');
-  await expect(page.getByText('No reports match these filters.')).toBeVisible();
+  await expect(page.getByText('No project timesheets for this period.')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: '../backend/target/ui-preview/reports-mobile.png', fullPage: true });
 });

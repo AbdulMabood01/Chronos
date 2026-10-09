@@ -1,0 +1,100 @@
+import {useEffect,useState} from 'react';
+import {useCompany} from '../CompanyContext';
+import {useAuth} from '../AuthContext';
+import {platformAdministrationAPI as api,companyAPI,billingAPI} from '../api';
+import ScreenTitle, {RecordSummary, RecordSearch} from '../components/ScreenTitle';
+import {LoadingIndicator} from '../components/Hourglass';
+import './Companies.css';
+import './PlatformAdministration.css';
+const failure=e=>e.response?.data?.message||'Unable to complete this action.';
+const planName=value=>(value||'Free').replaceAll('_',' ').toLowerCase().replace(/\b\w/g,c=>c.toUpperCase());
+const expiry=value=>value?new Date(value).toLocaleString():'No expiry';
+const emptyGrant={tier:'PRO',projectLimit:3,teamLimit:75,reason:'',expiry:'NONE',endsAt:''};
+
+export function PlatformCompanyTools(){
+ const {currentCompany,refreshCompanies}=useCompany(); const id=currentCompany?.id;
+ const [company,setCompany]=useState(null),[usage,setUsage]=useState(null),[invitations,setInvitations]=useState([]),[catalog,setCatalog]=useState(null);
+ const [form,setForm]=useState(emptyGrant),[adminEmail,setAdminEmail]=useState(''),[reason,setReason]=useState(''),[revokeReason,setRevokeReason]=useState('');
+ const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[revision,setRevision]=useState(0);
+ const [billing,setBilling]=useState(null),[retryReason,setRetryReason]=useState('');
+ useEffect(()=>{setNotice('');setReason('');setAdminEmail('');setRevokeReason('');setRetryReason('');},[id]);
+ useEffect(()=>{
+  let active=true;setCompany(null);setUsage(null);setInvitations([]);setBilling(null);setCatalog(null);setError('');
+  if(!id)return;setBusy(true);
+  Promise.all([api.companies(),api.usage(id),api.adminInvitations(id),billingAPI.catalog(),api.billing(id)]).then(([list,used,invites,plans,metadata])=>{
+   if(!active)return;
+   const row=list.data.find(c=>String(c.id)===String(id));setCompany(row);setUsage(used.data);setInvitations(invites.data);setCatalog(plans.data);setBilling(metadata.data);
+   const tier=used.data.plan||row?.plan_tier||'PRO',preset=plans.data.plans.find(p=>p.key===tier);
+   setForm({...emptyGrant,tier:preset?tier:'CUSTOM',projectLimit:preset?.projects||row?.project_limit||1,teamLimit:preset?.users||row?.team_limit||7,expiry:used.data.source==='COMPLIMENTARY'&&used.data.ends_at?'DATE':'NONE',endsAt:used.data.ends_at?localDateTime(used.data.ends_at):''});
+  }).catch(e=>{if(active)setError(failure(e));}).finally(()=>{if(active)setBusy(false);});
+  return()=>{active=false;};
+ },[id,revision]);
+ async function act(callback,message){setBusy(true);setError('');setNotice('');try{await callback();setNotice(message);setRevision(v=>v+1);await refreshCompanies();}catch(e){setError(failure(e));}finally{setBusy(false);}}
+ if(!id)return null;
+ return <section className="platform-company-tools" aria-label="Platform company administration">
+  {error&&<p className="error-message" role="alert">{error} <button className="button button-secondary" onClick={()=>setRevision(v=>v+1)}>Reload company</button></p>}
+  {notice&&<p className="success-message" role="status">{notice}</p>}
+  {busy&&!company&&<LoadingIndicator label="Loading company administration..."/>}
+  {company&&<>
+   <RecordSummary items={[{label:'Open projects',value:usage?.project_count||0,icon:'briefcase'},{label:'Employees / capacity',value:(usage?.active_users||0)+' / '+(usage?.user_capacity||0),icon:'users'},{label:'Reserved invitations',value:usage?.reservations||0,icon:'mail'}]}/>
+   <div className="platform-grid">
+    <section className="company-card platform-grant-card">
+     <div className="company-section-heading"><div><h2>Company plan</h2><p>Choose the capacity for {currentCompany.name}.</p></div><span className="company-pill">{company.is_suspended?'Suspended':'Available'}</span></div>
+     <div className="platform-plan-summary"><strong>{planName(usage?.plan||company.plan_tier)}</strong><span className="company-pill">{usage?.source==='COMPLIMENTARY'?'Complimentary':planName(usage?.source)}</span><span>{expiry(usage?.ends_at)}</span></div>
+     <form onSubmit={e=>{e.preventDefault();act(()=>api.plan(id,{tier:form.tier,projectLimit:Number(form.projectLimit),teamLimit:Number(form.teamLimit),reason:form.reason,version:company.platform_version,grantType:'COMPLIMENTARY',endsAt:form.expiry==='DATE'?new Date(form.endsAt).toISOString():null}),'Complimentary plan assigned. No payment is required.');}}>
+      <fieldset disabled={busy||!catalog||usage?.source==='PAID'}>
+       <h3>Assign complimentary plan</h3><p>For your own companies or an approved complimentary allowance. No checkout, card, payment or automatic renewal.</p>
+       {usage?.source==='PAID'&&<p role="status">This company has a paid term. It must be resolved through Billing before assigning a complimentary plan.</p>}
+       <div className="platform-form-grid">
+        <label className="company-field">Plan<select aria-label="Plan" value={form.tier} onChange={e=>{const preset=catalog?.plans.find(p=>p.key===e.target.value);setForm({...form,tier:e.target.value,...(preset?{projectLimit:preset.projects,teamLimit:preset.users}:{})});}}>{(catalog?.plans||[]).map(p=><option key={p.key} value={p.key}>{p.name}</option>)}<option value="CUSTOM">Custom allowance</option></select></label>
+        <label className="company-field">Expiry<select aria-label="Expiry" value={form.expiry} onChange={e=>setForm({...form,expiry:e.target.value})}><option value="NONE">No expiry</option><option value="DATE">Choose an end date</option></select></label>
+        {form.expiry==='DATE'&&<label className="company-field platform-form-wide">End date and time<input aria-label="End date and time" required type="datetime-local" value={form.endsAt} onChange={e=>setForm({...form,endsAt:e.target.value})}/><small>Your local time. The company returns to Free at expiry.</small></label>}
+        <label className="company-field">Open-project limit<input required disabled={form.tier!=='CUSTOM'} type="number" min={1} max={100000} value={form.projectLimit} onChange={e=>setForm({...form,projectLimit:e.target.value})}/></label>
+        <label className="company-field">Company user allowance<input aria-label="Company user allowance" required disabled={form.tier!=='CUSTOM'} type="number" min={1} max={100000} value={form.teamLimit} onChange={e=>setForm({...form,teamLimit:e.target.value})}/><small>{form.tier==='FREE'?'All active people, including administrators.':'Employees pooled across projects; administration-only accounts are free.'}</small></label>
+        <label className="company-field platform-form-wide">Reason for grant<textarea required maxLength={500} value={form.reason} onChange={e=>setForm({...form,reason:e.target.value})}/></label>
+       </div>
+       <button className="button button-primary">Assign complimentary plan</button>
+      </fieldset>
+     </form>
+     {usage?.source==='COMPLIMENTARY'&&<details className="platform-revoke"><summary>Revoke complimentary plan</summary><form onSubmit={e=>{e.preventDefault();act(()=>api.revokePlan(id,{version:company.platform_version,reason:revokeReason}),'Complimentary plan revoked. The company now uses Free.');}}><fieldset disabled={busy}><p>The company returns to Free: 1 open project and 7 people, including admins. Reduce usage first if it exceeds these limits. History is retained.</p><label className="company-field">Reason for revocation<textarea required maxLength={500} value={revokeReason} onChange={e=>setRevokeReason(e.target.value)}/></label><button className="button button-secondary">Confirm revocation</button></fieldset></form></details>}
+    </section>
+    <div className="platform-stack">
+     <form className="company-card" onSubmit={e=>{e.preventDefault();act(()=>api.status(id,{suspended:!company.is_suspended,reason,version:company.platform_version}),company.is_suspended?'Company resumed.':'Company suspended.');}}><fieldset disabled={busy}><h2>Company availability</h2><p>Suspension pauses operations and invitation acceptance. Memberships and history are kept.</p><label className="company-field">Reason for availability change<textarea required maxLength={500} value={reason} onChange={e=>setReason(e.target.value)}/></label><button className="button button-secondary">{company.is_suspended?'Resume company':'Suspend company'}</button></fieldset></form>
+     <form className="company-card" onSubmit={e=>{e.preventDefault();act(()=>companyAPI.invite(id,{email:adminEmail,role:'COMPANY_ADMIN'}),'Company Admin invitation queued.');}}><fieldset disabled={busy||company.is_suspended||company.onboarding_complete}><h2>Company Admin onboarding</h2>{company.onboarding_complete?<p>Initial onboarding is complete. Company Admins manage further appointments.</p>:<><p>Invite the first administrator to manage this company.</p><label className="company-field">Company Admin email<input type="email" required maxLength={255} value={adminEmail} onChange={e=>setAdminEmail(e.target.value)}/></label><button className="button button-primary">Invite Company Admin</button></>}</fieldset></form>
+    </div>
+   </div>
+   <section className="company-card"><h2>Company Admin invitations</h2><p>Queued delivery means the invitation is waiting to be sent.</p>{invitations.map(i=><article className="platform-list-row" key={i.id}><div><strong>{i.invitee_email}</strong><p>Invitation: {i.accepted_at?'Accepted':i.revoked_at?'Revoked':new Date(i.expires_at)<new Date()?'Expired':'Pending'} · Delivery: {i.delivery_status||'Legacy — resend to queue delivery'}</p>{i.last_error&&<p>{i.last_error}</p>}</div>{!i.accepted_at&&!i.revoked_at&&<div className="platform-actions"><button className="button button-secondary" disabled={busy||company.is_suspended||company.onboarding_complete} onClick={()=>act(()=>api.resendAdmin(id,i.id),'Company Admin invitation queued again.')}>Resend invitation</button><button className="button button-secondary" disabled={busy||company.onboarding_complete} onClick={()=>act(()=>api.revokeAdmin(id,i.id),'Company Admin invitation revoked.')}>Revoke invitation</button></div>}</article>)}{!invitations.length&&<p className="platform-empty">No Company Admin invitations.</p>}</section>
+   {billing&&<details className="company-card platform-billing"><summary>Billing processing <span>{billing.purchases.length} recorded payments</span></summary><p>Payment processing and recovery for this company.</p>{billing.purchases.map(p=><p key={p.id}>{planName(p.plan_key)} · {p.status} · {((p.amount_cents+p.tax_cents)/100).toFixed(2)} USD{p.failure_code?' · '+p.failure_code:''}</p>)}{!!billing.events.filter(e=>!e.processed_at).length&&<label className="company-field">Reason for retry<input maxLength={500} value={retryReason} onChange={e=>setRetryReason(e.target.value)}/></label>}{billing.events.filter(e=>!e.processed_at).map(e=><div className="platform-list-row" key={e.event_id}><span>{e.event_type} · {e.attempts} attempts · {e.failure_code}</span><button className="button button-secondary" disabled={busy||!retryReason.trim()} onClick={()=>act(()=>api.retryBilling(id,e.event_id,retryReason),'Verified event retried. Review its processing result.')}>Retry verified event</button></div>)}{!billing.purchases.length&&<p>No company payments recorded.</p>}</details>}
+  </>}
+ </section>;
+}
+function localDateTime(value){const date=new Date(value);return new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,16);}
+
+export function PlatformAccounts(){
+ const {companies=[]}=useCompany();const [companyFilter,setCompanyFilter]=useState('');
+ const {user}=useAuth();const [rows,setRows]=useState([]),[query,setQuery]=useState(''),[revision,setRevision]=useState(0),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[selected,setSelected]=useState(null),[action,setAction]=useState(''),[reason,setReason]=useState(''),[invite,setInvite]=useState({firstName:'',lastName:'',email:''});
+ useEffect(()=>{let active=true;setRows([]);setBusy(true);setError('');api.accounts(query,companyFilter||undefined).then(r=>{if(active)setRows(r.data);}).catch(e=>{if(active)setError(failure(e));}).finally(()=>{if(active)setBusy(false);});return()=>{active=false;};},[query,companyFilter,revision]);
+ async function act(callback,message){setBusy(true);setError('');setNotice('');try{await callback();setNotice(message);setSelected(null);setAction('');setReason('');setRevision(v=>v+1);window.dispatchEvent(new Event('chronos:company-memberships-changed'));}catch(e){setError(failure(e));}finally{setBusy(false);}}
+ return <div className="page-container platform-page highlighted-workspace">
+  <ScreenTitle title="Platform accounts" icon="users" eyebrow="PLATFORM ADMINISTRATION" description="Manage shared sign-in access and Platform Admin appointments."/>
+  {error&&<p className="error-message" role="alert">{error} <button className="button button-secondary" onClick={()=>setRevision(v=>v+1)}>Reload accounts</button></p>}{notice&&<p className="success-message" role="status">{notice}</p>}
+  {selected&&<form className="company-card platform-account-action" onSubmit={e=>{e.preventDefault();act(()=>api.account(selected.id,{action,reason,version:selected.platform_access_version}),'Account action completed.');}}><h2>Manage {selected.email}</h2><fieldset disabled={busy}><div className="platform-form-grid"><label className="company-field">Account action<select aria-label="Account action" required value={action} onChange={e=>setAction(e.target.value)}><option value="">Choose an action</option>{[['LOCK','Lock sign-in'],['UNLOCK','Unlock sign-in'],['DEACTIVATE','Deactivate account'],['REACTIVATE','Reactivate account'],['SIGN_OUT','Sign out all sessions'],['PROMOTE','Appoint Platform Admin'],['DEMOTE','Remove Platform Admin'],['INVITE','Resend admin setup invitation'],['REVOKE_INVITATION','Revoke admin setup invitation']].filter(([key])=>!(String(selected.id)===String(user.id)&&['LOCK','DEACTIVATE','DEMOTE'].includes(key))).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label><label className="company-field">Reason for account action<textarea required maxLength={500} value={reason} onChange={e=>setReason(e.target.value)}/></label></div><p>Shared sign-in changes affect every company. Appointments require an activated account without active company memberships. Each last administrator is protected.</p><div className="platform-actions"><button className="button button-primary">Confirm account action</button><button className="button button-secondary" type="button" onClick={()=>setSelected(null)}>Cancel</button></div></fieldset></form>}
+  <div className="platform-grid platform-accounts-grid">
+   <section className="company-card"><div className="company-section-heading"><div><h2>Account directory</h2><p>Company Admins manage company memberships and roles.</p></div><span className="company-pill">{rows.length} results</span></div><div className="platform-account-filters"><label className="company-field">Filter accounts by company<select value={companyFilter} onChange={e=>{setCompanyFilter(e.target.value);setSelected(null);setAction('');setReason('');setNotice('');}}><option value="">All companies</option>{companies.map(company=><option key={company.id} value={company.id}>{company.name}</option>)}</select></label><RecordSearch value={query} onChange={setQuery} label="Search accounts" placeholder="Search by name or email"/></div>
+    {busy&&!rows.length?<LoadingIndicator label="Loading accounts..."/>:<div className="platform-account-list">{rows.map(r=><article className="platform-list-row" key={r.id}><div className="platform-account-identity"><span className="company-person-avatar" aria-hidden="true">{(r.first_name||r.email).charAt(0)}</span><div><strong>{r.first_name} {r.last_name}</strong><p>{r.email}</p><div className="platform-badges"><span className="company-pill">{r.platform_admin?'Platform Admin':'Account'}</span><span className="company-pill">{r.is_active?r.admin_locked?'Locked':r.account_status:'Inactive'}</span><span>{r.active_memberships} active company memberships</span></div><p className="platform-account-companies">{r.companies?.length?r.companies.map(company=>company.name).join(' · '):'No active company membership'}</p>{r.delivery_status&&<p>Invitation delivery: {r.delivery_status}</p>}</div></div><button className="button button-secondary" disabled={busy} onClick={()=>{setSelected(r);setAction('');setReason('');}}>Manage sign-in access</button></article>)}{!rows.length&&!error&&<p className="platform-empty">{companyFilter?'No accounts match this company and search.':query?'No accounts match your search.':'No accounts found.'}</p>}</div>}
+   </section>
+   <form className="company-card" onSubmit={e=>{e.preventDefault();act(async()=>{await api.createAdmin(invite);setInvite({firstName:'',lastName:'',email:''});},'Platform Admin account created and invitation queued.');}}><h2>Invite a Platform Admin</h2><p>They will choose their password when accepting the invitation.</p><fieldset disabled={busy}><label className="company-field">First name<input required maxLength={100} autoComplete="given-name" value={invite.firstName} onChange={e=>setInvite({...invite,firstName:e.target.value})}/></label><label className="company-field">Last name<input required maxLength={100} autoComplete="family-name" value={invite.lastName} onChange={e=>setInvite({...invite,lastName:e.target.value})}/></label><label className="company-field">Admin email<input type="email" required maxLength={255} autoComplete="email" value={invite.email} onChange={e=>setInvite({...invite,email:e.target.value})}/></label><button className="button button-primary">Create and invite Platform Admin</button></fieldset></form>
+  </div>
+ </div>;
+}
+export function PlatformAudit(){
+ const [rows,setRows]=useState([]),[page,setPage]=useState(0),[error,setError]=useState(''),[loading,setLoading]=useState(true),[revision,setRevision]=useState(0);
+ useEffect(()=>{let active=true;setRows([]);setLoading(true);setError('');api.audit(page).then(r=>{if(active)setRows(r.data);}).catch(e=>{if(active)setError(failure(e));}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;};},[page,revision]);
+ return <div className="page-container platform-page highlighted-workspace"><ScreenTitle title="Platform audit" icon="file" eyebrow="PLATFORM ADMINISTRATION" description="Company provisioning, plan changes, availability and account actions."/>
+  {error&&<p className="error-message" role="alert">{error}</p>}
+  <section className="company-card"><div className="company-section-heading"><div><h2>Platform activity</h2><p>Company operations and private employee content are excluded.</p></div><button className="button button-secondary" disabled={loading} onClick={()=>setRevision(v=>v+1)}>Reload activity</button></div>
+   {loading?<LoadingIndicator label="Loading platform activity..."/>:<div>{rows.map(r=><article className="platform-audit-row" key={r.id}><span className="platform-audit-marker" aria-hidden="true"/><div><strong>{r.action.replaceAll('_',' ')}</strong><p>{r.actor_email} · {r.company_name||r.target_email||'Platform'}</p>{r.reason&&<p className="platform-audit-reason">{r.reason}</p>}</div><time dateTime={r.created_at}>{new Date(r.created_at).toLocaleString()}</time></article>)}{!rows.length&&!error&&<p className="platform-empty">No platform activity on this page.</p>}</div>}
+   <nav className="platform-pagination" aria-label="Audit pages"><button className="button button-secondary" disabled={loading||!page} onClick={()=>setPage(p=>p-1)}>Previous</button><span>Page {page+1}</span><button className="button button-secondary" disabled={loading||rows.length<100} onClick={()=>setPage(p=>p+1)}>Next</button></nav>
+  </section>
+ </div>;
+}

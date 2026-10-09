@@ -66,12 +66,15 @@ public class UpdateProfileRequest {
     @Size(max = 100)
     private String lastName;
 
-    @NotBlank
     @Size(max = 120)
     private String jobTitle;
 
     @NotNull
     private LocalDate dateOfBirth;
+    @Size(max=100) private String gender;
+    @Size(max=100) private String race;
+    @Size(max=100) private String ethnicity;
+    private LocalDate joiningDate;
 
     @Pattern(regexp = "^$|\\d{4}", message = "SSN last 4 must be blank or exactly 4 digits")
     private String ssnLast4;

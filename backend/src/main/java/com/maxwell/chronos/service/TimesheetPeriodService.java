@@ -103,7 +103,7 @@ public class TimesheetPeriodService {
     private boolean eligibleDay(long userId, long projectId, LocalDate day) {
         if (day.getDayOfWeek()==DayOfWeek.SATURDAY || day.getDayOfWeek()==DayOfWeek.SUNDAY) return false;
         if (!eligible(userId,projectId,new Period(day,day,"DAILY"))) return false;
-        return !Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS (SELECT 1 FROM vacation_requests WHERE user_id=? AND status IN ('APPROVED','LOCKED') AND start_date<=? AND end_date>=?)",Boolean.class,userId,day,day));
+        return !Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS (SELECT 1 FROM vacation_requests WHERE company_id=(SELECT company_id FROM projects WHERE id=?) AND user_id=? AND status IN ('APPROVED','LOCKED') AND start_date<=? AND end_date>=?)",Boolean.class,projectId,userId,day,day));
     }
     private boolean needsSubmission(long userId, long projectId, Period period) {
         for(LocalDate day=period.start();!day.isAfter(period.end());day=day.plusDays(1)) if(eligibleDay(userId,projectId,day)) return true;
@@ -111,6 +111,7 @@ public class TimesheetPeriodService {
     }
 
     public Map<String,Object> view(long requesterId, long userId, long projectId, LocalDate day) {
+        access.requireActiveCompanyAccess(access.companyId(projectId),requesterId);
         if (requesterId!=userId && !access.mayReview(projectId,requesterId,userId,false,"Queue preview")
                 && !access.mayManageProject(projectId,requesterId)) throw new AccessDeniedException("Approval period access denied");
         Period period=period(projectId,day);
@@ -121,15 +122,15 @@ public class TimesheetPeriodService {
         Instant correction=instant(row,"correction_until");
         boolean correctionOpen=correction!=null && now.isBefore(correction);
         boolean required=needsSubmission(userId,projectId,period);
-        Instant graceEnds=period.end().plusDays(8).atStartOfDay(ZoneId.of(employee.getTimezone())).toInstant();
-        boolean open=!today(employee).isBefore(period.start())
-                && (now.isBefore(graceEnds) || correctionOpen);
+        boolean open=!today(employee).isBefore(period.start()) && eligible(userId,projectId,period);
         var result=new java.util.LinkedHashMap<String,Object>();
         result.put("id",row.get("id")); result.put("userId",userId); result.put("projectId",projectId);
         result.put("companyId",row.get("company_id")); result.put("periodStart",period.start()); result.put("periodEnd",period.end());
         result.put("frequency",period.frequency()); result.put("status",status); result.put("totalHours",hours(userId,projectId,period));
         result.put("late",Boolean.TRUE.equals(row.get("is_late")) || status.equals("DRAFT") && required && now.isAfter(cutoff(period,employee)));
         result.put("submittedAt",row.get("submitted_at"));
+        result.put("submissionDeadline",cutoff(period,employee));
+        result.put("employeeTimezone",employee.getTimezone());
         result.put("reviewedAt",row.get("reviewed_at")); result.put("reviewComment",row.get("review_comment"));
         Long reviewerId=row.get("reviewed_by_id")==null?null:number(row,"reviewed_by_id");
         String reviewerName=reviewerId==null?null:users.findById(reviewerId).map(User::getFullName).orElse(null);
@@ -142,9 +143,14 @@ public class TimesheetPeriodService {
         result.put("userName",employee.getFullName());
         result.put("projectCode",project(projectId).getCode());
         result.put("projectName",project(projectId).getName());
-        result.put("userJobTitle",employee.getJobTitle());
+        result.put("userJobTitle",access.employmentJobTitle(((Number)row.get("company_id")).longValue(),userId));
         result.put("year",period.start().getYear()); result.put("month",period.start().getMonthValue());
-        result.put("timesheetId",db.query("SELECT id FROM timesheets WHERE user_id=? AND company_id=? AND year=? AND month=?",(rs,i)->rs.getLong(1),userId,row.get("company_id"),period.start().getYear(),period.start().getMonthValue()).stream().findFirst().orElse(null));
+        result.put("timesheetId",db.query("""
+                SELECT t.id FROM timesheets t WHERE t.user_id=? AND t.company_id=?
+                AND ((t.year=? AND t.month=?) OR EXISTS (
+                    SELECT 1 FROM time_entries e WHERE e.timesheet_id=t.id AND e.project_id=? AND e.entry_date BETWEEN ? AND ?))
+                ORDER BY t.year,t.month LIMIT 1
+                """,(rs,i)->rs.getLong(1),userId,row.get("company_id"),period.start().getYear(),period.start().getMonthValue(),projectId,period.start(),period.end()).stream().findFirst().orElse(null));
         result.put("openingReason",row.get("opening_reason"));
         result.put("openingRequestedAt",row.get("opening_requested_at"));
         Map<String,Object> assignment=db.queryForList("SELECT COALESCE(planned_hours,0) AS planned_hours,start_date,end_date FROM project_assignments WHERE project_id=? AND user_id=?",projectId,userId)
@@ -155,6 +161,7 @@ public class TimesheetPeriodService {
         result.put("timeEntries",entries.findPeriodEntries(userId,projectId,period.start(),period.end()).stream().map(entry -> {
             var item=new java.util.LinkedHashMap<String,Object>();
             item.put("entryDate",entry.getEntryDate()); item.put("hours",entry.getHours()); item.put("notes",entry.getNotes());
+            item.put("late",Boolean.TRUE.equals(row.get("is_late")) && entry.getHours().signum()>0);
             item.put("sessions",entry.getSessions().stream().map(session -> Map.of("loginTime",session.getLoginTime(),"logoutTime",session.getLogoutTime())).toList());
             return item;
         }).toList());
@@ -170,9 +177,11 @@ public class TimesheetPeriodService {
     }
 
     public void requireEditable(long userId, long projectId, LocalDate day) {
+        db.queryForObject("SELECT id FROM users WHERE id=? FOR NO KEY UPDATE",Long.class,userId);
+        access.lockCompanyAdministration(access.companyId(projectId));
         access.requireMaySubmit(projectId,userId,"timesheets");
         Map<String,Object> period=view(userId,userId,projectId,day);
-        if (!Boolean.TRUE.equals(period.get("editable"))) throw new IllegalArgumentException("This approval period is closed; request a reopening from your Project Admin");
+        if (!Boolean.TRUE.equals(period.get("editable"))) throw new IllegalArgumentException("This approval period is read-only. Submitted periods must be reviewed; approved periods require an opening.");
         if ("APPROVED".equals(period.get("status"))) {
             db.update("UPDATE timesheet_approval_periods SET status='DRAFT',reviewed_at=NULL,reviewed_by_id=NULL,approved_bill_rate=NULL WHERE id=?",period.get("id"));
             event(((Number)period.get("id")).longValue(),userId,"CORRECTION_STARTED",null);
@@ -180,10 +189,13 @@ public class TimesheetPeriodService {
     }
 
     public Map<String,Object> submit(long userId,long projectId,LocalDate day) {
+        db.queryForObject("SELECT id FROM users WHERE id=? FOR NO KEY UPDATE",Long.class,userId);
+        access.lockCompanyAdministration(access.companyId(projectId));
         access.requireMaySubmit(projectId,userId,"timesheets");
         Period period=period(projectId,day);
         if(!eligible(userId,projectId,period)) throw new IllegalArgumentException("Project assignment does not cover this period");
         Map<String,Object> row=ensure(userId,projectId,period);
+        if ("SUBMITTED".equals(row.get("status"))) throw new IllegalArgumentException("This approval period is already submitted and awaiting review");
         requireEditable(userId,projectId,day);
         User employee=user(userId);
         boolean late=Instant.now().isAfter(cutoff(period,employee));
@@ -197,6 +209,35 @@ public class TimesheetPeriodService {
         if(reviewer!=null && reviewer!=userId) notifications.createNotification(reviewer,"TIMESHEET_SUBMITTED","Timesheet awaiting review",
                 project.getCode()+" " + period.start()+" to "+period.end(),number(row,"id"),"TimesheetApprovalPeriod");
         return view(userId,userId,projectId,day);
+    }
+
+    public List<Map<String,Object>> month(long requesterId,long userId,long projectId,LocalDate day) {
+        var month=YearMonth.from(day);
+        var result=new java.util.ArrayList<Map<String,Object>>();
+        for(LocalDate cursor=month.atDay(1);!cursor.isAfter(month.atEndOfMonth());) {
+            Period period=period(projectId,cursor);
+            var snapshot=view(requesterId,userId,projectId,cursor);
+            // The representative date stays in the displayed month for weeks crossing its boundary.
+            snapshot.put("selectionDate",cursor);
+            result.add(snapshot);
+            cursor=period.end().plusDays(1);
+        }
+        return result;
+    }
+
+    public List<Map<String,Object>> submitBatch(long userId,long projectId,List<LocalDate> dates) {
+        if(dates==null || dates.isEmpty() || dates.size()>31 || dates.stream().anyMatch(java.util.Objects::isNull))
+            throw new IllegalArgumentException("Select between 1 and 31 approval periods");
+        var month=YearMonth.from(dates.getFirst());
+        if(dates.stream().anyMatch(date->!YearMonth.from(date).equals(month)))
+            throw new IllegalArgumentException("Select approval periods within one calendar month");
+        var seen=new java.util.HashSet<Period>();
+        var result=new java.util.ArrayList<Map<String,Object>>();
+        for(var day:dates) {
+            if(!seen.add(period(projectId,day))) throw new IllegalArgumentException("Select each approval period only once");
+            result.add(submit(userId,projectId,day));
+        }
+        return result;
     }
 
     public Map<String,Object> decide(long reviewerId,long id,boolean approve,String comment,String fallbackReason) {
@@ -224,7 +265,8 @@ public class TimesheetPeriodService {
         Map<String,Object> row=ensure(userId,projectId,period);
         LocalDate today=today(user(userId));
         boolean approved="APPROVED".equals(row.get("status"));
-        if(!today.isAfter(period.end().plusDays(approved?0:7)) || today.isAfter(period.end().plusDays(30)))
+        if(!approved) throw new IllegalArgumentException("Only approved periods require an opening; draft and rejected periods can be edited directly");
+        if(!today.isAfter(period.end()) || today.isAfter(period.end().plusDays(30)))
             throw new IllegalArgumentException("Reopening is available within 30 days after the approval period closes");
         if("SUBMITTED".equals(row.get("status")) || "PENDING".equals(row.get("opening_status")))
             throw new IllegalArgumentException("This approval period is already awaiting review");

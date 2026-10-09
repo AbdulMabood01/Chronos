@@ -17,6 +17,15 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class ApprovedReportTest {
+    @Test void pdfBrandingUsesOnlyTheOwningCompanyDisplayName() throws Exception {
+        byte[] bytes;
+        try(var pdf=new TimesheetPdf("TEST","October 2026","Company A Limited")){pdf.section("Employee");pdf.field("Employee","Sam Member");bytes=pdf.finish();}
+        try(var document=PDDocument.load(bytes)){
+            assertEquals("Company A Limited",document.getDocumentInformation().getAuthor());
+            String result=new PDFTextStripper().getText(document);
+            assertTrue(result.contains("Company A Limited"));assertFalse(result.contains("MAXWELL"));
+        }
+    }
     private final TimesheetRepository sheets = mock(TimesheetRepository.class);
     private final TimesheetProjectSubmissionRepository submissions = mock(TimesheetProjectSubmissionRepository.class);
     private final ProjectAssignmentRepository assignments = mock(ProjectAssignmentRepository.class);
@@ -83,7 +92,7 @@ class ApprovedReportTest {
         assertTrue(result.contains("Taylor Morgan"));
         assertTrue(result.contains("$85.00 per hour"));
     }
-    @Test void paginatesAllEntriesEmbedsLogoAndKeepsProjectScope() throws Exception {
+    @Test void paginatesAllEntriesUsesSafeBrandingAndKeepsProjectScope() throws Exception {
         for (int i = 1; i <= 30; i++) {
             TimeEntry entry = TimeEntry.builder().id((long) i).timesheet(sheet).project(project)
                     .entryDate(LocalDate.of(2026, 9, i)).hours(new BigDecimal("8"))
@@ -103,9 +112,9 @@ class ApprovedReportTest {
             assertTrue(result.contains("240.00"));
             for (int i = 0; i < pdf.getNumberOfPages(); i++) {
                 assertTrue(result.contains("Page " + (i + 1) + " of " + pdf.getNumberOfPages()));
-                boolean hasImage = false;
-                for (var name : pdf.getPage(i).getResources().getXObjectNames()) hasImage |= pdf.getPage(i).getResources().isImageXObject(name);
-                assertTrue(hasImage, "Company logo missing on page " + (i + 1));
+                var pageText=new PDFTextStripper();pageText.setStartPage(i+1);pageText.setEndPage(i+1);
+                assertTrue(pageText.getText(pdf).contains("Chronos"));
+                assertFalse(pageText.getText(pdf).contains("MAXWELL"));
             }
             Path output = Path.of("target", "report-preview");
             Files.createDirectories(output);

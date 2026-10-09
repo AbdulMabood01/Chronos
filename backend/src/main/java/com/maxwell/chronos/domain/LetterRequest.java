@@ -20,6 +20,14 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 public class LetterRequest {
+    @Column(columnDefinition="text") private String issuedText;
+    @Column(columnDefinition="text") private String issuedDefinition;
+    @JdbcTypeCode(SqlTypes.VARBINARY) @Column(columnDefinition="bytea") private byte[] issuedPdf;
+    @Column(name = "company_id")
+    private Long companyId;
+
+    @Version
+    private long version;
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

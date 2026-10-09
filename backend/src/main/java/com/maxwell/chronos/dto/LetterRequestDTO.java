@@ -15,6 +15,8 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 public class LetterRequestDTO {
+    private Long companyId;
+    private long version;
     private Long id;
     private Long userId;
     private String userName;

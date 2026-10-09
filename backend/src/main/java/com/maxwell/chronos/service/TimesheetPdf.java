@@ -3,7 +3,6 @@ package com.maxwell.chronos.service;
 import org.apache.pdfbox.pdmodel.*;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
-import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 
 import java.awt.Color;
 import java.io.*;
@@ -20,7 +19,7 @@ final class TimesheetPdf implements AutoCloseable {
     private final PDDocument document = new PDDocument();
     private final String reference;
     private final String period;
-    private final PDImageXObject logo;
+    private final String companyName;
     private PDPageContentStream content;
     private float y;
     private boolean table;
@@ -28,13 +27,15 @@ final class TimesheetPdf implements AutoCloseable {
     private int rowIndex;
 
     TimesheetPdf(String reference, String period) throws IOException {
+        this(reference,period,"Chronos");
+    }
+    TimesheetPdf(String reference, String period,String companyName) throws IOException {
         this.reference = reference;
         this.period = period;
-        try (InputStream in = TimesheetPdf.class.getResourceAsStream("/Logo.png")) {
-            if (in == null) throw new IOException("Company logo is missing from report resources");
-            logo = PDImageXObject.createFromByteArray(document, in.readAllBytes(), "Maxwell logo");
+        this.companyName=companyName==null||companyName.isBlank()?"Chronos":companyName;
+        try {
             document.getDocumentInformation().setTitle("Approved Timesheet | " + period);
-            document.getDocumentInformation().setAuthor("Maxwell Network Inc.");
+            document.getDocumentInformation().setAuthor(this.companyName);
             newPage();
         } catch (IOException | RuntimeException ex) {
             document.close();
@@ -48,9 +49,8 @@ final class TimesheetPdf implements AutoCloseable {
         document.addPage(page);
         content = new PDPageContentStream(document, page);
         fill(0, 784, 612, 8, BURGUNDY);
-        float logoWidth = 134;
-        float logoHeight = logoWidth * logo.getHeight() / logo.getWidth();
-        content.drawImage(logo, LEFT, 768 - logoHeight, logoWidth, logoHeight);
+        var nameLines=wrap(companyName,218,13,true);
+        for(int i=0;i<Math.min(4,nameLines.size());i++)text(nameLines.get(i),LEFT,752-i*17,13,true,NAVY);
         text("APPROVED TIMESHEET", 282, 740, 19, true, NAVY);
         text(period, 282, 718, 11, false, MUTED);
         text(reference, 282, 701, 9, false, MUTED);
@@ -195,7 +195,7 @@ final class TimesheetPdf implements AutoCloseable {
                     PDPageContentStream.AppendMode.APPEND, true, true)) {
                 content = footer;
                 fill(LEFT, 49, WIDTH, 0.5f, new Color(204, 213, 219));
-                text("MAXWELL NETWORK INC.  |  Confidential employee record", LEFT, 34, 8, false, MUTED);
+                text("Confidential employee record", LEFT, 34, 8, false, MUTED);
                 text("Page " + (i + 1) + " of " + pages, 505, 34, 8, false, MUTED);
             } finally {
                 content = null;

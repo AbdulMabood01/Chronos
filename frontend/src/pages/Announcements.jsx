@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { announcementAPI } from '../api';
+import { companyAnnouncementAPI } from '../api';
+import { useCompany } from '../CompanyContext';
 import { useAuth } from '../AuthContext';
 import './Announcements.css';
 
@@ -12,13 +13,14 @@ function Meta({ item }) {
 }
 
 export function AnnouncementPanel({ className = '' }) {
+  const {currentCompany}=useCompany(); const companyId=currentCompany?.id; const announcementAPI=companyAnnouncementAPI(companyId);
   const [items, setItems] = useState([]);
   const [state, setState] = useState('loading');
   useEffect(() => {
     let active = true;
     announcementAPI.list().then(r => { if (active) { setItems(r.data); setState('ready'); } }).catch(() => { if (active) setState('error'); });
     return () => { active = false; };
-  }, []);
+  }, [companyId]);
   const item = items.find(announcement => !announcement.acknowledged_at);
   if (state !== 'ready' || !item) return null;
   return <section className={`announcements announcement-banner ${className}`} aria-label="Company announcements">
@@ -34,9 +36,11 @@ export function AnnouncementPanel({ className = '' }) {
 const emptyForm = () => ({ title: '', content: '', publishDate: new Date().toISOString().slice(0, 10), expirationDate: '', priority: 'NORMAL', status: 'DRAFT', acknowledgmentRequired: false, version: 0 });
 export default function Announcements() {
   const { user } = useAuth();
-  const admin = user?.role === 'ADMIN';
+  const {currentCompany,companyCapabilities}=useCompany(); const companyId=currentCompany?.id; const announcementAPI=companyAnnouncementAPI(companyId);
+  const admin = companyCapabilities.canManageCompanyAnnouncements===true;
   const [params, setParams] = useSearchParams();
-  const management = admin;
+  const [memberView,setMemberView]=useState(false);
+  const management = admin && !memberView;
   const [items, setItems] = useState([]);
   const [selected, setSelected] = useState(null);
   const [tracking, setTracking] = useState(null);
@@ -57,7 +61,7 @@ export default function Announcements() {
       .then(([list, detail]) => { if (active) { setItems(list.data.map(i => detail?.data.id === i.id ? detail.data : i)); setSelected(detail?.data || null); } })
       .catch(e => { if (active) setError(failure(e)); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [management, id]);
+  }, [companyId,management, id]);
   const act = async callback => {
     setBusy(true); setError(''); setNotice('');
     try { await callback(); } catch (e) { setError(failure(e)); } finally { setBusy(false); }
@@ -89,12 +93,12 @@ export default function Announcements() {
     const url = URL.createObjectURL(r.data); const link = document.createElement('a'); link.href = url; link.download = selected.attachment_name; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
   const filtered = items.filter(item => filter === 'ALL' || (filter === 'UNREAD' ? !item.viewed_at : filter === 'PENDING' ? item.acknowledgment_required && !item.acknowledged_at : item.status === filter));
-  return <div className={`page-container announcements${management ? ' announcement-management' : ''}`}><div className="announcement-heading accent-page-header"><div>{!management && <span className="eyebrow">COMPANY UPDATES</span>}<h1>Announcements</h1>{!management && <p>News, updates, and the things we need you to know.</p>}</div>{management && <button className="button" disabled={busy} onClick={() => edit(null)}>New announcement</button>}</div>
+  return <div className={`page-container announcements${management ? ' announcement-management' : ''}`}><div className="announcement-heading"><div>{!management && <span className="eyebrow">COMPANY UPDATES</span>}<h1>Announcements</h1>{admin && <button type="button" onClick={()=>setMemberView(v=>!v)}>{memberView?"Manage announcements":"Read as company member"}</button>}{!management && <p>News, updates, and the things we need you to know.</p>}</div>{management && <button className="button" disabled={busy} onClick={() => edit(null)}>New announcement</button>}</div>
     {error && <div className="error-message" role="alert">{error} <button disabled={busy} onClick={() => act(async () => { await reload(); if (id) setSelected((await announcementAPI.open(id, management)).data); })}>Reload</button></div>}{notice && <p role="status">{notice}</p>}
     {form ? <form className="announcement-editor announcement-card" onSubmit={save}><h2>{form.id ? 'Edit announcement' : 'New announcement'}</h2><fieldset disabled={busy}>
       <label>Title<input required maxLength={200} value={form.title} onChange={e => field('title', e.target.value)}/></label>
       <label>Message<textarea required maxLength={50000} rows={8} value={form.content} onChange={e => field('content', e.target.value)}/></label>
-      <div className="announcement-form-grid"><label>Publish date<input required type="date" value={form.publishDate} onChange={e => field('publishDate', e.target.value)}/></label><label>Expiration date (optional)<input type="date" min={form.publishDate} value={form.expirationDate} onChange={e => field('expirationDate', e.target.value)}/></label><label>Priority<select value={form.priority} onChange={e => field('priority', e.target.value)}>{['NORMAL', 'IMPORTANT', 'URGENT'].map(v => <option key={v} value={v}>{label(v)}</option>)}</select></label><label>Status<select value={form.status} onChange={e => field('status', e.target.value)}>{['DRAFT', 'PUBLISHED', 'ARCHIVED'].map(v => <option key={v} value={v}>{label(v)}</option>)}</select></label></div>
+      <div className="announcement-form-grid"><label>Publish date<input required type="date" value={form.publishDate} onChange={e => field('publishDate', e.target.value)}/></label><label>Expiration date (optional)<input type="date" min={form.publishDate} value={form.expirationDate} onChange={e => field('expirationDate', e.target.value)}/></label><label>Priority<select value={form.priority} onChange={e => field('priority', e.target.value)}>{['NORMAL', 'IMPORTANT', 'URGENT'].map(v => <option key={v} value={v}>{label(v)}</option>)}</select></label><label>Status<select aria-label="Status" value={form.status} onChange={e => field('status', e.target.value)}>{['DRAFT', 'PUBLISHED', 'ARCHIVED'].map(v => <option key={v} value={v}>{label(v)}</option>)}</select></label></div>
       <p className="announcement-hint">Dates use UTC. Published announcements appear on their publish date and remain visible through their expiration date.</p>
       <label className="announcement-checkbox"><input type="checkbox" checked={form.acknowledgmentRequired} onChange={e => field('acknowledgmentRequired', e.target.checked)}/>Require employee acknowledgment</label>
       <label>Attachment (optional, up to 5 MB)<input type="file" onChange={e => { const next = e.target.files[0]; if (next && (next.size > 5 * 1024 * 1024 || !next.size)) { setError('Choose a non-empty file up to 5 MB.'); e.target.value = ''; setFile(null); } else { setError(''); setFile(next || null); } }}/></label>
@@ -106,7 +110,7 @@ export default function Announcements() {
       {selected.attachment_name && <button disabled={busy} onClick={download}>Download {selected.attachment_name}</button>}
       {!management && selected.acknowledgment_required && <div className="announcement-ack">{selected.acknowledged_at ? <p role="status">✓ You acknowledged this announcement.</p> : <><p>Please confirm that you have read this announcement.</p><button className="button" disabled={busy} onClick={() => act(async () => { await announcementAPI.acknowledge(selected.id, selected.version); setSelected((await announcementAPI.open(selected.id)).data); await reload(); })}>Acknowledge announcement</button></>}</div>}
       {management && <><div className="announcement-actions"><button disabled={busy} onClick={() => edit(selected)}>Edit</button>{selected.status !== 'PUBLISHED' && <button disabled={busy} onClick={() => changeStatus('PUBLISHED')}>Publish</button>}{selected.status !== 'ARCHIVED' && <button disabled={busy} onClick={() => changeStatus('ARCHIVED')}>Archive</button>}<button disabled={busy} onClick={() => act(async () => setTracking((await announcementAPI.tracking(selected.id)).data))}>View tracking</button><button className="announcement-delete" disabled={busy} onClick={() => { if (window.confirm('Delete this announcement and all its tracking? This cannot be undone.')) act(async () => { await announcementAPI.remove(selected.id, selected.version); setParams({}); await reload(); }); }}>Delete</button></div>
-      {tracking && <section aria-label="Announcement tracking"><h3>Employee engagement</h3><div className="announcement-statistics"><span><strong>{tracking.viewed} / {tracking.total}</strong> viewed</span><span><strong>{tracking.acknowledged} / {tracking.total}</strong> acknowledged</span></div><p className="announcement-hint">Includes all active employee accounts. Management previews do not count as views.</p><label className="announcement-checkbox"><input type="checkbox" checked={pendingOnly} onChange={e => setPendingOnly(e.target.checked)}/>Show only employees who have not acknowledged</label><div className="announcement-table"><table><thead><tr><th>Employee</th><th>Viewed</th><th>Acknowledged</th></tr></thead><tbody>{tracking.employees.filter(e => !pendingOnly || !e.acknowledged_at).map(e => <tr key={e.id}><td>{e.name}<small>{e.email}</small></td><td>{e.viewed_at ? 'Yes' : 'No'}</td><td>{e.acknowledged_at ? 'Yes' : 'No'}</td></tr>)}</tbody></table>{pendingOnly && tracking.employees.every(e => e.acknowledged_at) && <p>Everyone has acknowledged this announcement.</p>}</div></section>}</>}
+      {tracking && <section aria-label="Announcement tracking"><h3>Employee engagement</h3><div className="announcement-statistics"><span><strong>{tracking.viewed} / {tracking.total}</strong> viewed</span><span><strong>{tracking.acknowledged} / {tracking.total}</strong> acknowledged</span></div><p className="announcement-hint">Includes active members of this company. Management previews do not count as views.</p><label className="announcement-checkbox"><input type="checkbox" checked={pendingOnly} onChange={e => setPendingOnly(e.target.checked)}/>Show only employees who have not acknowledged</label><div className="announcement-table"><table><thead><tr><th>Employee</th><th>Viewed</th><th>Acknowledged</th></tr></thead><tbody>{tracking.employees.filter(e => !pendingOnly || !e.acknowledged_at).map(e => <tr key={e.id}><td>{e.name}<small>{e.email}</small></td><td>{e.viewed_at ? 'Yes' : 'No'}</td><td>{e.acknowledged_at ? 'Yes' : 'No'}</td></tr>)}</tbody></table>{pendingOnly && tracking.employees.every(e => e.acknowledged_at) && <p>Everyone has acknowledged this announcement.</p>}</div></section>}</>}
     </article> : <><label className="announcement-filter">Show<select value={filter} onChange={e => setFilter(e.target.value)}>{(management ? ['ALL', 'DRAFT', 'PUBLISHED', 'ARCHIVED'] : ['ALL', 'UNREAD', 'PENDING']).map(v => <option key={v} value={v}>{v === 'PENDING' ? 'Awaiting acknowledgment' : label(v)}</option>)}</select></label>{loading ? <p role="status">Loading announcements…</p> : <div className="announcement-list">{filtered.map(item => <button key={item.id} className={`announcement-card ${!item.viewed_at && !management ? 'unread' : ''} ${item.priority.toLowerCase()}`} onClick={() => setParams({ id: item.id })}><Meta item={item}/><h2>{item.title}</h2><p className="announcement-excerpt">{item.content}</p>{management && <span>{label(item.status)}</span>}<span className="announcement-open">Open announcement →</span></button>)}{!filtered.length && !error && <div className="announcement-card"><h2>You're all caught up</h2><p>No announcements match this view.</p></div>}</div>}</>}
   </div>;
 }

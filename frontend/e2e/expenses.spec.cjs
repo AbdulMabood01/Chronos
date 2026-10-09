@@ -5,15 +5,16 @@ const { apiAs, resetFixtures } = require('./support/api.cjs');
 test('expense changes, approval, and project totals stay in sync', async ({ page, request }) => {
   test.setTimeout(120000);
   const fixture = await resetFixtures(request);
-  const manager = await apiAs(request, 'projectAdmin');
+  const owner = await apiAs(request, 'projectAdmin');
+  const manager = await apiAs(request, 'manager');
   const project = (await (await manager.get('/api/projects')).json()).find(p => p.id === fixture.projectId);
-  expect((await manager.put(`/api/projects/${fixture.projectId}`, { data: {
+  expect((await owner.put(`/api/projects/${fixture.projectId}`, { data: {
     code: project.code, name: project.name, description: project.description, status: project.status,
     projectManagerId: project.projectManagerId, projectManagerHoursApproverId: project.projectManagerHoursApproverId,
     expenseBudget: 100,
   }})).ok()).toBeTruthy();
 
-  await authenticatePage(page, request, 'employee');
+  await authenticatePage(page, request, 'employee', fixture.companyId);
   await page.goto('/expenses');
   await page.getByRole('combobox', { name: 'Project', exact: true }).selectOption(String(fixture.projectId));
   await page.getByRole('combobox', { name: 'Category', exact: true }).selectOption('TRAVEL');
@@ -42,7 +43,7 @@ test('expense changes, approval, and project totals stay in sync', async ({ page
   await page.getByRole('button', { name: 'Resubmit for approval' }).click();
   await expect(page.getByText('Pending approval').first()).toBeVisible();
 
-  await authenticatePage(page, request, 'projectAdmin');
+  await authenticatePage(page, request, 'manager', fixture.companyId);
   await page.goto('/expenses');
   await expect(page.getByRole('heading', { name: 'Expense approvals' })).toHaveCount(0);
   await page.goto('/admin');
@@ -56,6 +57,7 @@ test('expense changes, approval, and project totals stay in sync', async ({ page
   expect(Number(totals.approved)).toBe(50);
   expect(Number(totals.pending)).toBe(0);
   expect(Number(totals.remaining)).toBe(50);
+  await authenticatePage(page, request, 'projectAdmin', fixture.companyId);
   await page.goto('/projects');
   await page.getByRole('button', { name: /E2E Core Project/ }).click();
   await expect(page.getByRole('img', { name: /Project expenses: 50.00 approved, 0.00 pending, 50.00 remaining/ })).toBeVisible();

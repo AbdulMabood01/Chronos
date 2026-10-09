@@ -1,8 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { eachDayOfInterval, endOfMonth, format, startOfMonth } from 'date-fns';
-import { vacationAPI } from '../api';
+import {federalHolidays} from '../utils/federalHolidays';
+import { companyLeaveAPI } from '../api';
+import {useCompany} from '../CompanyContext';
 import './WorkflowFeatures.css';
 export default function TeamLeaveCalendar() {
+  const {currentCompany}=useCompany();
   const [month, setMonth] = useState(() => format(new Date(), 'yyyy-MM'));
   const [absences, setAbsences] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -13,12 +16,13 @@ export default function TeamLeaveCalendar() {
     setAbsences([]); setError(''); setLoading(true);
     const [year, number] = month.split('-').map(Number);
     if (!year || !number) { setLoading(false); return; }
-    Promise.resolve().then(() => vacationAPI.getTeamCalendar(year, number))
+    if(!currentCompany){setLoading(false);return;}
+    Promise.resolve().then(() => companyLeaveAPI.calendar(currentCompany.id,year, number))
       .then(response => { if (current) setAbsences(response.data || []); })
       .catch(() => { if (current) setError('Could not load the team leave calendar.'); })
       .finally(() => { if (current) setLoading(false); });
     return () => { current = false; };
-  }, [month, refresh]);
+  }, [month, refresh,currentCompany?.id]);
   const days = useMemo(() => {
     if (!month) return [];
     const date = new Date(month + '-01T00:00:00');
@@ -27,6 +31,7 @@ export default function TeamLeaveCalendar() {
   const [selected, setSelected] = useState('');
   useEffect(() => setSelected(''), [month]);
   const onDay = date => absences.filter(item => item.startDate <= date && item.endDate >= date);
+  const holidays=useMemo(()=>federalHolidays(Number(month.slice(0,4))||new Date().getFullYear()),[month]);
   const selectedAbsences = selected ? onDay(selected) : [];
   return <section className="card workflow-panel" aria-labelledby="team-calendar-title">
     <div className="panel-heading"><div><h2 id="team-calendar-title">Team leave calendar</h2><p>Approved absences for your teams. Select a day to see who is away.</p></div>
@@ -37,14 +42,14 @@ export default function TeamLeaveCalendar() {
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => <div className="team-calendar-weekday" key={day}>{day}</div>)}
         {Array.from({ length: days[0]?.getDay() || 0 }, (_, index) => <div aria-hidden="true" key={'blank-' + index} />)}
         {days.map(day => { const date = format(day, 'yyyy-MM-dd'), away = onDay(date), count = new Set(away.map(item => item.userId)).size;
-          return <button type="button" key={date} className={'team-calendar-day' + (count ? ' has-absence' : '')} aria-pressed={selected === date}
-            aria-label={format(day, 'MMMM d, yyyy') + ': ' + count + ' away'} onClick={() => setSelected(date)}>
-            <span>{day.getDate()}</span>{count > 0 && <strong>{count} away</strong>}
+          return <button type="button" key={date} className={'team-calendar-day' + (count ? ' has-absence' : '')+(holidays.has(date)?' has-holiday':'')} aria-pressed={selected === date}
+            aria-label={format(day, 'MMMM d, yyyy') + ': ' + count + ' away'+(holidays.has(date)?': '+holidays.get(date):'')} onClick={() => setSelected(date)}>
+            <span>{day.getDate()}</span>{holidays.has(date)&&<small className="calendar-holiday">{holidays.get(date)}</small>}{count > 0 && <strong>{count} away</strong>}
           </button>;
         })}
       </div>
-      {selected && <div className="team-day-detail" aria-live="polite"><h3>Away on {selected}</h3>{!selectedAbsences.length ? <p>No approved absences.</p> : <ul>{selectedAbsences.map(item => <li key={item.id}><strong>{item.userName}</strong><span>{item.startDate} to {item.endDate}</span></li>)}</ul>}</div>}
-      <p className="table-subtext">Calendar shows full approved date ranges, including weekends.</p>
+      {selected && <div className="team-day-detail" aria-live="polite"><h3>Away on {selected}</h3>{holidays.has(selected)&&<p><strong>{holidays.get(selected)}</strong>: excluded from leave deductions.</p>}{!selectedAbsences.length ? <p>No approved absences.</p> : <ul>{selectedAbsences.map(item => <li key={item.id}><strong>{item.userName}</strong><span>{item.startDate} to {item.endDate}</span></li>)}</ul>}</div>}
+      <p className="table-subtext">U.S. federal holidays are marked and excluded from leave deductions. Calendar shows full approved date ranges.</p>
     </>}
   </section>;
 }

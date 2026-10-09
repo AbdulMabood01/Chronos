@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { employeeReportsAPI } from '../api';
+import { companyEmployeeReportsAPI,companyGovernanceAPI } from '../api';
+import { useCompany } from '../CompanyContext';
 import { categories, ReportProgress } from './EmployeeReports';
 import Icon from '../components/Icon';
 
@@ -7,6 +8,7 @@ const label = value => value.replaceAll('_', ' ').toLowerCase().replace(/\b\w/g,
 const date = value => value ? new Date(value).toLocaleString() : '—';
 
 export default function SubmittedReports({ SubmissionForm }) {
+  const {currentCompany,companyCapabilities}=useCompany(); const companyId=currentCompany?.id;const employeeReportsAPI=companyEmployeeReportsAPI(companyId);
   const [refresh, setRefresh] = useState(0);
   const [page, setPage] = useState(0);
   const [rows, setRows] = useState([]);
@@ -37,7 +39,7 @@ export default function SubmittedReports({ SubmissionForm }) {
     }
     load();
     return () => { active = false; };
-  }, [selectedId, page, refresh]);
+  }, [companyId,selectedId, page, refresh]);
   useEffect(() => {
     if (selectedId) heading.current?.focus();
     else if (returnId.current) document.getElementById('view-report-' + returnId.current)?.focus();
@@ -49,7 +51,7 @@ export default function SubmittedReports({ SubmissionForm }) {
         <button type="button" className={view === 'create' ? 'is-active' : ''} aria-current={view === 'create' ? 'page' : undefined} onClick={() => setView('create')}>Create report</button>
       </nav>
       <div hidden={view !== 'create'} className="report-compose-layout"><SubmissionForm key={formVersion} onSubmitted={(receipt, anonymous) => { setPage(0); setRefresh(v => v + 1); if (anonymous) { setLatestReportId(''); } else { setLatestReportId(receipt.reportId); setFormVersion(v => v + 1); setView('submitted'); } }} />
-        <aside className="report-compose-aside"><span className="report-kicker">BEFORE YOU BEGIN</span><h2>A clear account helps HR respond</h2><p>Describe what happened in your own words. Include dates, people, and supporting files when you have them.</p><div><Icon name="check" size={18}/><span>Only authorized HR Admins can review submissions.</span></div><div><Icon name="file" size={18}/><span>You can follow identified reports from this page.</span></div><div><Icon name="users" size={18}/><span>Anonymous reports cannot be linked to your account.</span></div></aside>
+        <aside className="report-compose-aside"><span className="report-kicker">BEFORE YOU BEGIN</span><h2>A clear account helps HR respond</h2><p>Describe what happened in your own words. Include dates, people, and supporting files when you have them.</p><div><Icon name="check" size={18}/><span>Only authorized designated confidential handlers can review submissions.</span></div><div><Icon name="file" size={18}/><span>You can follow identified reports from this page.</span></div><div><Icon name="users" size={18}/><span>Anonymous reports cannot be linked to your account.</span></div></aside>
       </div>
       <section className="concern-card report-list-panel" hidden={view !== 'submitted'} aria-label="Submitted Reports">
         <div className="concern-heading"><div><span className="report-kicker">YOUR CASES</span><h2>Submitted Reports</h2><p className="concern-help">Identified reports are kept here so you can follow their progress.</p></div><button disabled={loading} onClick={() => setRefresh(v => v + 1)}><Icon name="clock" size={16}/> Refresh reports</button></div>

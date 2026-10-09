@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../AuthContext';
-import { feedbackReviewsAPI as api } from '../api';
+import { companyFeedbackReviewsAPI } from '../api';
+import { useCompany } from '../CompanyContext';
 import './FeedbackReviews.css';
 
 const categories = { APPRECIATION: 'Appreciation / Recognition', GENERAL: 'General Feedback', COLLABORATION: 'Collaboration / Teamwork', COMMUNICATION: 'Communication', IMPROVEMENT: 'Areas for Improvement', OTHER: 'Other' };
@@ -28,7 +29,8 @@ function FeedbackContent({ content }) {
   </section>)}</div>;
 }
 
-export function EmployeeSearch({ selected, onSelect, exclude }) {
+export function EmployeeSearch({ selected, onSelect, exclude,reviewerOnly=false }) {
+  const {currentCompany}=useCompany(); const companyId=currentCompany?.id;const api=companyFeedbackReviewsAPI(companyId);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [error, setError] = useState('');
@@ -38,10 +40,10 @@ export function EmployeeSearch({ selected, onSelect, exclude }) {
     setResults([]); setError('');
     if (query.trim().length < 2 || selected) { setLoading(false); return; }
     setLoading(true);
-    const timer = setTimeout(() => api.employees(query).then(r => { if (active) setResults(r.data.filter(u => u.id !== exclude)); })
+    const timer = setTimeout(() => api.employees(query).then(r => { if (active) setResults(r.data.filter(u => u.id !== exclude && (!reviewerOnly || u.can_review))); })
       .catch(e => { if (active) setError(message(e)); }).finally(() => { if (active) setLoading(false); }), 250);
     return () => { active = false; clearTimeout(timer); };
-  }, [query, selected, exclude]);
+  }, [companyId,query, selected, exclude,reviewerOnly]);
   return <div className="employee-search">
     <label>Search employee by name or email<input value={query} maxLength={200} onChange={e => { setQuery(e.target.value); onSelect(null); }} placeholder="Enter at least 2 characters" /></label>
     {selected && <p role="status">Selected: <strong>{selected.first_name} {selected.last_name}</strong> ({selected.email}) <button type="button" onClick={() => { onSelect(null); setQuery(''); }}>Change employee</button></p>}
@@ -53,6 +55,7 @@ export function EmployeeSearch({ selected, onSelect, exclude }) {
 
 export function FeedbackPage() {
   const { user } = useAuth();
+  const {currentCompany,companyCapabilities}=useCompany(); const companyId=currentCompany?.id; const api=companyFeedbackReviewsAPI(companyId);
   const [tab, setTab] = useState('received');
   const [rows, setRows] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -70,7 +73,7 @@ export function FeedbackPage() {
     setBusy(true);
     api.feedback(tab === 'given').then(r => { if (active) setRows(r.data); }).catch(e => { if (active) setError(message(e)); }).finally(() => { if (active) setBusy(false); });
     return () => { active = false; };
-  }, [tab]);
+  }, [companyId,tab]);
   async function submit(e) {
     e.preventDefault();
     if (busy) return;
@@ -115,7 +118,8 @@ export function FeedbackPage() {
 
 export function PerformanceReviewsPage() {
   const { user } = useAuth();
-  const admin = user.role === 'ADMIN';
+  const {currentCompany,companyCapabilities}=useCompany(); const companyId=currentCompany?.id; const api=companyFeedbackReviewsAPI(companyId);
+  const admin = companyCapabilities.canManagePerformanceReviews===true;
   const [employee, setEmployee] = useState(null);
   const [rows, setRows] = useState([]);
   const [year, setYear] = useState('');
@@ -137,7 +141,7 @@ export function PerformanceReviewsPage() {
     api.reviews(admin ? employee?.id : undefined).then(r => { if (active) { setRows(r.data); const latest = r.data.find(row => desiredPeriod.current && row.review_year === desiredPeriod.current.year && row.quarter === desiredPeriod.current.quarter) || r.data[0]; desiredPeriod.current = null; if (latest) { setYear(String(latest.review_year)); setQuarter(String(latest.quarter)); } } })
       .catch(e => { if (active) setError(message(e)); }).finally(() => { if (active) setBusy(false); });
     return () => { active = false; };
-  }, [employee, admin, revision]);
+  }, [companyId,employee, admin, revision]);
   const selected = rows.find(r => String(r.review_year) === year && String(r.quarter) === quarter);
   const years = [...new Set([new Date().getFullYear(), ...rows.map(r => r.review_year)])].sort((a,b) => b-a);
   const matchingReviews = rows.filter(row => (row.employee_name + ' ' + row.employee_email).toLowerCase().includes(search.toLowerCase()) && (!status || Boolean(row.published_at) === (status === 'published'))
@@ -153,10 +157,11 @@ export function PerformanceReviewsPage() {
     try { await api.publish(selected.id, selected.version); desiredPeriod.current = { year: selected.review_year, quarter: selected.quarter }; setNotice('Review published to the employee.'); setRevision(r => r+1); }
     catch (e) { setError(message(e)); } finally { setBusy(false); }
   }
-  return <div className="page-container feedback-reviews feedback-page performance-page"><header className="performance-page-header"><div><span className="eyebrow">DEVELOPMENT &amp; GROWTH</span><h1>Performance Reviews</h1><p className="page-subtitle">Reflect on achievements, recognize strengths, and plan what comes next.</p></div><span className="performance-access">{admin ? "Review management" : "My quarterly reviews"}</span></header><p className="performance-visibility">{admin ? "Drafts are visible only to Admins. Publish a review when it is ready to share." : "Your published quarterly reviews, all in one place. Reviews are read-only."}</p>
-    {admin && <section className="card performance-directory"><><div className="performance-heading"><div><h2>{employee ? 'Employee review history' : 'All employee reviews'}</h2><p className="page-subtitle">Search an employee to create a quarterly review or view their history.</p></div>{employee && <button disabled={busy} onClick={() => setEmployee(null)}>All employee reviews</button>}</div><fieldset disabled={busy || !!form}><EmployeeSearch selected={employee} onSelect={value => { setEmployee(value); setNotice(''); }}/></fieldset></></section>}
+  return <div className="page-container feedback-reviews feedback-page performance-page"><header className="performance-page-header"><div><span className="eyebrow">DEVELOPMENT &amp; GROWTH</span><h1>Performance Reviews</h1><p className="page-subtitle">Reflect on achievements, recognize strengths, and plan what comes next.</p></div><span className="performance-access">{admin ? "Review management" : "My quarterly reviews"}</span></header><p className="performance-visibility">{admin ? "Drafts are visible only to designated reviewers. Publish a review when it is ready to share." : "Your published quarterly reviews, all in one place. Reviews are read-only."}</p>
+    {admin && <button onClick={()=>setEmployee({id:user.id,first_name:user.firstName,last_name:user.lastName,email:user.email})}>My published reviews</button>}
+    {admin && <section className="card performance-directory"><><div className="performance-heading"><div><h2>{employee ? 'Employee review history' : 'All employee reviews'}</h2><p className="page-subtitle">Search an employee to create a quarterly review or view their history.</p></div>{employee && <button disabled={busy} onClick={() => setEmployee(null)}>All employee reviews</button>}</div><fieldset disabled={busy || !!form}><EmployeeSearch reviewerOnly selected={employee} onSelect={value => { setEmployee(value); setNotice(''); }}/></fieldset></></section>}
     {error && <p className="feedback-message feedback-error" role="alert">{error}</p>}{notice && <p className="feedback-message" role="status">{notice}</p>}
-    {admin && employee && !form && <button className="button button-primary" disabled={busy} onClick={() => { setForm({ year: new Date().getFullYear(), quarter: Math.floor(new Date().getMonth()/3)+1, version: 0, ...Object.fromEntries(Object.keys(fields).map(k => [k,''])) }); setAudit(null); }}>Create quarterly review</button>}
+    {admin && employee && employee.id!==user.id && !form && <button className="button button-primary" disabled={busy} onClick={() => { setForm({ year: new Date().getFullYear(), quarter: Math.floor(new Date().getMonth()/3)+1, version: 0, ...Object.fromEntries(Object.keys(fields).map(k => [k,''])) }); setAudit(null); }}>Create quarterly review</button>}
     {admin && !employee && !busy && <section className="card performance-directory">
       <div className="review-filters"><label>Filter by employee<input placeholder="Name or email" value={search} onChange={e => setSearch(e.target.value)}/></label><label>Year<select value={searchYear} onChange={e => setSearchYear(e.target.value)}><option value="">All years</option>{years.map(y => <option key={y} value={y}>{y}</option>)}</select></label><label>Quarter<select value={searchQuarter} onChange={e => setSearchQuarter(e.target.value)}><option value="">All quarters</option>{[1,2,3,4].map(q => <option key={q} value={q}>Q{q}</option>)}</select></label><label>Review status<select value={status} onChange={e => setStatus(e.target.value)}><option value="">All statuses</option><option value="draft">Draft</option><option value="published">Published</option></select></label></div>
       <div className="performance-list">{matchingReviews.map(row => <button className="performance-list-item" key={row.id} onClick={() => { desiredPeriod.current = { year: row.review_year, quarter: row.quarter }; setEmployee({ id: row.employee_id, first_name: row.first_name, last_name: row.last_name, email: row.employee_email }); }}><span><strong>{row.employee_name}</strong><small>{row.employee_email}</small></span><span>Q{row.quarter} {row.review_year}</span><span className={`performance-status ${row.published_at ? "is-published" : "is-draft"}`}>{row.published_at ? 'Published' : 'Draft'}</span><span>View review &rarr;</span></button>)}</div>
@@ -164,14 +169,14 @@ export function PerformanceReviewsPage() {
     </section>}
     {busy && <p role="status">Loading…</p>}
     {form ? <form className="card performance-form" onSubmit={save}><fieldset disabled={busy}><h2>{form.id ? 'Edit review' : 'New quarterly review'} — {employee.first_name} {employee.last_name}</h2>
-      {form.published_at && <p>Changes to this published review will be visible to the employee when saved.</p>}
+      {form.published_at && <p>Saving changes returns this review to draft. Publish again to share the updated review.</p>}
       <div className="review-filters"><label>Review year<input type="number" min="1900" max="9999" required disabled={!!form.id} value={form.year} onChange={e => setForm({ ...form, year: e.target.value })}/></label><label>Quarter<select disabled={!!form.id} value={form.quarter} onChange={e => setForm({ ...form, quarter: e.target.value })}>{[1,2,3,4].map(q => <option key={q} value={q}>Q{q}</option>)}</select></label></div>
       <div className="performance-fields">{Object.entries(fields).map(([key,label]) => <label className={key === 'summary' || key === 'goals' ? 'performance-wide' : ''} key={key}>{label}{key === 'summary' ? ' (required)' : ''}<textarea required={key === 'summary'} maxLength={20000} value={form[key] || ''} onChange={e => setForm({ ...form, [key]: e.target.value })}/></label>)}</div>
-      <div className="review-tabs"><button className="button button-primary" disabled={busy || !form.summary.trim()}>{busy ? 'Saving...' : 'Save review'}</button><button type="button" disabled={busy} onClick={() => setForm(null)}>Cancel</button></div><p className="page-subtitle">{form.published_at ? 'Saving updates the published review.' : 'Save a draft first, then publish it to the employee.'}</p></fieldset></form>
+      <div className="review-tabs"><button className="button button-primary" disabled={busy || !form.summary.trim()}>{busy ? 'Saving...' : 'Save review'}</button><button type="button" disabled={busy} onClick={() => setForm(null)}>Cancel</button></div><p className="page-subtitle">{form.published_at ? 'Saving returns this review to draft for publication.' : 'Save a draft first, then publish it to the employee.'}</p></fieldset></form>
     : (!admin || employee) && <><div className="review-filters"><label>Year<select value={year} onChange={e => { setYear(e.target.value); setAudit(null); }}><option value="">Select year</option>{years.map(y => <option key={y}>{y}</option>)}</select></label><label>Quarter<select value={quarter} onChange={e => { setQuarter(e.target.value); setAudit(null); }}><option value="">Select quarter</option>{[1,2,3,4].map(q => <option key={q} value={q}>Q{q}</option>)}</select></label></div>
       {selected ? <article className="review-card performance-review"><header className="performance-review-header"><span className={`performance-status ${selected.published_at ? "is-published" : "is-draft"}`}>{selected.published_at ? "Published" : "Draft"}</span><h2>Performance Review — Q{selected.quarter} {selected.review_year}</h2><p>{selected.employee_name} · {selected.published_at ? `Published ${date(selected.published_at)}` : 'Draft'}</p></header>
         <div className="performance-review-sections">{Object.entries(fields).map(([key,label], index) => <section className={key === "summary" || key === "goals" ? "performance-wide" : ""} key={key}><h3><span className="performance-section-number" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>{label}</h3><p className={`review-text${selected[key] ? "" : " performance-unfilled"}`}>{selected[key] || "No comments added."}</p></section>)}</div>
-        {admin && <><p>Created {date(selected.created_at)} · Created by user #{selected.created_by} · Last modified {date(selected.modified_at)}</p><div className="review-tabs"><button disabled={busy} onClick={() => setForm({ ...selected, year: selected.review_year })}>Edit review</button>{!selected.published_at && <button className="button button-primary" disabled={busy} onClick={publish}>Publish to employee</button>}<button disabled={busy} onClick={async () => { setBusy(true); try { setAudit((await api.audit(selected.id)).data); } catch(e) { setError(message(e)); } finally { setBusy(false); } }}>View audit history</button></div>
+        {admin && selected.can_manage && <><p>Created {date(selected.created_at)} · Created by user #{selected.created_by} · Last modified {date(selected.modified_at)}</p><div className="review-tabs"><button disabled={busy} onClick={() => setForm({ ...selected, year: selected.review_year })}>Edit review</button>{!selected.published_at && <button className="button button-primary" disabled={busy} onClick={publish}>Publish to employee</button>}<button disabled={busy} onClick={async () => { setBusy(true); try { setAudit((await api.audit(selected.id)).data); } catch(e) { setError(message(e)); } finally { setBusy(false); } }}>View audit history</button></div>
           {audit && <section><h3>Audit history</h3>{audit.map(a => <p key={a.id}>{a.action} · {date(a.recorded_at)} · User #{a.actor_id}</p>)}</section>}</>}
       </article> : !busy && <p className="performance-empty">No {admin ? '' : 'published '}review for this period.</p>}</>}
   </div>;

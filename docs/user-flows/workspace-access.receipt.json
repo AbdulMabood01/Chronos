@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "deliver",
+  "type": "workflow",
+  "input": "C:\\Users\\maboo\\Chronos\\docs\\user-flows\\workspace-access.json",
+  "output": "C:\\Users\\maboo\\Chronos\\docs\\user-flows\\workspace-access.html",
+  "specification": {
+    "sha256": "2fb5c97ff1172f7190af75efd1d7d75e5837ef4d4ff5fd604591c5c0294b0424",
+    "bytes": 2866
+  },
+  "artifact": {
+    "sha256": "81b75e03e7a9c1f08155e9d183ef9faf451add93c5c10149ad3a7bb6433427ea",
+    "bytes": 803078
+  },
+  "validation": {
+    "checksPassed": 9,
+    "checkCount": 9,
+    "compositionProfile": "showcase",
+    "compositionStatus": "pass",
+    "errors": 0,
+    "warnings": 0
+  }
+}
