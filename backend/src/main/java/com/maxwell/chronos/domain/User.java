@@ -79,6 +79,11 @@ public class User {
     @Column(length = 120)
     private String jobTitle;
 
+    private String gender;
+    private String race;
+    private String ethnicity;
+    @Builder.Default
+    private Boolean profileDetailsSubmitted = false;
     private LocalDate dateOfBirth;
     private LocalDate joiningDate;
 

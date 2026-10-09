@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { timesheetAPI } from '../api';
+import {useCompany} from '../CompanyContext';
 import './MissingTimesheets.css';
 
 const statusLabels = { NOT_STARTED: 'Not started', IN_PROGRESS: 'In progress', DRAFT: 'Draft', SUBMITTED: 'Submitted', APPROVED: 'Approved', LOCKED: 'Locked', REJECTED: 'Needs correction', CHANGE_REQUESTED: 'Change requested' };
@@ -9,6 +10,7 @@ const detailsLabel = row => row.timesheetId ? 'View timesheet' : 'No timesheet y
 const sortValue = (row, key) => key === 'hours' ? Number(row.hours || 0) : key === 'status' ? statusLabels[row.status] || row.status : key === 'details' ? detailsLabel(row) : row[key] || '';
 
 export default function MissingTimesheets() {
+  const {currentCompany,companyCapabilities}=useCompany();
   const now = new Date();
   const [period, setPeriod] = useState(now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0'));
   const [rows, setRows] = useState([]);
@@ -30,13 +32,13 @@ export default function MissingTimesheets() {
     let current = true;
     setLoading(true); setError(''); setRows([]);
     const [year, month] = period.split('-').map(Number);
-    if (!year || !month) { setLoading(false); return; }
-    Promise.resolve().then(() => timesheetAPI.getMissingTimesheets(year, month))
+    if (!year || !month || !currentCompany) { setLoading(false); return; }
+    Promise.resolve().then(() => timesheetAPI.getMissingTimesheets(year, month,currentCompany.id))
       .then(response => { if (current) setRows(response.data || []); })
       .catch(() => { if (current) setError('Could not load missing timesheets.'); })
       .finally(() => { if (current) setLoading(false); });
     return () => { current = false; };
-  }, [period, refresh]);
+  }, [period, refresh,currentCompany?.id]);
   return <section className="admin-panel missing-timesheets" aria-labelledby="missing-title">
     <div className="panel-heading"><div><h2 id="missing-title">Missing timesheets</h2><p>Track submissions and approved records for active projects. The current month is still in progress.</p></div>
       </div>
@@ -46,7 +48,7 @@ export default function MissingTimesheets() {
     {loading ? <div className="empty-state" role="status">Loading missing timesheets...</div> : error ? <div className="error-message" role="alert">{error}</div> : !period ? <div className="empty-state">Select a month.</div> : <>
       <p className="missing-timesheets-summary" role="status"><strong>{new Set(displayedRows.map(row => row.userId)).size}</strong> employees / <strong>{displayedRows.length}</strong> records / <strong>{outstanding}</strong> outstanding</p>
       {!displayedRows.length ? <div className="empty-state"><p>No timesheet records for this month{projectId ? ' and project' : ''}.</p></div> : <div className="table-container" tabIndex={0} role="region" aria-label="Project timesheet records"><table className="data-table"><thead><tr>{columns.map(([key, label]) => <th key={key} scope="col" className={key === 'hours' ? 'missing-timesheets-hours' : undefined} aria-sort={sort.key === key ? sort.direction === 'asc' ? 'ascending' : 'descending' : 'none'}><button type="button" className="missing-timesheets-sort" onClick={() => changeSort(key)}>{label}<span aria-hidden="true">{sort.key === key ? sort.direction === 'asc' ? ' ↑' : ' ↓' : ' ↕'}</span></button></th>)}</tr></thead>
-        <tbody>{displayedRows.map(row => <tr key={row.userId + '-' + row.projectId + '-' + row.periodStart}><td className="missing-timesheets-employee">{row.userName}</td><td>{row.projectCode}</td><td>{row.periodStart ? `${row.periodStart} to ${row.periodEnd}` : period}</td><td><span className={`status-badge status-${row.status === 'NOT_STARTED' ? 'draft' : row.status.toLowerCase()}`}>{statusLabels[row.status] || row.status}</span>{row.late && <span role="status"> Late</span>}</td><td className="missing-timesheets-hours">{Number(row.hours || 0).toFixed(2)}</td><td>{row.timesheetId ? <Link className="missing-timesheets-link" to={'/timesheet/' + row.timesheetId + '?projectId=' + row.projectId + (row.periodStart ? '&date=' + row.periodStart : '')}>View timesheet</Link> : <span className="missing-timesheets-muted">No timesheet yet</span>}</td></tr>)}</tbody></table></div>}
+        <tbody>{displayedRows.map(row => <tr key={row.userId + '-' + row.projectId + '-' + row.periodStart}><td className="missing-timesheets-employee">{row.userName}</td><td>{row.projectCode}</td><td>{row.periodStart ? `${row.periodStart} to ${row.periodEnd}` : period}</td><td><span className={`status-badge status-${row.status === 'NOT_STARTED' ? 'draft' : row.status.toLowerCase()}`}>{statusLabels[row.status] || row.status}</span>{row.late && <span role="status"> Late</span>}</td><td className="missing-timesheets-hours">{Number(row.hours || 0).toFixed(2)}</td><td>{row.timesheetId ? <Link className="missing-timesheets-link" to={companyCapabilities?.canReviewWork?'/timesheet/' + row.timesheetId + '?projectId=' + row.projectId + (row.periodStart ? '&date=' + row.periodStart : ''):'/reports'}>{companyCapabilities?.canReviewWork?'View timesheet':'View report'}</Link> : <span className="missing-timesheets-muted">No timesheet yet</span>}</td></tr>)}</tbody></table></div>}
     </>}
   </section>;
 }

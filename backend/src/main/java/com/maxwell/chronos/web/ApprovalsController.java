@@ -66,50 +66,6 @@ public class ApprovalsController {
         }
     }
 
-    @PostMapping("/vacation/{vacationId}/approve")
-    public ResponseEntity<VacationRequestDTO> approveVacation(
-            @PathVariable Long vacationId,
-            @RequestBody(required = false) java.util.Map<String, String> body,
-            @AuthenticationPrincipal Jwt jwt) {
-        String email = jwt.getClaimAsString("preferred_username");
-        var user = userService.findUserEntityByEmail(email);
-
-        if (user == null) {
-            return ResponseEntity.status(403).build();
-        }
-
-        try {
-            var accounting = body == null || body.get("accountingType") == null ? null
-                    : com.maxwell.chronos.enums.LeaveAccountingType.valueOf(body.get("accountingType"));
-            VacationRequestDTO vacation = vacationService.approveVacationRequest(vacationId, user.getId(), accounting);
-            return ResponseEntity.ok(vacation);
-        } catch (IllegalArgumentException e) {
-            throw e;
-        }
-    }
-
-    @PostMapping("/vacation/{vacationId}/reject")
-    public ResponseEntity<VacationRequestDTO> rejectVacation(
-            @PathVariable Long vacationId,
-            @RequestBody(required = false) Map<String, String> body,
-            @RequestParam(required = false) String reason,
-            @AuthenticationPrincipal Jwt jwt) {
-        String email = jwt.getClaimAsString("preferred_username");
-        var user = userService.findUserEntityByEmail(email);
-
-        if (user == null) {
-            return ResponseEntity.status(403).build();
-        }
-
-        try {
-            String rejectionReason = reason != null ? reason : body != null ? body.get("reason") : null;
-            VacationRequestDTO vacation = vacationService.rejectVacationRequest(vacationId, rejectionReason, user.getId());
-            return ResponseEntity.ok(vacation);
-        } catch (IllegalArgumentException e) {
-            throw e;
-        }
-    }
-
     @PostMapping("/timesheet-project/{submissionId}/approve")
     public ResponseEntity<TimesheetProjectSubmissionDTO> approveProjectTimesheet(
             @PathVariable Long submissionId,
@@ -154,45 +110,6 @@ public class ApprovalsController {
         }
     }
 
-    @PostMapping("/letter-request/{requestId}/approve")
-    public ResponseEntity<LetterRequestDTO> approveLetterRequest(
-            @PathVariable Long requestId,
-            @RequestBody com.maxwell.chronos.dto.LetterReviewRequest review,
-            @AuthenticationPrincipal Jwt jwt) {
-        String email = jwt.getClaimAsString("preferred_username");
-        var user = userService.findUserEntityByEmail(email);
-
-        if (user == null || !user.isAdmin()) {
-            return ResponseEntity.status(403).build();
-        }
-
-        try {
-            LetterRequestDTO request = letterRequestService.approveLetterRequest(requestId, user.getId(), review);
-            return ResponseEntity.ok(request);
-        } catch (IllegalArgumentException e) {
-            throw e;
-        }
-    }
-
-    @PostMapping("/letter-request/{requestId}/reject")
-    public ResponseEntity<LetterRequestDTO> rejectLetterRequest(
-            @PathVariable Long requestId,
-            @RequestBody(required = false) Map<String, String> body,
-            @RequestParam(required = false) String reason,
-            @AuthenticationPrincipal Jwt jwt) {
-        String email = jwt.getClaimAsString("preferred_username");
-        var user = userService.findUserEntityByEmail(email);
-
-        if (user == null || !user.isAdmin()) {
-            return ResponseEntity.status(403).build();
-        }
-
-        try {
-            String rejectionReason = reason != null ? reason : body != null ? body.get("reason") : null;
-            LetterRequestDTO request = letterRequestService.rejectLetterRequest(requestId, rejectionReason, user.getId());
-            return ResponseEntity.ok(request);
-        } catch (IllegalArgumentException e) {
-            throw e;
-        }
-    }
+    @PostMapping({"/letter-request/{id}/approve","/letter-request/{id}/reject"})
+    public void retiredLetters(){throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.GONE,"Use company letter reviews");}
 }

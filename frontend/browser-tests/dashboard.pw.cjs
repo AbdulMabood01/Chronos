@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./support/company-fixture.cjs');
 
 async function setup(page, role) {
   await page.clock.setFixedTime(new Date('2026-09-24T12:00:00'));
@@ -24,47 +24,14 @@ async function setup(page, role) {
   });
 }
 
-for (const role of ['EMPLOYEE', 'PROJECT_ADMIN', 'ADMIN']) {
-  test(`${role} dashboard remains usable on desktop, mobile, and dark theme`, async ({ page }) => {
-    const errors = [];
-    page.on('pageerror', error => errors.push(error.message));
-    await setup(page, role);
-    await page.goto('/dashboard');
-    await expect(page.getByRole('region', { name: 'Workspace summary' })).toBeVisible();
-    if (role === 'EMPLOYEE') await expect(page.getByRole('heading', { name: 'My Projects', exact: true })).toBeVisible();
-    else await expect(page.getByRole('heading', { name: /^(Project Health|Projects)$/ })).toHaveCount(0);
-    await expect(page.getByRole('alert')).toHaveCount(0);
-    if (role === 'EMPLOYEE') await expect(page.getByRole('link', { name: /Hours This Week/ })).toContainText('22');
-    {
-      await page.getByRole('button', { name: 'Pause animation' }).click();
-      await expect(page.getByRole('button', { name: 'Play animation' })).toHaveAttribute('aria-pressed', 'true');
-      expect(await page.locator('.day-clock-float').evaluate(element => getComputedStyle(element).animationPlayState)).toBe('paused');
-      await page.getByRole('button', { name: 'Play animation' }).click();
-    }
-    if (role === 'PROJECT_ADMIN') await expect(page.getByRole('heading', { name: 'Team Capacity' })).toBeVisible();
-    const summaryTop = (await page.getByRole('region', { name: 'Workspace summary' }).boundingBox()).y;
-    expect(summaryTop).toBeLessThan(500);
-    await page.screenshot({ path: `test-results/dashboard-${role.toLowerCase()}-desktop.png`, fullPage: true });
-    for (const width of [320, 390, 768]) {
-      await page.setViewportSize({ width, height: 844 });
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-      await expect(page.getByRole('region', { name: 'Workspace summary' })).toBeVisible();
-      if (width === 390) await page.screenshot({ path: `test-results/dashboard-${role.toLowerCase()}-mobile.png`, fullPage: true });
-    }
-    await page.evaluate(() => document.body.classList.add('theme-dark'));
-    {
-      await page.emulateMedia({ reducedMotion: 'reduce' });
-      expect(await page.locator('.day-clock-float').evaluate(element => getComputedStyle(element).animationName)).toBe('none');
-      await expect(page.getByRole('button', { name: 'Pause animation' })).toBeHidden();
-    }
-    await page.screenshot({ path: `test-results/dashboard-${role.toLowerCase()}-dark.png`, fullPage: true });
-    if (role === 'ADMIN') {
-      await page.getByRole('link', { name: 'Manage announcements' }).click();
-      await expect(page.getByRole('button', { name: /New announcement/i })).toBeVisible();
-    } else {
-      const link = page.getByRole('region', { name: 'Company announcements' }).getByRole('link', { name: /Quarterly team meeting/ });
-      await expect(link).toHaveAttribute('href', '/announcements?id=news');
-    }
-    expect(errors).toEqual([]);
-  });
+for (const role of ['EMPLOYEE','PROJECT_ADMIN','ADMIN']) {
+ test(role + ' company overview respects navigation and fits desktop/mobile themes', async ({page}) => {
+   const errors=[];page.on('pageerror',e=>errors.push(e.message));await setup(page,role);await page.goto('/dashboard');
+   await expect(page.getByRole('heading',{name:'Company overview',exact:true})).toBeVisible();
+   await expect(page.getByRole('heading',{name:'Your workspace tools'})).toBeVisible();
+   await expect(page.getByRole('link',{name:'Timesheets',exact:true})).toHaveCount(role==='EMPLOYEE'?2:0);
+   for(const width of [1440,768,390,320]) {await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
+   await page.setViewportSize({width:1440,height:900});await page.getByRole('button',{name:'Switch to dark theme'}).click();await expect(page.locator('body')).toHaveClass('theme-dark');
+   await page.getByRole('button',{name:'Switch to light theme'}).click();expect(errors).toEqual([]);
+ });
 }

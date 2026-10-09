@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./support/company-fixture.cjs');
 
 async function mockEmployee(page, { noProjects = false, failOnce = false } = {}) {
   await page.addInitScript(() => localStorage.setItem('authToken', 'browser-test-token'));

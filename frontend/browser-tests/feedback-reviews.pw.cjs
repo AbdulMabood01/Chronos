@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./support/company-fixture.cjs');
 
 test('recipient sees incoming feedback only in My Feedback', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('authToken', 'recipient-session'));
@@ -73,7 +73,7 @@ test('Admin browses employee reviews and creates reviews in a responsive workspa
     let data = [];
     if (url.pathname === '/api/auth/me') data = { id:1, firstName:'Jordan', lastName:'Rivera', role:'ADMIN', profileCompleted:true };
     if (url.pathname.endsWith('/notifications/unread-count')) data = 0;
-    if (url.pathname.endsWith('/feedback-reviews/reviews')) data = [{ id:'review', employee_id:2, first_name:'Alex', last_name:'Chen', employee_name:'Alex Chen', employee_email:'alex@example.com', review_year:2026, quarter:3, summary:'Strong collaboration across the team.', version:0 }];
+    if (url.pathname.endsWith('/feedback-reviews/reviews')) data = [{ id:'review', employee_id:2, first_name:'Alex', last_name:'Chen', employee_name:'Alex Chen', employee_email:'alex@example.com', review_year:2026, quarter:3, summary:'Strong collaboration across the team.', can_manage:true, version:0 }];
     await route.fulfill({ json:data });
   });
   await page.goto('/performance-reviews');

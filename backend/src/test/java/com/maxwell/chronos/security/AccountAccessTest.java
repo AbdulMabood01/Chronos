@@ -94,9 +94,9 @@ class AccountAccessTest {
         for (UserRole role : java.util.List.of(UserRole.EMPLOYEE, UserRole.PROJECT_ADMIN)) {
             employee.setRole(role);
             mvc.perform(patch("/users/2/lock").contentType("application/json").content("{}").with(token()))
-                    .andExpect(status().isForbidden());
-            mvc.perform(patch("/users/2/unlock").with(token())).andExpect(status().isForbidden());
-            mvc.perform(post("/users/2/sign-out-all").with(token())).andExpect(status().isForbidden());
+                    .andExpect(status().isGone());
+            mvc.perform(patch("/users/2/unlock").with(token())).andExpect(status().isGone());
+            mvc.perform(post("/users/2/sign-out-all").with(token())).andExpect(status().isGone());
         }
         verify(service, never()).lockAccount(anyLong(), anyLong(), any());
         verify(service, never()).unlockAccount(anyLong(), anyLong());

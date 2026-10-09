@@ -5,7 +5,7 @@ import { BrandLogo } from '../components/Hourglass';
 import './Login.css';
 
 export default function Activate() {
-  const [token] = useState(() => new URLSearchParams(window.location.search).get('token') || '');
+  const [token] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get('token') || new URLSearchParams(window.location.search).get('token') || '');
   const [employee, setEmployee] = useState(null);
   const [password, setPassword] = useState('');
   const [confirmation, setConfirmation] = useState('');

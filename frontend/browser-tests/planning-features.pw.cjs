@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./support/company-fixture.cjs');
 const path = require('path');
 const fs = require('fs');
 const output = path.resolve(__dirname, '../../backend/target/ui-preview');
@@ -9,7 +9,7 @@ test('calendar, budget, checklist and history work on desktop and mobile', async
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url()); let data = [];
     if(url.pathname.endsWith('/auth/me')) data = { id: 1, firstName: 'Alice', lastName: 'Smith', role: 'PROJECT_ADMIN', jobTitle: 'Engineer', dateOfBirth: '1990-01-01', profileCompleted: true };
-    else if(url.pathname.endsWith('/team-calendar')) data = [{ id: 5, userId: 8, userName: 'Sam Jones', startDate: prefix+'-01', endDate: prefix+'-03' }];
+    else if(url.pathname.endsWith('/leave/calendar')) data = [{ id: 5, userId: 8, userName: 'Sam Jones', startDate: prefix+'-01', endDate: prefix+'-03' }];
     else if(url.pathname === '/api/projects' || url.pathname === '/api/projects/assigned') data = [{ id:4, code:'ATLAS', name:'Atlas platform', status:'ACTIVE', isActive:true, assignments:[{ userId:1, isActive:true, plannedHours:100 }] }];
     else if(url.pathname.endsWith('/hours-dashboard')) data = [{ projectId:4, projectCode:'ATLAS', projectName:'Atlas platform', budgetHours:100, lifetimeLoggedHours:85, totalLoggedHours:8, plannedHours:40, employees:[] }];
     else if(url.pathname.includes('/timesheets/id/')) data = { id:2,userId:1,year,month,status:'APPROVED',timeEntries:[{id:10,projectId:4,projectCode:'ATLAS',entryDate:prefix+'-01',hours:8}],vacationDays:[] };
@@ -39,6 +39,7 @@ test('calendar, budget, checklist and history work on desktop and mobile', async
   await page.getByLabel('Phone number',{exact:true}).fill('555-0101');
   await expect(page.getByRole('progressbar',{name:'Profile completeness'})).toHaveAttribute('value','2');
   await page.goto('/timesheet/2');
+  await page.getByText('Approval history',{exact:false}).first().click();
   await expect(page.getByText(/Correct Monday hours/)).toBeVisible();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });

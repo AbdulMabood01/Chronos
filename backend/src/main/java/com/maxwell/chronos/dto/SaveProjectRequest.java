@@ -15,6 +15,7 @@ import java.time.LocalDate;
 @Builder
 public class SaveProjectRequest {
     private Long companyId;
+    private Long ownerUserId;
     private String code;
     private String name;
     private String description;

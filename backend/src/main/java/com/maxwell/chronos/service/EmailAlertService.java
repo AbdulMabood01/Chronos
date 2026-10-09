@@ -51,6 +51,22 @@ public class EmailAlertService {
                 userId, category.name(), subject, path);
     }
 
+    public void enqueueCompany(long company,long user,Category category,String subject,String path,java.util.UUID resource,boolean handlerOnly) {
+        if(preferences(user).allows(category))db.update("INSERT INTO email_alert_outbox(company_id,user_id,category,subject,path,resource_id,handler_only) VALUES (?,?,?,?,?,?,?)",company,user,category.name(),subject,path,resource,handlerOnly);
+    }
+    public boolean companyDeliveryAllowed(java.util.Map<String,Object> item) {
+        if(!(item.get("company_id") instanceof Number company))return !java.util.Set.of("ANNOUNCEMENTS","REPORTS","FEEDBACK","PERFORMANCE").contains(item.get("category"));
+        long user=((Number)item.get("user_id")).longValue();
+        boolean member=Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS(SELECT 1 FROM company_memberships m JOIN users u ON u.id=m.user_id WHERE m.company_id=? AND m.user_id=? AND m.status='ACTIVE' AND EXISTS(SELECT 1 FROM companies c WHERE c.id=m.company_id AND NOT c.is_suspended) AND u.is_active AND NOT u.admin_locked AND NOT EXISTS(SELECT 1 FROM role_assignments p WHERE p.user_id=u.id AND p.role_key='PLATFORM_ADMIN' AND p.removed_at IS NULL))",Boolean.class,company.longValue(),user));
+        if(!member)return false;
+        if(Boolean.TRUE.equals(item.get("handler_only")))return Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS(SELECT 1 FROM company_sensitive_grants g JOIN employee_reports r ON r.company_id=g.company_id WHERE g.company_id=? AND g.user_id=? AND g.permission='CONFIDENTIAL_HANDLER' AND g.revoked_at IS NULL AND g.starts_on<=(CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date AND g.ends_on>=(CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date AND r.id=? AND (r.reporter_id IS NULL OR r.reporter_id<>?) AND NOT EXISTS(SELECT 1 FROM employee_report_exclusions x WHERE x.report_id=r.id AND x.exclusion_token=encode(sha256(r.recusal_salt||convert_to(?::text,'UTF8')),'hex')))",Boolean.class,company.longValue(),user,item.get("resource_id"),user,user));
+        if("ANNOUNCEMENTS".equals(item.get("category")))return Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS(SELECT 1 FROM company_announcements WHERE id=? AND company_id=? AND status='PUBLISHED' AND publish_date<=(CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date AND (expiration_date IS NULL OR expiration_date>=(CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date))",Boolean.class,item.get("resource_id"),company.longValue()));
+        if("PERFORMANCE".equals(item.get("category")))return Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS(SELECT 1 FROM performance_reviews WHERE id=? AND company_id=? AND employee_id=? AND published_at IS NOT NULL)",Boolean.class,item.get("resource_id"),company.longValue(),user));
+        if("FEEDBACK".equals(item.get("category")))return Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS(SELECT 1 FROM employee_feedback WHERE id=? AND company_id=? AND recipient_id=?)",Boolean.class,item.get("resource_id"),company.longValue(),user));
+        if("REPORTS".equals(item.get("category")))return Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS(SELECT 1 FROM employee_reports WHERE id=? AND company_id=? AND reporter_id=? AND NOT anonymous)",Boolean.class,item.get("resource_id"),company.longValue(),user));
+        return true;
+    }
+
     public void notifyHr(Category category, String subject, String path) {
         db.queryForList("SELECT id FROM users WHERE is_active=true AND role='ADMIN'", Long.class)
             .forEach(id -> enqueue(id, category, subject, path));

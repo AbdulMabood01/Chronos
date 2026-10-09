@@ -1,7 +1,7 @@
 import ScreenTitle from '../components/ScreenTitle';
 import React from 'react';
 import { useAuth } from '../AuthContext';
-import EmploymentDetails from '../components/EmploymentDetails';
+
 import ProfileForm from '../components/ProfileForm';
 import ChangePassword from '../components/ChangePassword';
 import '../styles.css';
@@ -20,7 +20,7 @@ export default function Profile() {
       <div className="header-bar">
         <div>
           <ScreenTitle title="Profile" icon="users" eyebrow="YOUR ACCOUNT" />
-          <p className="page-subtitle">Keep your employee details current.</p>
+          <p className="page-subtitle">Manage your personal details and shared login account.</p>
         </div>
       </div>
 
@@ -29,7 +29,7 @@ export default function Profile() {
       <div className="card profile-card">
         <ProfileForm user={user} onSave={handleSave} />
       </div>
-      <EmploymentDetails user={user} />
+
       <ChangePassword />
     </div>
   );

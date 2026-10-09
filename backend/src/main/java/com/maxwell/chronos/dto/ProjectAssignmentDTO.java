@@ -24,6 +24,8 @@ public class ProjectAssignmentDTO {
     private BigDecimal plannedHours;
     private BigDecimal approvedHoursToDate;
     private boolean pendingApproval;
+    private boolean canApproveHours;
+    private boolean canApproveExpenses;
     private BigDecimal billRate;
     private LocalDate startDate;
     private LocalDate endDate;

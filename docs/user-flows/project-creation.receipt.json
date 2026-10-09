@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "deliver",
+  "type": "workflow",
+  "input": "C:\\Users\\maboo\\Chronos\\docs\\user-flows\\project-creation.json",
+  "output": "C:\\Users\\maboo\\Chronos\\docs\\user-flows\\project-creation.html",
+  "specification": {
+    "sha256": "427fe83937d65b8299ed73130f14759621446372f17ad217d0be4156ad4681a2",
+    "bytes": 2935
+  },
+  "artifact": {
+    "sha256": "8b07b1f61f22faf1e06493af4d79caa772b6c5f6b20ca49880a5b6eddaf9fe8e",
+    "bytes": 803265
+  },
+  "validation": {
+    "checksPassed": 9,
+    "checkCount": 9,
+    "compositionProfile": "showcase",
+    "compositionStatus": "pass",
+    "errors": 0,
+    "warnings": 0
+  }
+}

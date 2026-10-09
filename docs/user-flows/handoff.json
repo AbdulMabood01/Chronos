@@ -1,0 +1,156 @@
+[
+  {
+    "diagram_type": "workflow",
+    "output": "C:\\Users\\maboo\\Chronos\\docs\\user-flows\\confidential-reports.html",
+    "specification_sha256": "df4a815af3743a7dd02d7bd63accdf206386d1e8c2efbe0b42f9b1935572373a",
+    "artifact_sha256": "252c361a3160fd455b25bfa092ccd4b2cbd993e0049cee66e0cfde996e6fc270",
+    "validation": {
+      "checksPassed": 9,
+      "checkCount": 9,
+      "compositionProfile": "showcase",
+      "compositionStatus": "pass",
+      "errors": 0,
+      "warnings": 0
+    },
+    "browser_evidence": "passed",
+    "visual_review": "passed",
+    "correction_rounds": 1,
+    "visual_review_scope": [
+      "1440x900 light screenshot",
+      "2048x1320 dark screenshot"
+    ],
+    "observations": "Readable nodes and cards; clear branch routing; no clipping or ambiguous crossings observed."
+  },
+  {
+    "diagram_type": "workflow",
+    "output": "C:\\Users\\maboo\\Chronos\\docs\\user-flows\\leave-and-letters.html",
+    "specification_sha256": "552e51df8c325cc4b4535cf1ca984c0d25103b6837723d2fe48d08440783c7ae",
+    "artifact_sha256": "db8f2da306b5c101c34c196b53a27aca7f898c0bd5536773a0b7e0d94143626f",
+    "validation": {
+      "checksPassed": 9,
+      "checkCount": 9,
+      "compositionProfile": "showcase",
+      "compositionStatus": "pass",
+      "errors": 0,
+      "warnings": 0
+    },
+    "browser_evidence": "passed",
+    "visual_review": "passed",
+    "correction_rounds": 1,
+    "visual_review_scope": [
+      "1440x900 light screenshot",
+      "2048x1320 dark screenshot"
+    ],
+    "observations": "Readable nodes and cards; clear branch routing; no clipping or ambiguous crossings observed."
+  },
+  {
+    "diagram_type": "workflow",
+    "output": "C:\\Users\\maboo\\Chronos\\docs\\user-flows\\people-administration.html",
+    "specification_sha256": "1dcb7554c0fb85208bc3af58b0503ecc9471aaf757ff81f2056846607aceb20f",
+    "artifact_sha256": "bb1e84d5f95c24544651ef577a40fb8eec820380b3edcf66a71537534478151c",
+    "validation": {
+      "checksPassed": 9,
+      "checkCount": 9,
+      "compositionProfile": "showcase",
+      "compositionStatus": "pass",
+      "errors": 0,
+      "warnings": 0
+    },
+    "browser_evidence": "passed",
+    "visual_review": "passed",
+    "correction_rounds": 1,
+    "visual_review_scope": [
+      "1440x900 light screenshot",
+      "2048x1320 dark screenshot"
+    ],
+    "observations": "Readable nodes and cards; clear branch routing; no clipping or ambiguous crossings observed."
+  },
+  {
+    "diagram_type": "workflow",
+    "output": "C:\\Users\\maboo\\Chronos\\docs\\user-flows\\platform-administration.html",
+    "specification_sha256": "417667d1ab9b01fce6f207a555210e916c568f77ed391b3db259366298136bef",
+    "artifact_sha256": "309c7d9c8160fff6607fd3ab1530ccbc5e4c6a76328921f66c06c68949003ba9",
+    "validation": {
+      "checksPassed": 9,
+      "checkCount": 9,
+      "compositionProfile": "showcase",
+      "compositionStatus": "pass",
+      "errors": 0,
+      "warnings": 0
+    },
+    "browser_evidence": "passed",
+    "visual_review": "passed",
+    "correction_rounds": 1,
+    "visual_review_scope": [
+      "1440x900 light screenshot",
+      "2048x1320 dark screenshot"
+    ],
+    "observations": "Readable nodes and cards; clear branch routing; no clipping or ambiguous crossings observed."
+  },
+  {
+    "diagram_type": "workflow",
+    "output": "C:\\Users\\maboo\\Chronos\\docs\\user-flows\\project-creation.html",
+    "specification_sha256": "427fe83937d65b8299ed73130f14759621446372f17ad217d0be4156ad4681a2",
+    "artifact_sha256": "8b07b1f61f22faf1e06493af4d79caa772b6c5f6b20ca49880a5b6eddaf9fe8e",
+    "validation": {
+      "checksPassed": 9,
+      "checkCount": 9,
+      "compositionProfile": "showcase",
+      "compositionStatus": "pass",
+      "errors": 0,
+      "warnings": 0
+    },
+    "browser_evidence": "passed",
+    "visual_review": "passed",
+    "correction_rounds": 1,
+    "visual_review_scope": [
+      "1440x900 light screenshot",
+      "2048x1320 dark screenshot"
+    ],
+    "observations": "Readable nodes and cards; clear branch routing; no clipping or ambiguous crossings observed."
+  },
+  {
+    "diagram_type": "workflow",
+    "output": "C:\\Users\\maboo\\Chronos\\docs\\user-flows\\work-approval.html",
+    "specification_sha256": "b02af8643ee2bc5db656dbe1b57e0be57b9f3b2ec805561181adaed73f0ec149",
+    "artifact_sha256": "c3092b0df5ca8165618380a54df06c97d98e5f34892ee1edde48ec7e2202eae1",
+    "validation": {
+      "checksPassed": 9,
+      "checkCount": 9,
+      "compositionProfile": "showcase",
+      "compositionStatus": "pass",
+      "errors": 0,
+      "warnings": 0
+    },
+    "browser_evidence": "passed",
+    "visual_review": "passed",
+    "correction_rounds": 1,
+    "visual_review_scope": [
+      "1440x900 light screenshot",
+      "2048x1320 dark screenshot"
+    ],
+    "observations": "Readable nodes and cards; clear branch routing; no clipping or ambiguous crossings observed."
+  },
+  {
+    "diagram_type": "workflow",
+    "output": "C:\\Users\\maboo\\Chronos\\docs\\user-flows\\workspace-access.html",
+    "specification_sha256": "2fb5c97ff1172f7190af75efd1d7d75e5837ef4d4ff5fd604591c5c0294b0424",
+    "artifact_sha256": "81b75e03e7a9c1f08155e9d183ef9faf451add93c5c10149ad3a7bb6433427ea",
+    "validation": {
+      "checksPassed": 9,
+      "checkCount": 9,
+      "compositionProfile": "showcase",
+      "compositionStatus": "pass",
+      "errors": 0,
+      "warnings": 0
+    },
+    "browser_evidence": "passed",
+    "visual_review": "passed",
+    "correction_rounds": 1,
+    "visual_review_scope": [
+      "1440x900 light screenshot",
+      "2048x1320 dark screenshot"
+    ],
+    "observations": "Readable nodes and cards; clear branch routing; no clipping or ambiguous crossings observed."
+  }
+]

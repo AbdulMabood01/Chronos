@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./support/company-fixture.cjs');
 
 for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }, { width: 844, height: 390 }]) {
   test(`first-login profile can scroll and save at ${viewport.width}x${viewport.height}`, async ({ page }) => {

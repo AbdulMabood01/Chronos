@@ -4,8 +4,16 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ProjectManagement from './ProjectManagement';
 import { projectAPI, userAPI, expenseAPI, companyAPI } from '../api';
+const { refreshCompanies } = vi.hoisted(()=>({refreshCompanies:vi.fn()}));
 vi.mock('../api');
 vi.mock('../AuthContext', () => ({ useAuth: () => ({ user: currentUser }) }));
+vi.mock('../CompanyContext', () => ({ useCompany: () => ({ currentCompany: { id:1, name:'Test Company' }, platformAdmin:false,
+  companyRoles:currentUser.canCreateProjects ? ['PROJECT_ADMIN'] : [],
+  companyCapabilities:{canViewProjects:true,canManageCompanyPeople:currentUser.role==='ADMIN',canManageProjects:currentUser.canManageProjects,
+    canCreateProjects:currentUser.canCreateProjects,canReviewWork:currentUser.canReviewProjects},
+  permissionsForProject:()=>({capabilities:{canManageProject:currentUser.canManageProjects}}),
+  refreshCompanies,
+}) }));
 const currentUser = { id: 1, role: 'ADMIN' };
 const project = { id: 10, companyId: 1, canManage: true, code: 'P1', name: 'Atlas', status: 'ACTIVE', projectManagerId: 3, projectManagerHoursApproverId: 4,
   assignments: [{ id: 5, userId: 3, userName: 'Employee', isActive: true, startDate: '2026-09-01', endDate: '2026-09-30', billRate: 10, plannedHours: 40 }] };
@@ -31,9 +39,25 @@ beforeEach(() => {
     { user_id: 4, status: 'ACTIVE', roles: ['PROJECT_ADMIN'] },
     { user_id: 9, status: 'ACTIVE', roles: ['USER'] },
   ] });
-  companyAPI.projectRoles.mockResolvedValue({ data: [] });
+  companyAPI.projectRoles.mockResolvedValue({ data: [{user_id:4,role_key:'PROJECT_ADMIN'}] });
 });
 afterEach(cleanup);
+
+it('shows projects only for the shared current company', async () => {
+  projectAPI.getProjects.mockResolvedValue({ data: [project, { ...project, id: 90, companyId: 2, name: 'Other Company Project', code: 'OTHER' }] });
+  render(<ProjectManagement />);
+  fireEvent.change(await screen.findByLabelText('Project Name'), { target: { value: 'Other Company Project' } });
+  await waitFor(() => expect(projectAPI.getProjects).toHaveBeenCalled());
+  expect(screen.queryByRole('button', { name: /Other Company Project/ })).toBeNull();
+});
+
+it('starts new projects in the shared company without a second company selector', async () => {
+  currentUser.role = 'PROJECT_ADMIN'; currentUser.canManageProjects = true; currentUser.canCreateProjects = true;
+  render(<ProjectManagement />);
+  fireEvent.click(await screen.findByRole('button', { name: 'New Project' }));
+  expect(screen.getByLabelText('Company').value).toBe('Test Company');
+  expect(screen.getByLabelText('Company').readOnly).toBe(true);
+});
 
 async function selectProject() {
   render(<ProjectManagement />);
@@ -166,7 +190,8 @@ it('validates budget precision and warns before leaving an unsaved budget', asyn
 it('creates a draft with essentials and guides setup before activation', async () => {
   currentUser.role = 'PROJECT_ADMIN'; currentUser.canManageProjects = true; currentUser.canCreateProjects = true;
   const draft = { ...project, id: 11, code: 'P2', name: 'New Project', status: 'DRAFT', isActive: false, projectManagerId: null, projectManagerHoursApproverId: null, assignments: [] };
-  projectAPI.createProject.mockResolvedValue({ data: draft });
+  // Mutation responses historically omitted canManage; refreshed scoped permissions authorize editing.
+  projectAPI.createProject.mockResolvedValue({ data: { ...draft, canManage: null } });
   render(<ProjectManagement />);
   fireEvent.click(await screen.findByRole('button', { name: 'New Project' }));
   fireEvent.change(screen.getByLabelText('Company'), { target: { value: '1' } });
@@ -177,6 +202,9 @@ it('creates a draft with essentials and guides setup before activation', async (
   fireEvent.click(screen.getByRole('button', { name: 'Create Draft' }));
   await waitFor(() => expect(projectAPI.createProject).toHaveBeenCalledWith(expect.objectContaining({ status: 'DRAFT', projectManagerId: null, projectManagerHoursApproverId: null })));
   expect(await screen.findByText('Prepare this draft for activation')).toBeTruthy();
+  expect(refreshCompanies).toHaveBeenCalled();
+  expect(screen.getByLabelText('Project Code').closest('fieldset').disabled).toBe(false);
+  expect(screen.getByRole('button', { name: 'Save Project' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Activate Project' }).disabled).toBe(true);
   fireEvent.click(screen.getByRole('button', { name: 'Add team' }));
   expect(await screen.findByText('Add a team member')).toBeTruthy();
@@ -332,6 +360,7 @@ it('uses the shared project workspace for a project manager with read-only actio
 
 
 it('excludes Admin and inactive users from ownership selections and previews a handover', async () => {
+  companyAPI.projectRoles.mockResolvedValue({data:[{user_id:4,role_key:'PROJECT_ADMIN'},{user_id:7,role_key:'PROJECT_ADMIN'}]});
   currentUser.role = 'PROJECT_ADMIN'; currentUser.canManageProjects = true; currentUser.canCreateProjects = true;
   userAPI.getAllUsers.mockResolvedValue({ data: [
     { id: 3, firstName: 'Original', lastName: 'PM', role: 'EMPLOYEE', isActive: true },

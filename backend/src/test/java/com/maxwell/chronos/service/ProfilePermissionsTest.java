@@ -11,11 +11,27 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class ProfilePermissionsTest {
+    @Test void submittedIdentityCannotBeChanged() {
+        var users=mock(UserRepository.class);
+        var user=User.builder().id(1L).email("employee@example.com").role(UserRole.EMPLOYEE)
+            .firstName("Test").lastName("Employee").dateOfBirth(java.time.LocalDate.of(1990,1,1)).profileCompleted(true).build();
+        when(users.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
+        when(users.findForUpdate(user.getId())).thenReturn(Optional.of(user));
+        var service=new UserService(users,mock(AuditService.class),mock(AuthSessionService.class));
+        var request=new UpdateProfileRequest();request.setFirstName("Changed");request.setLastName("Employee");request.setDateOfBirth(user.getDateOfBirth());
+        assertThrows(IllegalArgumentException.class,()->service.updateOwnProfile(user.getEmail(),request));
+        request.setFirstName("Test");request.setDateOfBirth(java.time.LocalDate.of(1991,1,1));
+        assertThrows(IllegalArgumentException.class,()->service.updateOwnProfile(user.getEmail(),request));
+        request.setDateOfBirth(user.getDateOfBirth());user.setProfileDetailsSubmitted(true);user.setGender("Female");request.setGender("Male");
+        assertThrows(IllegalArgumentException.class,()->service.updateOwnProfile(user.getEmail(),request));
+        verify(users,never()).save(any());
+    }
     @Test void timezoneIsSavedReturnedAndValidated() {
         var users = mock(UserRepository.class);
         var service = new UserService(users, mock(AuditService.class), mock(AuthSessionService.class));
         var user = User.builder().id(1L).email("employee@example.com").role(UserRole.EMPLOYEE).build();
         when(users.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
+        when(users.findForUpdate(user.getId())).thenReturn(Optional.of(user));
         when(users.save(user)).thenReturn(user);
         var request = new UpdateProfileRequest();
         request.setTimezone("Asia/Kolkata");
@@ -32,6 +48,7 @@ class ProfilePermissionsTest {
         var service = new UserService(users, mock(AuditService.class), mock(AuthSessionService.class));
         var user = User.builder().id(1L).email("employee@example.com").role(UserRole.EMPLOYEE).build();
         when(users.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
+        when(users.findForUpdate(user.getId())).thenReturn(Optional.of(user));
         when(users.save(user)).thenReturn(user);
         var request = new UpdateProfileRequest();
         String[] fields = {"PhoneNumber", "PersonalEmail", "AddressLine1", "AddressLine2", "City", "StateProvince", "PostalCode", "Country", "BloodGroup", "EmergencyContactName", "EmergencyContactRelationship", "EmergencyContactPhone", "EmergencyContactEmail"};
@@ -75,9 +92,11 @@ class ProfilePermissionsTest {
 
     @Test void systemAdminCannotSetSsnAndExistingValueIsNotReturnedOrErased() {
         var users = mock(UserRepository.class);
-        var service = new UserService(users, mock(AuditService.class), mock(AuthSessionService.class));
+        var jdbc=mock(org.springframework.jdbc.core.JdbcTemplate.class);when(jdbc.queryForObject(org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.eq(Boolean.class),org.mockito.ArgumentMatchers.eq(1L),org.mockito.ArgumentMatchers.eq("PLATFORM_ADMIN"))).thenReturn(true);
+        var service = new UserService(users, mock(AuditService.class), mock(AuthSessionService.class),jdbc);
         var user = User.builder().id(1L).email("admin@example.com").role(UserRole.ADMIN).ssnLast4("1234").build();
         when(users.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
+        when(users.findForUpdate(user.getId())).thenReturn(Optional.of(user));
         var request = new UpdateProfileRequest();
         request.setSsnLast4("5678");
         assertThrows(AccessDeniedException.class, () -> service.updateOwnProfile(user.getEmail(), request));
@@ -94,23 +113,31 @@ class ProfilePermissionsTest {
         var service = new UserService(users, mock(AuditService.class), mock(AuthSessionService.class));
         var user = User.builder().id(1L).email("employee@example.com").role(UserRole.EMPLOYEE).build();
         when(users.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
+        when(users.findForUpdate(user.getId())).thenReturn(Optional.of(user));
         when(users.save(user)).thenReturn(user);
         var request = new UpdateProfileRequest();
         request.setSsnLast4("1234");
         assertEquals("1234", service.updateOwnProfile(user.getEmail(), request).getSsnLast4());
     }
-    @Test void onlyAdminCanSetOrClearJoiningDate() {
+    @Test void legacyJoiningDateEditsAreBlockedForEveryRole() {
         var users = mock(UserRepository.class);
         var service = new UserService(users, mock(AuditService.class), mock(AuthSessionService.class));
         var employee = User.builder().id(1L).role(UserRole.EMPLOYEE).build();
         var admin = User.builder().id(2L).role(UserRole.PROJECT_ADMIN).build();
         var systemAdmin = User.builder().id(3L).role(UserRole.ADMIN).build();
         var date = java.time.LocalDate.of(2026, 7, 27);
-        assertThrows(AccessDeniedException.class, () -> service.updateJoiningDate(1L, date, employee));
-        assertThrows(AccessDeniedException.class, () -> service.updateJoiningDate(1L, date, admin));
-        when(users.findForUpdate(1L)).thenReturn(Optional.of(employee));
-        when(users.save(employee)).thenReturn(employee);
-        assertEquals(date, service.updateJoiningDate(1L, date, systemAdmin).getJoiningDate());
-        assertNull(service.updateJoiningDate(1L, null, systemAdmin).getJoiningDate());
+        for(var actor:java.util.List.of(employee,admin,systemAdmin)) {
+            var ex=assertThrows(org.springframework.web.server.ResponseStatusException.class,()->service.updateJoiningDate(1L,date,actor));
+            assertEquals(410,ex.getStatusCode().value());
+        }
+        verifyNoInteractions(users);
+    }
+
+    @Test void personalProfileCannotChangeLegacyEmploymentFields() {
+        var users=mock(UserRepository.class);
+        var service=new UserService(users,mock(AuditService.class),mock(AuthSessionService.class));
+        var request=new UpdateProfileRequest();request.setJobTitle("New title");
+        assertThrows(IllegalArgumentException.class,()->service.updateOwnProfile("employee@example.com",request));
+        verifyNoInteractions(users);
     }
 }

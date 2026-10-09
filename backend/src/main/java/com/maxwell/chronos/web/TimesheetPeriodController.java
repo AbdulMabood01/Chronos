@@ -20,6 +20,13 @@ public class TimesheetPeriodController {
     private long actor(Jwt jwt) { return users.findUserEntityByEmail(jwt.getClaimAsString("preferred_username")).getId(); }
     public record Decision(boolean approve,String comment,String fallbackReason) {}
     public record Opening(String reason) {}
+    public record BatchSubmission(List<LocalDate> dates) {}
+    @GetMapping("/month") public List<Map<String,Object>> month(@AuthenticationPrincipal Jwt jwt,@RequestParam long projectId,@RequestParam LocalDate date,@RequestParam(required=false) Long userId) {
+        long actor=actor(jwt); return periods.month(actor,userId==null?actor:userId,projectId,date);
+    }
+    @PostMapping("/submit-batch") public List<Map<String,Object>> submitBatch(@AuthenticationPrincipal Jwt jwt,@RequestParam long projectId,@RequestBody BatchSubmission submission) {
+        return periods.submitBatch(actor(jwt),projectId,submission.dates());
+    }
     @GetMapping public Map<String,Object> get(@AuthenticationPrincipal Jwt jwt,@RequestParam long projectId,@RequestParam LocalDate date,@RequestParam(required=false) Long userId) {
         long actor=actor(jwt); return periods.view(actor,userId==null?actor:userId,projectId,date);
     }

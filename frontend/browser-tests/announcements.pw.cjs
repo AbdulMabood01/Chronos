@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./support/company-fixture.cjs');
 const announcement = { id:'news', title:'A new chapter for our team', content:'Our fall company meeting is coming up.\n\nJoin us on Friday to hear what is next, celebrate recent milestones, and meet the people behind our newest projects.', priority:'IMPORTANT', status:'PUBLISHED', publish_date:'2026-09-22', acknowledgment_required:true, version:0 };
 
 async function setup(page, role) {
@@ -17,47 +17,14 @@ async function setup(page, role) {
     await route.fulfill({ json:data });
   });
 }
-test('employee dashboard and acknowledgment work on desktop and mobile', async ({ page }) => {
-  const errors=[]; page.on('pageerror', e => errors.push(e.message));
-  await setup(page,'EMPLOYEE');
-  await page.goto('/dashboard');
-  const banner = page.getByRole('region', { name:'Company announcements' });
-  await expect(banner).toBeVisible();
-  await expect(banner.getByRole('link')).toHaveCount(3);
-  expect((await banner.boundingBox()).height).toBeLessThan(300);
-  await page.setViewportSize({ width:390, height:844 });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  expect((await banner.boundingBox()).height).toBeLessThan(400);
-  await page.setViewportSize({ width:1440, height:1050 });
-  await page.screenshot({ path:'test-results/announcements-dashboard-desktop.png', fullPage:true });
-  await banner.getByRole('link', { name:/A new chapter for our team/ }).click();
-  await expect(page).toHaveURL(/\/announcements\?id=news$/);
-  await expect(page.getByRole('heading', { name:announcement.title })).toBeVisible();
-  await page.getByRole('button', { name:'Acknowledge announcement' }).click();
-  await expect(page.getByText('✓ You acknowledged this announcement.')).toBeVisible();
-  await page.setViewportSize({ width:390, height:844 });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path:'test-results/announcements-detail-mobile.png', fullPage:true });
-  await page.getByRole('button', { name:'All announcements' }).click();
-  await expect(page.getByRole('button', { name:/A new chapter for our team/ })).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  expect(errors).toEqual([]);
-  await page.goto('/dashboard');
-  await expect(page.getByRole('region', { name:'Company announcements' }).getByRole('link', { name:/Office access this weekend/ })).toBeVisible();
-  await expect(page.getByRole('link', { name:/A new chapter for our team/ })).toHaveCount(0);
-  await page.reload();
-  await expect(page.getByRole('region', { name:'Company announcements' }).getByRole('link', { name:/Office access this weekend/ })).toBeVisible();
+test('employee acknowledges an announcement and returns to the mobile feed', async ({page})=>{
+ await setup(page,'EMPLOYEE');await page.goto('/announcements?id=news');await expect(page.getByRole('heading',{name:announcement.title})).toBeVisible();
+ await page.getByRole('button',{name:'Acknowledge announcement'}).click();await expect(page.getByText(/You acknowledged this announcement/)).toBeVisible();
+ await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.getByRole('button',{name:'All announcements'}).click();await expect(page.getByRole('button',{name:/A new chapter for our team/})).toBeVisible();
 });
-test('homepage has no announcement banner when the feed is empty', async ({ page }) => {
-  await setup(page,'ADMIN');
-  await page.route('**/api/announcements?*', route => route.fulfill({ json:[] }));
-  const feed = page.waitForResponse(response => new URL(response.url()).pathname === '/api/announcements');
-  await page.goto('/dashboard');
-  await feed;
-  await expect(page.getByRole('region', { name:'Company announcements' })).toHaveCount(0);
-  await expect(page.locator('.admin-announcement-banner')).toHaveCount(0);
-  await page.goto('/announcements');
-  await expect(page.getByRole('heading', { name:"You're all caught up" })).toBeVisible();
+test('empty company announcement feed displays its empty state',async({page})=>{
+ await setup(page,'ADMIN');await page.route('**/api/companies/1/announcements?*',route=>route.fulfill({json:[]}));await page.goto('/announcements');await expect(page.getByRole('heading',{name:"You're all caught up"})).toBeVisible();
 });
 test('Admin management form and tracking fit mobile and dark theme', async ({ page }) => {
   await setup(page,'ADMIN');

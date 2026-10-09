@@ -3,6 +3,8 @@ import React from 'react';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import Expenses, { ProjectExpenseHistory } from './Expenses';
+vi.mock('../CompanyContext', () => ({ useCompany:()=>({currentCompany:{id:1},projectPermissions:[{projectId:3}],
+  permissionsForProject:()=>({capabilities:{canSubmitWork:true}})}) }));
 import { expenseAPI, projectAPI } from '../api';
 
 vi.mock('../api');
@@ -10,7 +12,7 @@ vi.mock('../AuthContext', () => ({ useAuth: () => ({ user: { id: 4, role: 'EMPLO
 
 beforeEach(() => {
   vi.resetAllMocks();
-  projectAPI.getAssignedProjects.mockResolvedValue({ data: [{ id: 3, code: 'ATLAS', name: 'Atlas', isActive: true }] });
+  projectAPI.getAssignedProjects.mockResolvedValue({ data: [{ id: 3, companyId:1, code: 'ATLAS', name: 'Atlas', isActive: true }] });
   expenseAPI.mine.mockResolvedValue({ data: [] });
   expenseAPI.pending.mockResolvedValue({ data: [] });
   expenseAPI.project.mockResolvedValue({ data: [] });
@@ -33,8 +35,8 @@ it('submits an assigned project expense with its receipt', async () => {
 
 it('shows a newly submitted expense first in My expenses', async () => {
   expenseAPI.mine.mockResolvedValueOnce({ data: [] }).mockResolvedValue({ data: [
-    { id: 1, project_code: 'ATLAS', category: 'MEALS', amount: 12, expense_date: '2026-09-20', status: 'APPROVED', description: 'Older claim', submitted_at: '2026-09-20T12:00:00Z' },
-    { id: 2, project_code: 'ATLAS', category: 'TRAVEL', amount: 25.5, expense_date: '2026-09-27', status: 'PENDING_APPROVAL', description: 'New claim', submitted_at: '2026-09-27T12:00:00Z' },
+    { id: 1, project_id:3, project_code: 'ATLAS', category: 'MEALS', amount: 12, expense_date: '2026-09-20', status: 'APPROVED', description: 'Older claim', submitted_at: '2026-09-20T12:00:00Z' },
+    { id: 2, project_id:3, project_code: 'ATLAS', category: 'TRAVEL', amount: 25.5, expense_date: '2026-09-27', status: 'PENDING_APPROVAL', description: 'New claim', submitted_at: '2026-09-27T12:00:00Z' },
   ] });
   expenseAPI.save.mockResolvedValue({ data: {} });
   render(<Expenses />);

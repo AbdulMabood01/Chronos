@@ -1893,11 +1893,11 @@ html, body, #root {
   background:
     radial-gradient(circle at center, #11374f 0 56%, transparent 57%),
     conic-gradient(
-      #28c76f 0 var(--approved-deg),
-      #ffb547 var(--approved-deg) var(--submitted-deg),
-      #ff5c75 var(--submitted-deg) var(--rejected-deg),
-      #6fd3ff var(--rejected-deg) var(--other-deg),
-      rgba(255, 255, 255, 0.24) var(--other-deg) 360deg
+      var(--chart-approved) 0 var(--approved-deg),
+      var(--chart-submitted) var(--approved-deg) var(--submitted-deg),
+      var(--chart-rejected) var(--submitted-deg) var(--rejected-deg),
+      var(--chart-draft) var(--rejected-deg) var(--other-deg),
+      var(--chart-remaining) var(--other-deg) 360deg
     );
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 50%;
@@ -2118,7 +2118,7 @@ html, body, #root {
   aspect-ratio: 1;
   background:
     radial-gradient(circle at center, #fff 0 54%, transparent 55%),
-    conic-gradient(var(--chart-primary) 0 var(--chart-percent), #dbe3ee var(--chart-percent) 100%);
+    conic-gradient(var(--chart-primary) 0 var(--chart-percent), var(--chart-remaining) var(--chart-percent) 100%);
   border-radius: 50%;
   display: flex;
   justify-content: center;
@@ -2132,11 +2132,11 @@ html, body, #root {
 }
 
 .donut-chart-blue {
-  --chart-primary: var(--primary-color);
+  --chart-primary: var(--chart-approved);
 }
 
 .donut-chart-green {
-  --chart-primary: var(--success-color);
+  --chart-primary: var(--chart-approved);
 }
 
 .project-chart-copy {
@@ -2816,7 +2816,7 @@ html, body, #root {
   align-items: start;
   display: grid;
   gap: 1.25rem;
-  grid-template-columns: minmax(0, 1fr) 280px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
 }
 
 .letter-paper {
@@ -2922,6 +2922,18 @@ html, body, #root {
 .letter-review-side .button {
   width: 100%;
 }
+
+.letter-review-side { min-width: 0; }
+.letter-confirmation-card { display: grid; gap: 18px; padding: 24px; margin: 0; }
+.letter-confirmation-card h3, .letter-confirmation-card p { margin: 0; }
+.letter-confirmation-card h3 { font-size: 18px; line-height: 1.4; }
+.letter-confirmation-card p, .letter-approval-guidance { color: var(--text-secondary); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.letter-confirmation-card > label { display: grid; gap: 8px; font-size: 14px; font-weight: 600; }
+.letter-confirmation-card input:not([type="checkbox"]), .letter-confirmation-card textarea { width: 100%; min-width: 0; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--surface-color); color: var(--text-primary); font: inherit; font-weight: 400; }
+.letter-confirmation-card textarea { min-height: 90px; resize: vertical; }
+.letter-confirmation-card > .letter-confirmation-check { display: flex; align-items: flex-start; gap: 10px; line-height: 1.5; font-weight: 400; }
+.letter-confirmation-check input { width: 18px; height: 18px; margin: 2px 0 0; flex-shrink: 0; }
+.letter-approval-guidance { margin: 0; padding: 12px 16px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--surface-muted); }
 
 .task-letter-preview {
   color: var(--text-secondary);
@@ -3222,7 +3234,7 @@ body.theme-dark .project-section-heading p {
 body.theme-dark .donut-chart {
   background:
     radial-gradient(circle at center, #151d2b 0 54%, transparent 55%),
-    conic-gradient(var(--chart-primary) 0 var(--chart-percent), #2f3a49 var(--chart-percent) 100%);
+    conic-gradient(var(--chart-primary) 0 var(--chart-percent), var(--chart-remaining) var(--chart-percent) 100%);
 }
 
 body.theme-dark .table-hours-input {
@@ -3629,3 +3641,12 @@ body.theme-dark .gross-pay-tile strong {
 .highlighted-workspace .timesheet-filter-row #timesheet-project-select { border-color: #278569; background: color-mix(in srgb, #278569 9%, var(--surface-color)); }
 .connection-banner { position: fixed; z-index: 1100; top: 0; left: 0; right: 0; padding: .8rem 1rem; text-align: center; color: #fff; background: #8b3434; box-shadow: 0 2px 12px #0003; }
 .connection-restored { background: #21664e; }
+
+.letter-employee-details { display:grid; gap:12px; padding:18px 0; margin:18px 0; border-top:1px solid var(--border-color); border-bottom:1px solid var(--border-color); }
+.letter-employee-details > div { display:grid; grid-template-columns:160px minmax(0,1fr); gap:16px; }
+.letter-employee-details dt { font-weight:600; color:#475569; }
+.letter-employee-details dd { margin:0; overflow-wrap:anywhere; }
+@media(max-width:600px) { .letter-employee-details > div { grid-template-columns:1fr; gap:4px; } }
+
+.letter-employer-info > span { display:grid; grid-template-columns:140px minmax(0,1fr); gap:16px; padding:5px 0; }
+.letter-employer-info > span > strong { font-weight:600; }

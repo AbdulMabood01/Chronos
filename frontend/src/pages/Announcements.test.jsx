@@ -5,13 +5,13 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import Announcements, { AnnouncementPanel } from './Announcements';
 import { announcementAPI as api } from '../api';
-vi.mock('../api', () => ({ announcementAPI: { list: vi.fn(), open: vi.fn(), save: vi.fn(), status: vi.fn(), remove: vi.fn(), acknowledge: vi.fn(), tracking: vi.fn(), attachment: vi.fn() } }));
+vi.mock('../api',()=>{const api={ list: vi.fn(), open: vi.fn(), save: vi.fn(), status: vi.fn(), remove: vi.fn(), acknowledge: vi.fn(), tracking: vi.fn(), attachment: vi.fn() };return {announcementAPI:api,companyAnnouncementAPI:()=>api,companyFeedbackReviewsAPI:()=>({employees:vi.fn().mockResolvedValue({data:[]})}),companyGovernanceAPI:()=>({configuration:vi.fn().mockResolvedValue({data:{handlerConfigured:true}}),recuse:vi.fn().mockResolvedValue({data:null})})};});
 const user = { role: 'EMPLOYEE' };
 vi.mock('../AuthContext', () => ({ useAuth: () => ({ user }) }));
 const item = { id:'a', title:'Office update', content:'Please read this update.', priority:'IMPORTANT', status:'PUBLISHED', publish_date:'2026-09-22', acknowledgment_required:true, version:0 };
 const mount = (path = '/announcements') => render(<MemoryRouter initialEntries={[path]}><Announcements/></MemoryRouter>);
 afterEach(cleanup);
-beforeEach(() => { vi.resetAllMocks(); user.role = 'EMPLOYEE'; api.list.mockResolvedValue({ data:[item] }); api.open.mockResolvedValue({ data:{ ...item, viewed_at:'2026-09-22T12:00:00Z' } }); });
+beforeEach(() => { vi.resetAllMocks(); user.scopedAccess=false; api.list.mockResolvedValue({ data:[item] }); api.open.mockResolvedValue({ data:{ ...item, viewed_at:'2026-09-22T12:00:00Z' } }); });
 it('shows recent unread announcements on the dashboard without recording views', async () => {
   render(<MemoryRouter><AnnouncementPanel/></MemoryRouter>);
   await screen.findByText('Office update');
@@ -77,7 +77,7 @@ it('keeps failed acknowledgments available for retry', async () => {
   await waitFor(() => expect(screen.getByRole('button', { name:'Acknowledge announcement' }).disabled).toBe(false));
 });
 it('allows Admins to create drafts and see pending employees', async () => {
-  user.role='ADMIN'; mount();
+  user.scopedAccess=true; mount();
   await waitFor(() => expect(api.list).toHaveBeenCalledWith(true));
   await screen.findByRole('button', { name:/Office update/ });
   expect(screen.queryByRole('button', { name:'Employee view' })).toBeNull();
@@ -103,3 +103,5 @@ it('displays a useful empty state and handles feed failures', async () => {
   await screen.findByRole('alert');
   expect(screen.queryByText("You're all caught up")).toBeNull();
 });
+
+vi.mock('../CompanyContext',()=>({useCompany:()=>({currentCompany:{id:12,name:'Company A'},companyCapabilities:{canManageCompanyAnnouncements:user.scopedAccess===true}})}));

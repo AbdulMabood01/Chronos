@@ -2,7 +2,7 @@ import React from 'react';
 import Icon from './Icon';
 import './ProfileChecklist.css';
 const groups = [
-  ['Personal details', [['firstName', 'profile-first-name'], ['lastName', 'profile-last-name'], ['jobTitle', 'profile-job-title'], ['dateOfBirth', 'profile-dob']]],
+  ['Personal details', [['firstName', 'profile-first-name'], ['lastName', 'profile-last-name'], ['dateOfBirth', 'profile-dob']]],
   ['Phone number', [['phoneNumber', 'profile-phoneNumber']]],
   ['Home address', [['addressLine1', 'profile-addressLine1'], ['city', 'profile-city'], ['country', 'profile-country']]],
   ['Emergency contact', [['emergencyContactName', 'profile-emergencyContactName'], ['emergencyContactRelationship', 'profile-emergencyContactRelationship'], ['emergencyContactPhone', 'profile-emergencyContactPhone']]],

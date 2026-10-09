@@ -26,12 +26,12 @@
 
 /* Time off workspace */
 .workspace-content .vacation-page { width: 100%; max-width: 1440px; margin: 0 auto; }
-.vacation-page-hero { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 26px; overflow: hidden; margin-bottom: 18px; padding: clamp(28px, 4vw, 46px); border: 1px solid color-mix(in srgb, var(--primary-color) 19%, var(--border-color)); border-radius: 20px; background: linear-gradient(115deg, color-mix(in srgb, var(--primary-color) 12%, var(--surface-color)), var(--surface-color) 72%); }
-.vacation-page-hero::after { content: ''; position: absolute; width: 260px; height: 260px; right: -90px; top: -155px; border: 1px solid color-mix(in srgb, var(--primary-color) 13%, transparent); border-radius: 50%; box-shadow: 0 0 0 38px color-mix(in srgb, var(--primary-color) 3%, transparent), 0 0 0 76px color-mix(in srgb, var(--primary-color) 3%, transparent); pointer-events: none; }
+.vacation-page-hero { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 26px; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.vacation-page-hero::after { display: none; }
 .vacation-kicker { display: block; color: var(--primary-color); font-size: 10px; font-weight: 800; letter-spacing: .16em; line-height: 1.5; }
-.vacation-page .vacation-page-hero h1 { margin: 7px 0 10px; font-size: clamp(29px, 3vw, 40px); line-height: 1.13; letter-spacing: -.045em; }
+.vacation-page .vacation-page-hero h1 { margin: 7px 0 10px; font-size: 27px; line-height: 1.13; letter-spacing: -.045em; }
 .vacation-page-hero p { margin: 0; color: var(--text-secondary); font-size: 14px; line-height: 1.65; }
-.vacation-hero-mark { position: relative; z-index: 1; display: grid; place-items: center; flex: 0 0 72px; height: 72px; border: 1px solid color-mix(in srgb, var(--primary-color) 20%, var(--border-color)); border-radius: 18px; background: var(--surface-color); color: var(--primary-color); box-shadow: var(--shadow-soft); }
+.vacation-hero-mark { display: none; }
 .vacation-page .record-summary { gap: 12px; margin-bottom: 20px; }
 .vacation-page .record-summary > div { border-radius: 13px; }
 .vacation-page .vacation-view-switch { width: 100%; max-width: none; gap: 26px; padding: 0 4px; margin-bottom: 22px; border: 0; border-bottom: 1px solid var(--border-color); border-radius: 0; background: transparent; }
@@ -77,5 +77,42 @@
 .vacation-guide button { display: flex; align-items: center; gap: 8px; justify-self: start; padding: 0; border: 0; background: transparent; color: var(--primary-color); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
 .vacation-page .vacation-balances-view > .card { margin: 0; padding: clamp(24px, 3vw, 38px); border-radius: 18px; box-shadow: var(--shadow-soft); }
 @media (max-width: 1050px) { .vacation-page .vacation-layout { grid-template-columns: minmax(0, 1fr); } .vacation-guide { position: static; } }
-@media (max-width: 700px) { .vacation-page-hero { padding: 27px; } .vacation-hero-mark { display: none; } .vacation-page .vacation-view-switch { gap: 12px; } .vacation-page .vacation-view-switch button { flex: 1; font-size: 12px; } .vacation-page .request-card { flex-direction: column; padding: 19px; } .vacation-page .request-actions { align-self: stretch; justify-content: flex-start; } .vacation-page .vacation-list-heading .button { align-self: flex-start; } }
+@media (max-width: 700px) { .vacation-page-hero { padding: 0; } .vacation-hero-mark { display: none; } .vacation-page .vacation-view-switch { gap: 12px; } .vacation-page .vacation-view-switch button { flex: 1; font-size: 12px; } .vacation-page .request-card { flex-direction: column; padding: 19px; } .vacation-page .request-actions { align-self: stretch; justify-content: flex-start; } .vacation-page .vacation-list-heading .button { align-self: flex-start; } }
 @media (max-width: 700px) { .vacation-page .record-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; } .vacation-page .record-summary > div { display: block; min-height: 64px; padding: 11px; } .vacation-page .record-summary-icon { display: none; } .vacation-page .record-summary small { font-size: 9px; letter-spacing: .02em; } .vacation-page .record-summary strong { font-size: 19px; } .vacation-page .request-actions .button { width: auto; flex: 1 1 75px; } }
+
+.vacation-page .header-bar { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+.vacation-page .header-bar > button { flex-shrink: 0; }
+.leave-balances-view { margin-bottom: 24px; padding: 24px; }
+.vacation-page details { margin-top: 8px; font-size: .85rem; }
+.vacation-page details summary { cursor: pointer; color: var(--text-secondary); }
+@media(max-width:600px) { .vacation-page .header-bar { align-items: flex-start; flex-direction: column; } }
+
+
+/* Leave history: content, duration, and actions have a stable reading order. */
+.vacation-page .leave-history { margin-top: 28px; border: 1px solid var(--border-color); border-radius: 18px; background: var(--surface-color); overflow: hidden; }
+.leave-history-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 26px 28px; border-bottom: 1px solid var(--border-color); }
+.leave-history-heading h2 { margin: 5px 0 7px; font-size: 23px; letter-spacing: -.025em; }
+.leave-history-heading p { margin: 0; color: var(--text-secondary); font-size: 13px; }
+.leave-request-count { flex-shrink: 0; color: var(--text-secondary); font-size: 12px; }
+.leave-history-item { display: grid; grid-template-columns: minmax(0,1fr) 110px; gap: 12px 32px; padding: 25px 28px; border-bottom: 1px solid var(--border-color); }
+.leave-history-item:last-child { border-bottom: 0; }
+.leave-history-main { min-width: 0; }
+.leave-history-title { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.leave-history-title h3 { margin: 0; font-size: 17px; font-weight: 650; }
+.leave-history-title h3 span { color: var(--text-secondary); font-weight: 450; }
+.leave-history-title .status-badge { font-size: 11px; }
+.leave-history-dates { margin: 12px 0 7px; font-size: 15px; font-weight: 550; }
+.leave-history-dates span { margin: 0 8px; color: var(--text-secondary); }
+.leave-history-impact, .leave-history-member { margin: 6px 0; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+.leave-history-rejection { font-size: 13px; color: var(--error-color); }
+.leave-history-duration { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border-left: 1px solid var(--border-color); }
+.leave-history-duration strong { font-size: 32px; line-height: 1.1; font-weight: 600; }
+.leave-history-duration span { font-size: 12px; color: var(--text-secondary); }
+.leave-history-duration small { font-size: 11px; color: var(--text-secondary); }
+.leave-history-actions { grid-column: 1 / -1; }
+.leave-history-actions:empty { display: none; }
+.leave-history-actions .compact-actions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 8px; }
+.leave-history-actions .button { min-height: 34px; font-size: 12px; }
+.leave-history-actions .compact-actions > button:last-child { margin-left: auto; }
+.leave-history-item details p { max-width: 720px; overflow-wrap: anywhere; color: var(--text-secondary); font-size: 13px; }
+@media(max-width:600px) { .leave-history-heading { padding: 21px 18px; } .leave-history-heading p { max-width: 230px; } .leave-request-count { display: none; } .leave-history-item { padding: 22px 18px; grid-template-columns: minmax(0,1fr) 76px; gap: 12px; } .leave-history-duration strong { font-size: 28px; } .leave-history-dates { font-size: 13px; line-height: 1.7; } .leave-history-dates span { margin: 0 3px; } }

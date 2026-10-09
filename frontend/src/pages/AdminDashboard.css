@@ -25,3 +25,5 @@
   outline: none; border-color: var(--primary-color); box-shadow: var(--focus-ring);
 }
 .opening-review-modal .expense-actions { gap: 9px; margin-top: 18px; }
+.approval-late-badge { display:inline-flex; color:#b42335; background:#fff0f2; border:1px solid #e9b6bf; border-radius:5px; padding:4px 8px; font-size:11px; font-weight:750; }
+body.theme-dark .approval-late-badge { color:#ff9ba8; background:#392631; border-color:#76505b; }

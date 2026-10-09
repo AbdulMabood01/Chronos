@@ -61,9 +61,9 @@ public class InvitationEmailService {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(from); message.setTo(user.getEmail());
         message.setSubject("Welcome to Chronos — activate your account");
-        message.setText("Hello " + user.getFullName() + ",\n\nWelcome to Maxwell's Chronos employee workspace.\n"
+        message.setText("Hello " + user.getFullName() + ",\n\nWelcome to Chronos.\n"
                 + "Create your password and activate your account using this one-time link:\n\n"
-                + frontend.replaceAll("/+$", "") + "/activate?token=" + token
+                + frontend.replaceAll("/+$", "") + "/activate#token=" + token
                 + "\n\nThis invitation expires at " + expires + " (UTC). After activation, sign in with your work email and password."
                 + "\nIf this invitation has expired, contact your Admin for a new one."
                 + "\nIf you were not expecting this invitation, please contact your administrator.\n\nThe Chronos team");

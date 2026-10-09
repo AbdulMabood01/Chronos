@@ -9,6 +9,8 @@ import java.util.List;
 
 @Repository
 public interface LetterRequestRepository extends JpaRepository<LetterRequest, Long> {
+    List<LetterRequest> findByCompanyIdAndUserIdOrderByCreatedAtDesc(Long companyId,Long userId);
+    List<LetterRequest> findByCompanyIdAndStatusOrderBySubmittedAtDesc(Long companyId,VacationStatus status);
     List<LetterRequest> findByUserIdOrderByCreatedAtDesc(Long userId);
     List<LetterRequest> findByStatusOrderBySubmittedAtDesc(VacationStatus status);
 }

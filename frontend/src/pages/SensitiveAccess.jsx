@@ -1,0 +1,29 @@
+import ScreenTitle from '../components/ScreenTitle';
+import {LoadingIndicator} from '../components/Hourglass';
+import './CompanyManagement.css';
+import {useEffect,useState} from 'react';
+import {useAuth} from '../AuthContext';
+import {useCompany} from '../CompanyContext';
+import {companyAPI,companyGovernanceAPI} from '../api';
+
+const today=()=>new Date().toISOString().slice(0,10);
+const empty=()=>({userId:'',permission:'CONFIDENTIAL_HANDLER',subjectUserId:'',startsOn:today(),endsOn:today(),purpose:''});
+export default function SensitiveAccess(){
+  const {user}=useAuth();const {currentCompany,refreshCompanies}=useCompany();const id=currentCompany.id;const api=companyGovernanceAPI(id);
+  const [members,setMembers]=useState([]),[grants,setGrants]=useState([]),[form,setForm]=useState(empty),[revision,setRevision]=useState(0),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
+  useEffect(()=>{let active=true;setBusy(true);Promise.all([companyAPI.members(id,{status:'ACTIVE'}),api.grants()]).then(([people,access])=>{if(active){setMembers(people.data.filter(m=>m.status==='ACTIVE'&&!m.platform_account&&m.account_available!==false));setGrants(access.data);}}).catch(e=>{if(active)setError(e.response?.data?.message||'Unable to load sensitive access.');}).finally(()=>{if(active)setBusy(false);});return()=>{active=false;};},[id,revision]);
+  async function act(callback){setBusy(true);setError('');setNotice('');try{await callback();setRevision(v=>v+1);window.dispatchEvent(new Event('chronos:company-memberships-changed'));await refreshCompanies();}catch(e){setError(e.response?.data?.message||'Unable to change access.');}finally{setBusy(false);}}
+  const name=m=>m.name||`${m.first_name||m.firstName||''} ${m.last_name||m.lastName||''}`.trim();
+  const field=(key,value)=>setForm({...form,[key]:value});
+  return <div className="page-container company-management-page"><div className="header-bar"><ScreenTitle title="Sensitive access" icon="users" eyebrow="MANAGEMENT" description={`Designate confidential handlers and employee reviewers in ${currentCompany.name}.`}/></div><p className="management-help">Company and project roles alone grant no access to this content.</p><p className="management-help">Another Company Admin must authorize a grant to you. Reviewers cannot review themselves. Handlers are excluded from cases they submitted or are involved in, and can recuse themselves.</p>
+    {error&&<p role="alert" className="error-message">{error} <button className="button button-small button-secondary" onClick={()=>setRevision(v=>v+1)}>Reload</button></p>}{notice&&<p className="success-message" role="status">{notice}</p>}
+    <form className="card management-section" onSubmit={e=>{e.preventDefault();act(async()=>{await api.grant({...form,userId:Number(form.userId),subjectUserId:form.permission==='PERFORMANCE_REVIEW'?Number(form.subjectUserId):null});setForm(empty());setNotice('Access granted.');});}}><h2>Grant access</h2><fieldset className="management-form-grid" disabled={busy}>
+      <label className="management-field">Member<select aria-label="Member" required value={form.userId} onChange={e=>field('userId',e.target.value)}><option value="">Choose a member</option>{members.filter(m=>String(m.user_id||m.userId||m.id)!==String(user.id)).map(m=><option key={m.user_id||m.userId||m.id} value={m.user_id||m.userId||m.id}>{name(m)} ({m.email})</option>)}</select></label>
+      <label className="management-field">Permission<select aria-label="Permission" value={form.permission} onChange={e=>field('permission',e.target.value)}><option value="CONFIDENTIAL_HANDLER">Handle eligible confidential cases</option><option value="PERFORMANCE_REVIEW">Review a specific employee</option></select></label>
+      {form.permission==='PERFORMANCE_REVIEW'&&<label className="management-field">Review subject<select aria-label="Review subject" required value={form.subjectUserId} onChange={e=>field('subjectUserId',e.target.value)}><option value="">Choose an employee</option>{members.filter(m=>String(m.user_id||m.userId||m.id)!==String(form.userId)).map(m=><option key={m.user_id||m.userId||m.id} value={m.user_id||m.userId||m.id}>{name(m)}</option>)}</select></label>}
+      <label className="management-field">Starts on (UTC)<input type="date" required value={form.startsOn} onChange={e=>field('startsOn',e.target.value)}/></label><label className="management-field">Ends on (UTC)<input type="date" min={form.startsOn} required value={form.endsOn} onChange={e=>field('endsOn',e.target.value)}/></label><p className="management-full-width">Dates are inclusive. Grants can cover up to one year.</p>
+      <label className="management-field management-full-width">Business purpose<textarea required maxLength={500} value={form.purpose} onChange={e=>field('purpose',e.target.value)}/></label><button className="button button-primary" type="submit">Grant access</button>
+    </fieldset></form>
+    <section className="card management-section"><h2>Access history</h2>{busy&&<LoadingIndicator label="Loading access..."/>}{!grants.length&&!busy&&<div className="management-empty"><h3>No sensitive access grants have been made.</h3><p>Use the form above to grant access to an eligible member.</p></div>}{grants.map(g=><article className="management-record" key={g.id}><h3>{g.user_name}</h3><p>{g.permission==='PERFORMANCE_REVIEW'?`Performance reviews for ${g.subject_name}`:'Eligible confidential cases'}  &middot;  {g.starts_on} through {g.ends_on}</p><p>{g.purpose}</p>{g.revoked_at?<span className="status-badge status-rejected">Revoked</span>:<button className="button button-small button-secondary" disabled={busy} onClick={()=>act(async()=>{await api.revoke(g.id,g.version);setNotice('Access revoked.');})}>Revoke access</button>}</article>)}</section>
+  </div>;
+}

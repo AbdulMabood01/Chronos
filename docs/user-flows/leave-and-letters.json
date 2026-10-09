@@ -1,0 +1,151 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Chronos | Request leave or employment letters",
+    "locale": "en",
+    "quality_profile": "showcase"
+  },
+  "lanes": [
+    {
+      "id": "journey",
+      "label": "User journey"
+    },
+    {
+      "id": "exceptions",
+      "label": "Exception / safeguard",
+      "variant": "exception"
+    }
+  ],
+  "mainPath": [
+    "s0",
+    "s1",
+    "s2",
+    "s3",
+    "s4",
+    "s5"
+  ],
+  "nodes": [
+    {
+      "id": "s0",
+      "lane": "journey",
+      "col": 0,
+      "type": "frontend",
+      "label": "Select company",
+      "sublabel": "Active company membership",
+      "width": 160
+    },
+    {
+      "id": "s1",
+      "lane": "journey",
+      "col": 1,
+      "type": "frontend",
+      "label": "Prepare request",
+      "sublabel": "Own leave or letter request",
+      "width": 160
+    },
+    {
+      "id": "s2",
+      "lane": "journey",
+      "col": 2,
+      "type": "security",
+      "label": "Submit request",
+      "sublabel": "Company-scoped record",
+      "width": 160
+    },
+    {
+      "id": "s3",
+      "lane": "journey",
+      "col": 3,
+      "type": "security",
+      "label": "Assign reviewer",
+      "sublabel": "Different Company Admin",
+      "width": 160
+    },
+    {
+      "id": "s4",
+      "lane": "journey",
+      "col": 4,
+      "type": "frontend",
+      "label": "Review request",
+      "sublabel": "Approve or reject",
+      "width": 160
+    },
+    {
+      "id": "s5",
+      "lane": "journey",
+      "col": 5,
+      "type": "frontend",
+      "label": "View outcome",
+      "sublabel": "Own status and allowed detail",
+      "width": 160
+    },
+    {
+      "id": "exception",
+      "lane": "exceptions",
+      "col": 3,
+      "type": "security",
+      "label": "Self-review blocked",
+      "sublabel": "Another eligible admin required",
+      "width": 160
+    }
+  ],
+  "edges": [
+    {
+      "id": "e0",
+      "from": "s0",
+      "to": "s1",
+      "role": "main"
+    },
+    {
+      "id": "e1",
+      "from": "s1",
+      "to": "s2",
+      "role": "main"
+    },
+    {
+      "id": "e2",
+      "from": "s2",
+      "to": "s3",
+      "role": "main"
+    },
+    {
+      "id": "e3",
+      "from": "s3",
+      "to": "s4",
+      "role": "main"
+    },
+    {
+      "id": "e4",
+      "from": "s4",
+      "to": "s5",
+      "role": "main"
+    },
+    {
+      "id": "blocked",
+      "from": "s3",
+      "to": "exception",
+      "label": "same person",
+      "role": "error",
+      "variant": "security"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Scope and routing",
+      "items": [
+        "Personal requests need no project assignment.",
+        "Company Admin requests require another admin."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Safeguards",
+      "items": [
+        "Calendar summaries show dates and availability only.",
+        "Annual policy application needs preview and confirmation."
+      ]
+    }
+  ]
+}

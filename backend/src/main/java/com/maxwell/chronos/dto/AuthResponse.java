@@ -12,7 +12,9 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
 public class AuthResponse {
+    private boolean platformAdmin;
     private String timezone;
     private String phoneNumber;
 
@@ -31,6 +33,10 @@ public class AuthResponse {
     private String country;
 
     private String bloodGroup;
+    private String gender;
+    private String race;
+    private String ethnicity;
+    private Boolean profileDetailsSubmitted;
 
     private String emergencyContactName;
 
@@ -51,10 +57,10 @@ public class AuthResponse {
     private Boolean profileCompleted;
     private String role;
     private List<String> roles;
-    private boolean canReviewProjects;
-    private boolean canViewProjects;
-    private boolean canManageProjects;
-    private boolean canCreateProjects;
-    private boolean canSubmitWork;
+    @com.fasterxml.jackson.annotation.JsonIgnore private boolean canReviewProjects;
+    @com.fasterxml.jackson.annotation.JsonIgnore private boolean canViewProjects;
+    @com.fasterxml.jackson.annotation.JsonIgnore private boolean canManageProjects;
+    @com.fasterxml.jackson.annotation.JsonIgnore private boolean canCreateProjects;
+    @com.fasterxml.jackson.annotation.JsonIgnore private boolean canSubmitWork;
     private Boolean isActive;
 }

@@ -44,6 +44,7 @@ class ProjectPermissionsTest {
         when(access.hasAnyProjectRole(2L, "PROJECT_ADMIN")).thenReturn(true);
         when(access.hasProjectRole(anyLong(), eq(2L), eq("PROJECT_ADMIN"))).thenReturn(true);
         when(access.hasCompanyRole(1L, 4L, "PROJECT_ADMIN")).thenReturn(true);
+        when(access.hasProjectRole(anyLong(),eq(4L),eq("PROJECT_ADMIN"))).thenReturn(true);
         when(jdbc.queryForObject(eq("SELECT id FROM companies WHERE id=? FOR UPDATE"), eq(Long.class), anyLong())).thenReturn(1L);
         when(jdbc.queryForObject(eq("SELECT project_limit FROM companies WHERE id=?"), eq(Integer.class), anyLong())).thenReturn(100);
         when(jdbc.queryForObject(eq("SELECT count(*) FROM projects WHERE company_id=?"), eq(Integer.class), anyLong())).thenReturn(0);
@@ -82,7 +83,7 @@ class ProjectPermissionsTest {
         when(projects.findAll()).thenReturn(List.of());
         assertTrue(service.getProjects(systemAdmin).isEmpty());
         assertTrue(service.getProjectHoursDashboard(2026, 9, systemAdmin).isEmpty());
-        verify(projects, times(2)).findAll();
+        verifyNoInteractions(projects);
     }
 
     @Test void systemAdminCannotWriteProjectsAssignmentsOrEitherPlanVariant() {
@@ -223,6 +224,7 @@ class ProjectPermissionsTest {
         assertThrows(IllegalArgumentException.class, () -> service.saveProject(null, request, admin));
         approver.setIsActive(true);
         approver.setRole(UserRole.ADMIN);
+        when(access.hasPlatformRole(4L,"PLATFORM_ADMIN")).thenReturn(true);
         assertThrows(IllegalArgumentException.class, () -> service.saveProject(null, request, admin));
         verify(projects, never()).save(any());
     }
