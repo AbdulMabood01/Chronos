@@ -82,4 +82,15 @@ class PlatformCompletionLocalDbTest {
   platform.plan(a,platformEmail,new PlatformAdministrationService.Plan("PRO_PLUS",7,175,1L,"Owned company","COMPLIMENTARY",null));
   assertTrue(db.queryForObject("SELECT is_suspended FROM companies WHERE id=?",Boolean.class,a));assertFalse(access.hasCompanyRole(a,admin,"COMPANY_ADMIN"));assertEquals("COMPLIMENTARY",new CompanyEntitlements(db).state(a).source());
  }
+ @Test void accountCompanyFilterCombinesSearchAndActiveMemberships(){
+  var all=platform.accounts(platformEmail,memberEmail);assertEquals(1,all.size());
+  assertEquals(2,((List<?>)all.getFirst().get("companies")).size());
+  var companyA=platform.accounts(platformEmail,memberEmail,a);assertEquals(1,companyA.size());assertEquals(member,((Number)companyA.getFirst().get("id")).longValue());
+  db.update("UPDATE company_memberships SET status='REMOVED' WHERE company_id=? AND user_id=?",b,member);
+  assertTrue(platform.accounts(platformEmail,memberEmail,b).isEmpty());
+  var remaining=platform.accounts(platformEmail,memberEmail,a);assertEquals(1,((List<?>)remaining.getFirst().get("companies")).size());
+  assertTrue(platform.accounts(platformEmail,platformEmail,a).isEmpty());
+  assertThrows(AccessDeniedException.class,()->platform.accounts(adminEmail,null,a));
+  assertThrows(IllegalArgumentException.class,()->platform.accounts(platformEmail,null,0L));
+ }
 }

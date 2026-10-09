@@ -36,4 +36,10 @@ class PlatformAdministrationControllerTest {
   verify(platform).revokeGrant(eq(12L),eq(actor.getEmail()),argThat(in->in.version()==4L));
   mvc.perform(delete("/platform/companies/12/plan").with(token()).contentType("application/json").content("{\"reason\":\"Missing revision\"}")).andExpect(status().isBadRequest());
  }
+ @Test void forwardsCompanyAndSearchFiltersToAuthorizedAccountDirectory() throws Exception {
+  when(platform.accounts(actor.getEmail(),"Sam",12L)).thenReturn(List.of(Map.of("id",8,"companies",List.of(Map.of("id",12,"name","Company A")))));
+  mvc.perform(get("/platform/accounts").param("companyId","12").param("query","Sam").with(token())).andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store")).andExpect(jsonPath("$[0].companies[0].name").value("Company A"));
+  verify(platform).accounts(actor.getEmail(),"Sam",12L);
+  mvc.perform(get("/platform/accounts").param("companyId","invalid").with(token())).andExpect(status().isBadRequest());
+ }
 }

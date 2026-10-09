@@ -1,8 +1,8 @@
 const {test,expect}=require('@playwright/test');
 const path=require('node:path');
 async function fixture(page,{platform=true}={}){
- const companies=[{id:12,name:'Company A',slug:'company-a',plan_tier:'FREE',project_limit:3,team_limit:6,is_suspended:false,platform_version:0}],writes=[],calls=[],errors=[];
- const accounts=[{id:5,email:'operator@example.com',first_name:'Platform',last_name:'Operator',is_active:true,admin_locked:false,platform_admin:true,active_memberships:0,account_status:'ACTIVE',platform_access_version:0},{id:7,email:'member@example.com',first_name:'Sam',last_name:'Member',is_active:true,admin_locked:false,platform_admin:false,active_memberships:1,account_status:'ACTIVE',platform_access_version:2}];
+ const companies=[{id:12,name:'Company A',slug:'company-a',plan_tier:'FREE',project_limit:3,team_limit:6,is_suspended:false,platform_version:0},{id:14,name:'Company B',slug:'company-b',plan_tier:'FREE',project_limit:1,team_limit:7,is_suspended:false,platform_version:0}],writes=[],calls=[],errors=[];
+ const accounts=[{id:5,email:'operator@example.com',first_name:'Platform',last_name:'Operator',is_active:true,admin_locked:false,platform_admin:true,active_memberships:0,account_status:'ACTIVE',platform_access_version:0},{id:7,email:'member@example.com',first_name:'Sam',last_name:'Member',is_active:true,admin_locked:false,platform_admin:false,companies:[{id:12,name:'Company A'}],active_memberships:1,account_status:'ACTIVE',platform_access_version:2}];
  const usage={project_count:2,active_users:4,reservations:0,user_capacity:7,project_limit:1,plan:'FREE',source:'FREE',ends_at:null};
  let invitations=[{id:31,invitee_email:'admin@example.com',role_key:'COMPANY_ADMIN',expires_at:'2026-11-05T12:00:00Z',created_at:'2026-10-05T12:00:00Z',delivery_status:'FAILED',attempts:5,last_error:'Delivery unavailable. Check email configuration or resend the invitation.'}];
  page.on('pageerror',e=>errors.push(e.message));
@@ -23,7 +23,7 @@ async function fixture(page,{platform=true}={}){
   else if(path.endsWith('/admin-invitations'))body=invitations;
   else if(path.endsWith('/resend')){writes.push({action:'resend'});invitations[0].delivery_status='PENDING';body=null;}
   else if(path.includes('/admin-invitations/')&&req.method()==='DELETE'){writes.push({action:'revoke'});invitations[0].revoked_at='2026-10-05T12:00:00Z';invitations[0].delivery_status='CANCELLED';body=null;}
-  else if(path==='/api/platform/accounts')body=accounts;
+  else if(path==='/api/platform/accounts'){const company=url.searchParams.get('companyId'),search=(url.searchParams.get('query')||'').toLowerCase();body=accounts.filter(account=>(!company||(account.companies||[]).some(c=>String(c.id)===company))&&(!search||(account.email+' '+account.first_name+' '+account.last_name).toLowerCase().includes(search)));}
   else if(path.endsWith('/actions')){const input=req.postDataJSON();writes.push({action:'account',id:Number(path.split('/')[4]),input});accounts[1].admin_locked=input.action==='LOCK';accounts[1].platform_access_version++;body=null;}
   else if(path==='/api/platform/administrators'){writes.push({action:'platform-invite',input:req.postDataJSON()});body={id:9};}
   else if(path==='/api/platform/audit')body=[{id:1,action:'COMPANY_PLAN_UPDATED',actor_email:'operator@example.com',company_name:'Company A',reason:'Growth',created_at:'2026-10-05T12:00:00Z'}];
@@ -85,4 +85,18 @@ for(const width of [1440,390])test('platform screens use shared styling without 
   await page.screenshot({path:path.resolve(__dirname,'../../reports/platform-ui/'+route+'-'+width+'-dark.png'),fullPage:true,animations:'disabled'});
  }
  expect(state.errors).toEqual([]);
+});
+
+test('platform account company filter combines search, clears selection and fits mobile',async({page})=>{
+ const state=await fixture(page);await page.goto('/platform-accounts');
+ const directory=page.getByRole('heading',{name:'Account directory'}).locator('xpath=ancestor::section');
+ await expect(directory.getByText('operator@example.com',{exact:true})).toBeVisible();
+ await page.getByLabel('Filter accounts by company').selectOption('12');
+ await expect(directory.getByText('operator@example.com',{exact:true})).toHaveCount(0);
+ await expect(directory.getByText('member@example.com',{exact:true})).toBeVisible();await expect(directory.locator('.platform-account-companies').getByText('Company A',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Manage sign-in access'}).click();await expect(page.getByRole('heading',{name:'Manage member@example.com'})).toBeVisible();
+ await page.getByLabel('Filter accounts by company').selectOption('14');await expect(page.getByRole('heading',{name:'Manage member@example.com'})).toHaveCount(0);await expect(directory.getByText('No accounts match this company and search.')).toBeVisible();
+ await page.getByLabel('Filter accounts by company').selectOption('12');await page.getByLabel('Search accounts',{exact:true}).fill('operator');await expect(directory.getByText('No accounts match this company and search.')).toBeVisible();
+ await page.getByLabel('Filter accounts by company').selectOption('');await expect(directory.getByText('operator@example.com',{exact:true})).toBeVisible();
+ await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect(state.errors).toEqual([]);
 });
