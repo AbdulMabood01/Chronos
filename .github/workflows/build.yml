@@ -201,6 +201,8 @@ jobs:
 
   security:
     name: Vulnerabilities and secrets
+    env:
+      TRIVY_SHOW_SUPPRESSED: true
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -223,7 +225,6 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: false
           trivyignores: .trivyignore.yaml
-          show-suppressed: true
           exit-code: '1'
           format: json
           output: trivy-results.json
@@ -238,7 +239,6 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: false
           trivyignores: .trivyignore.yaml
-          show-suppressed: true
           exit-code: '1'
           format: json
           output: trivy-packaged-results.json
