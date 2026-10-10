@@ -1,3 +1,4 @@
+const {completeRequiredProfile}=require('./support/profile-fields.cjs');
 const { test, expect } = require('./support/company-fixture.cjs');
 
 for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }, { width: 844, height: 390 }]) {
@@ -21,7 +22,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     expect(bounds.y + bounds.height).toBeLessThanOrEqual(viewport.height);
     expect(await dialog.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
     expect(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
-    await dialog.getByLabel('Contact email', { exact: true }).fill('contact@example.test');
+    await completeRequiredProfile(dialog);
     const submit = dialog.getByRole('button', { name: 'Continue', exact: true });
     await submit.scrollIntoViewIfNeeded();
     await expect(submit).toBeInViewport();

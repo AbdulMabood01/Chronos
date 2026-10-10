@@ -18,7 +18,7 @@ export default function ProfileCompletionPrompt() {
         <div className="modal-header">
           <h2 id="profile-completion-title">Complete Your Profile</h2>
         </div>
-        <p className="modal-subtitle">Fill in what you know now. Unknown fields can stay blank.</p>
+        <p className="modal-subtitle">Complete all fields marked with an asterisk. Optional fields can stay blank.</p>
         <ProfileForm user={user} onSave={updateProfile} submitLabel="Continue" />
       </div>
     </div>

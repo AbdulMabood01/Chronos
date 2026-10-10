@@ -1,7 +1,8 @@
+const {profileFields}=require('./support/profile-fields.cjs');
 const {test,expect}=require('@playwright/test');
 async function fixture(page){
   const companies=[{id:12,name:'Company A',slug:'company-a'},{id:13,name:'Company B',slug:'company-b'}];
-  const user={id:5,email:'admin@example.com',firstName:'Jordan',lastName:'Admin',role:'EMPLOYEE',profileCompleted:true,dateOfBirth:'1990-01-01',jobTitle:'Legacy shared title'};
+  const user={...profileFields,id:5,email:'admin@example.com',firstName:'Jordan',lastName:'Admin',role:'EMPLOYEE',profileCompleted:true,dateOfBirth:'1990-01-01',jobTitle:'Legacy shared title'};
   const records={
     '12:5':{companyId:12,userId:5,employeeId:'ADMIN-A',jobTitle:'Admin A',joiningDate:'2020-01-01',membershipStatus:'ACTIVE',version:0},
     '12:7':{companyId:12,userId:7,employeeId:'123',jobTitle:'Engineer A',joiningDate:'2020-01-01',membershipStatus:'ACTIVE',version:2},
@@ -24,7 +25,7 @@ async function fixture(page){
       const [, , ,company,,member]=path.split('/');const key=`${company}:${member}`;
       if(route.request().method()==='PUT'){
         const input=route.request().postDataJSON();employmentWrites.push({company:Number(company),member:Number(member),input});
-        records[key]={...records[key],...input,version:records[key].version+1};
+        records[key]={...records[key],...input,locked:true,version:records[key].version+1};
       }body=records[key];
     }else if(path==='/api/users/me/profile'){
       const input=route.request().postDataJSON();profileWrites.push(input);body={...user,...input};
@@ -40,7 +41,7 @@ test('company admin edits employment in A without changing B or login fields',as
   const editor=page.getByRole('region',{name:'Company employment details'});
   await editor.getByLabel('Job title').fill('Lead A');await editor.getByLabel('Employee ID').fill('12345');
   await editor.getByRole('button',{name:'Save employment details'}).click();
-  await expect(editor.getByRole('status')).toContainText('saved');
+  await expect(editor.getByText('Employment details saved.',{exact:true})).toBeVisible();await expect(editor.getByText('Employment details are saved and locked.')).toBeVisible();await expect(editor.getByRole('button',{name:'Save employment details'})).toHaveCount(0);
   expect(state.employmentWrites).toEqual([{company:12,member:7,input:{employeeId:'12345',jobTitle:'Lead A',joiningDate:'2020-01-01',version:2}}]);
   expect(state.records['13:7'].jobTitle).toBe('Engineer B');expect(state.profileWrites).toEqual([]);
   await page.getByLabel('Current company',{exact:true}).selectOption('13');
