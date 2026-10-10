@@ -35,3 +35,7 @@ reports/db-backups/
 frontend/test-results/
 frontend/playwright-report/
 reports/maxwell-reference-review/
+
+# Local Playwright caches and browser sessions
+frontend/playwright-transform-cache/
+frontend/playwright_chromiumdev_profile-*/

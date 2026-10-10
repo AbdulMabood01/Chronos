@@ -7,6 +7,7 @@ import { companyLetterRequestAPI,companyAPI } from '../api';
 import { useCompany } from '../CompanyContext';
 import { LoadingIndicator } from '../components/Hourglass';
 import '../styles.css';
+import './LetterDraft.css';
 
 const REQUEST_TYPES = {
   EMPLOYMENT_VERIFICATION: {
@@ -100,10 +101,10 @@ export default function EmployeeRequests() {
   }, [searchParams,user,employment]);
 
   const preview = useMemo(() => {
-    const d=selectedTemplate?.definition;if(!d)return 'Your company is setting up this letter type.';
+    const d=selectedTemplate?.definition;if(!d)return '';
     const values={employee_name:formData.requestedFullName||'[full name]',job_title:formData.requestedJobTitle||'[job title]',joining_date:formData.employmentStartDate?formatDate(formData.employmentStartDate):'[joining date]',issue_date:new Date().toLocaleDateString('en-CA'),employer_name:d.name,destination_country:formData.destinationCountry||'[destination]',travel_start_date:formData.travelStartDate?formatDate(formData.travelStartDate):'[travel start]',travel_end_date:formData.travelEndDate?formatDate(formData.travelEndDate):'[travel end]',vacation_start_date:formData.vacationStartDate?formatDate(formData.vacationStartDate):'[vacation start]',vacation_end_date:formData.vacationEndDate?formatDate(formData.vacationEndDate):'[vacation end]'};
     const body=d.body.replace(/\{\{([^{}]+)}}/g,(_,key)=>values[key]||'');
-    return d.name+'\n\nUNSIGNED DRAFT - NOT APPROVED\n\n'+body+'\n\n'+d.hrName+'\n'+d.hrTitle+'\n\nEmployer Information\n'+[d.name,d.address,d.email,d.phone,d.website,d.identifiers].filter(Boolean).join('\n');
+    return body;
   }, [formData,selectedTemplate]);
 
   const loadRequests = async () => {
@@ -336,7 +337,24 @@ export default function EmployeeRequests() {
             />
           </div>
 
-          <div className="letter-preview"><span>Unsigned draft - not approved</span><div className="letter-preview-paper">{selectedTemplate?.definition.logo&&<img src={selectedTemplate.definition.logo} alt="Company logo" style={{maxWidth:160,maxHeight:70,objectFit:'contain'}}/>}<pre style={{whiteSpace:'pre-wrap',font:'inherit',lineHeight:1.7}}>{preview}</pre></div></div>
+          <section className="letter-draft" aria-label="Letter draft preview">
+            <div className="letter-draft-toolbar"><strong>Letter preview</strong><span>Draft · Unsubmitted · Unsigned</span></div>
+            {selectedTemplate ? <article className="letter-draft-sheet">
+              <header className="letter-draft-letterhead">
+                {selectedTemplate.definition.logo && <img src={selectedTemplate.definition.logo} alt="Company logo" />}
+                <div><strong>{selectedTemplate.definition.name}</strong><span>Human Resources</span></div>
+              </header>
+              <p className="letter-draft-date">{formatDate(new Date().toLocaleDateString('en-CA'))}</p>
+              <h3>{REQUEST_TYPES[formData.requestType].label}</h3>
+              <p className="letter-draft-salutation">To whom it may concern,</p>
+              <div className="letter-draft-body">{preview.split(/\n\s*\n/).map((paragraph,index)=><p key={index}>{paragraph}</p>)}</div>
+              <div className="letter-draft-signatory"><p>Best regards,</p><strong>{selectedTemplate.definition.hrName}</strong><span>{selectedTemplate.definition.hrTitle}</span></div>
+              <section className="letter-draft-employer"><h4>Employer Information</h4><dl>
+                {[['Company',selectedTemplate.definition.name],['Address',selectedTemplate.definition.address],['Email',selectedTemplate.definition.email],['Telephone',selectedTemplate.definition.phone],['Website',selectedTemplate.definition.website],...((selectedTemplate.definition.identifiers||'').split('\n').filter(Boolean).map(line=>{const separator=line.indexOf(':');return separator>0?[line.slice(0,separator),line.slice(separator+1).trim()]:['Employer identifiers',line];}))].filter(([,value])=>value).map(([label,value],index)=><div key={index}><dt>{label}</dt><dd>{value}</dd></div>)}
+              </dl></section>
+            </article> : <p className="letter-draft-empty">Your company is setting up this letter type.</p>}
+            <p className="letter-draft-note">For review only. Submit your request for approval to receive a signed letter.</p>
+          </section>
 
           <div className="action-bar compact-actions">
             <button className="button button-primary" type="submit" disabled={saving||!selectedTemplate}>

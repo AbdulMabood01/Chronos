@@ -61,7 +61,8 @@ class TimesheetCorrectionRequestServiceTest {
         lenient().when(users.findByRole(UserRole.PROJECT_ADMIN)).thenReturn(List.of(admin));
     }
 
-    @Test void employeeCanRequestPastDraftWithCommentAndProjectAdminIsNotified() {
+    @Test void employeeCanRequestApprovedMonthWithCommentAndProjectAdminIsNotified() {
+        sheet.setStatus(TimesheetStatus.APPROVED);
         var result = service.request(4L, 3L, "  Missed July hours  ", employee);
         assertEquals(TimesheetCorrectionStatus.PENDING, result.status());
         assertEquals("Missed July hours", result.employeeComment());
@@ -69,6 +70,7 @@ class TimesheetCorrectionRequestServiceTest {
     }
 
     @Test void requestDeadlineIsThirtyDaysAfterMonthEndAndDuplicateIsRejected() {
+        sheet.setStatus(TimesheetStatus.APPROVED);
         YearMonth old = YearMonth.from(java.time.LocalDate.now(clock)).minusMonths(2);
         sheet.setYear(old.getYear());
         sheet.setMonth(old.getMonthValue());
@@ -80,6 +82,12 @@ class TimesheetCorrectionRequestServiceTest {
         when(requests.existsByTimesheetIdAndProjectIdAndStatus(4L, 3L, TimesheetCorrectionStatus.PENDING)).thenReturn(true);
         assertTrue(assertThrows(IllegalArgumentException.class,
                 () -> service.request(4L, 3L, "Missed hours", employee)).getMessage().contains("already pending"));
+    }
+
+    @Test void pastDraftDoesNotNeedReopeningAfterSevenDays() {
+        assertTrue(assertThrows(IllegalArgumentException.class,
+                () -> service.request(4L, 3L, "Missed hours", employee)).getMessage().contains("still open"));
+        verify(requests, never()).save(any());
     }
 
     @Test void approvedRequestOpensWindowAndDeclineRequiresComment() {

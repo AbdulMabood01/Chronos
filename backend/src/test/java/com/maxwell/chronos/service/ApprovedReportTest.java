@@ -17,6 +17,17 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class ApprovedReportTest {
+    @Test void reopenedApprovalCannotExportEvenWithoutAnExpiryTimestamp() {
+        var db = mock(org.springframework.jdbc.core.JdbcTemplate.class);
+        var access = mock(CompanyAccessService.class);
+        when(db.queryForMap("SELECT * FROM timesheet_approval_periods WHERE id=?", 99L))
+                .thenReturn(Map.of("user_id", 1L, "project_id", 4L, "status", "APPROVED", "opening_status", "APPROVED"));
+        var reports = new ReportService(mock(TimesheetRepository.class), mock(TimesheetProjectSubmissionRepository.class),
+                mock(ProjectAssignmentRepository.class), mock(VacationRequestRepository.class), mock(TimeEntryRepository.class),
+                mock(UserRepository.class), mock(ProjectRepository.class), access, db);
+        assertTrue(assertThrows(IllegalArgumentException.class, () -> reports.exportApprovalPeriodPdf(99L, 1L))
+                .getMessage().contains("finalized"));
+    }
     @Test void pdfBrandingUsesOnlyTheOwningCompanyDisplayName() throws Exception {
         byte[] bytes;
         try(var pdf=new TimesheetPdf("TEST","October 2026","Company A Limited")){pdf.section("Employee");pdf.field("Employee","Sam Member");bytes=pdf.finish();}

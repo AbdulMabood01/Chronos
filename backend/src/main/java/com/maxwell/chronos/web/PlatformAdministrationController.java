@@ -15,6 +15,7 @@ public class PlatformAdministrationController {
     private final org.springframework.beans.factory.ObjectProvider<CompanyBillingService> billing;
     private String email(Jwt jwt){return jwt.getClaimAsString("preferred_username");}
     private ResponseEntity<?> response(Object data){return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(data);}
+    @GetMapping("/companies/overview") public ResponseEntity<?> overview(@AuthenticationPrincipal Jwt jwt){return response(service.overview(email(jwt)));}
     @GetMapping("/companies") public ResponseEntity<?> list(@AuthenticationPrincipal Jwt jwt){return response(service.companies(email(jwt)));}
     @GetMapping("/companies/{id}/usage") public ResponseEntity<?> usage(@AuthenticationPrincipal Jwt jwt,@PathVariable long id){return response(service.usage(id,email(jwt)));}
     @GetMapping("/companies/{id}/billing-metadata") public ResponseEntity<?> billing(@AuthenticationPrincipal Jwt jwt,@PathVariable long id){return response(service.billingMetadata(id,email(jwt)));}

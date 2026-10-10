@@ -18,28 +18,35 @@ public class UpdateProfileRequest {
     private String timezone;
 
     @Size(max = 40)
+    @NotBlank(message = "Phone number is required")
     private String phoneNumber;
 
     @Size(max = 255)
     @jakarta.validation.constraints.Email
+    @NotBlank(message = "Personal email is required")
     private String personalEmail;
 
     @Size(max = 200)
+    @NotBlank(message = "Address line 1 is required")
     private String addressLine1;
 
     @Size(max = 200)
     private String addressLine2;
 
     @Size(max = 100)
+    @NotBlank(message = "City is required")
     private String city;
 
     @Size(max = 100)
+    @NotBlank(message = "State / Province is required")
     private String stateProvince;
 
     @Size(max = 20)
+    @NotBlank(message = "Postal code is required")
     private String postalCode;
 
     @Size(max = 100)
+    @NotBlank(message = "Country is required")
     private String country;
 
     @Size(max = 3)
@@ -47,16 +54,20 @@ public class UpdateProfileRequest {
     private String bloodGroup;
 
     @Size(max = 200)
+    @NotBlank(message = "Emergency contact name is required")
     private String emergencyContactName;
 
     @Size(max = 100)
+    @NotBlank(message = "Emergency contact relationship is required")
     private String emergencyContactRelationship;
 
     @Size(max = 40)
+    @NotBlank(message = "Emergency contact phone is required")
     private String emergencyContactPhone;
 
     @Size(max = 255)
     @jakarta.validation.constraints.Email
+    @NotBlank(message = "Emergency contact email is required")
     private String emergencyContactEmail;
     @NotBlank
     @Size(max = 100)
@@ -71,9 +82,13 @@ public class UpdateProfileRequest {
 
     @NotNull
     private LocalDate dateOfBirth;
-    @Size(max=100) private String gender;
-    @Size(max=100) private String race;
-    @Size(max=100) private String ethnicity;
+    @Size(max=100) @NotBlank(message = "Gender is required")
+    private String gender;
+    @Size(max=100) @NotBlank(message = "Race is required")
+    private String race;
+    @Size(max=100) @NotBlank(message = "Ethnicity is required")
+    private String ethnicity;
+    @NotNull(message = "Joining date is required")
     private LocalDate joiningDate;
 
     @Pattern(regexp = "^$|\\d{4}", message = "SSN last 4 must be blank or exactly 4 digits")

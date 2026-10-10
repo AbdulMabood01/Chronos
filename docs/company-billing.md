@@ -4,7 +4,7 @@ Implemented locally October 7, 2026. The company owns its plan; administrators d
 
 | Plan | Open projects | Included people / employees | Monthly reference | 3 months | 6 months | 12 months |
 |---|---:|---:|---:|---:|---:|---:|
-| Free | 1 | 7 people, including admins | $0 | — | — | — |
+| Free (60 days) | 1 | 7 people, including admins | $0 | — | — | — |
 | Pro | 3 | 75 employees | $149 | $447 | $804.60 | $1,430.40 |
 | Pro Plus | 7 | 175 employees | $299 | $897 | $1,614.60 | $2,870.40 |
 | Pro Max | 15 | 375 employees | $599 | $1,797 | $3,234.60 | $5,750.40 |
@@ -25,7 +25,9 @@ Administrative suspension remains effective after payment. Suspended Company Adm
 
 ## Purchases, expiry and refunds
 
-Each company may start one card-free 30-day Pro Plus trial: 7 projects / 175 employees. Eligibility persists across administrators.
+Free lasts sixty days from company creation. Existing companies receive sixty days from deployment of V66. The company’s original deadline persists through plan changes, purchases, refunds and grant revocation. At expiry, new work and capacity expansion require a paid plan or explicit dated grant, even below Free capacity. Authorized history, exports, billing and pending reviews remain available; records are retained until a verified company deletion request.
+
+Each company may start one card-free Pro Plus trial of up to thirty days: 7 projects / 175 employees. Its end is capped at the original Free deadline and it cannot start after that deadline. Eligibility persists across administrators. Trial expiry has no additional grace beyond the Free deadline.
 
 Checkout is explicit and hosted by Stripe. A success URL never grants access. Verified matching payment creates a term, immutable PDF receipt, audit history and queued delivery to current Company Admins. Reissue preserves the original document/payment date.
 
@@ -33,7 +35,7 @@ Same/lower-tier early renewal starts at the current end. A higher-tier purchase 
 
 Next-renewal preferences may reduce a plan or seat allowance without changing the current paid term. They are advisory for the next manual purchase and never charge automatically. No renewal means Free at expiry.
 
-Existing work receives seven days of grace after paid/trial expiry; new capacity immediately follows Free. After grace, over-limit companies cannot submit new time, expenses, leave or letters. Authorized history, exports, pending reviews, billing recovery and offboarding remain available. No automatic deletion, offboarding or global suspension occurs. Entitlements derive from timestamps during requests; jobs are not the expiry authority.
+Existing work receives seven days of grace after paid expiry; new capacity immediately follows Free. After grace, companies whose Free deadline has passed, or whose usage exceeds Free capacity, cannot submit new time, expenses, leave or letters. Authorized history, exports, pending reviews, billing recovery and offboarding remain available. No automatic deletion, offboarding or global suspension occurs. Entitlements derive from timestamps during requests; jobs are not the expiry authority.
 
 Full refunds may be requested within seven days of original verified payment. Pending refunds retain access until confirmation. Confirmed base refunds reverse their grant and can restore a still-valid paid predecessor. Extra-seat refunds reverse only their seats and require sufficient remaining capacity. Base purchases with dependent changes require coordinated support review. Receipts remain available.
 
@@ -43,17 +45,19 @@ Partial/additional external refunds and disputes enter a visible review state; a
 
 ## Migration and recovery
 
-V64 preserves existing companies with explicit `LEGACY` grants covering configured limits and current usage. It fabricates no payment history and does not rename old tiers. New companies start at Free 1/7. Legacy grants need business review before commercial conversion.
+V64 preserves existing companies with explicit `LEGACY` grants covering configured limits and current usage. It fabricates no payment history and does not rename old tiers. New companies start at Free 1/7 for sixty days. Legacy grants need business review before commercial conversion.
 
-Platform Admins see payment/event metadata and may retry a bound verified event with an audited reason. Billing grants do not expose operational/private records. Manual standard grants use catalog limits; Custom permits explicit exceptions. Existing support/contract grants last 90 days. Platform Admins can also assign complimentary Free, Pro, Pro Plus or Pro Max plans (or a Custom allowance) from Companies, with no expiry by default or an explicit end date. Complimentary grants use the normal plan features and capacity checks, require no card or checkout, and create no purchases, invoices or payment receipts. Only Platform Admins can assign, change or revoke them; a reason and current company revision are required. Platform Audit records the actor and reason; company billing activity records the grant event without exposing private platform notes.
+Platform Admins see payment/event metadata and may retry a bound verified event with an audited reason. Billing grants do not expose operational/private records. Manual standard grants use catalog limits; Custom permits explicit exceptions. Existing support/contract grants last 90 days. Platform Admins can also assign complimentary Free, Pro, Pro Plus or Pro Max plans (or a Custom allowance) from Companies, with no expiry by default for paid tiers; complimentary Free requires an explicit future end date. Complimentary grants use the normal plan features and capacity checks, require no card or checkout, and create no purchases, invoices or payment receipts. Only Platform Admins can assign, change or revoke them; a reason and current company revision are required. Platform Audit records the actor and reason; company billing activity records the grant event without exposing private platform notes.
 
-An active complimentary plan appears in Company Billing with its expiry or **No expiry**, and purchasing and trials are blocked until the grant is revoked or expires. Ask a Platform Admin to change its capacity. Active or scheduled paid terms cannot be replaced. Open checkout, pending refunds and payment review must be resolved before a grant changes. Revocation returns the company to Free and requires usage to fit 1 open project / 7 people, including admins and reserved invitations. Dated expiry returns to Free immediately through timestamp-based entitlements; over-limit work becomes restricted while history, exports and pending reviews remain available. No paid/trial expiry grace applies to complimentary grants. No data is deleted.
+An active complimentary plan appears in Company Billing with its expiry or **No expiry**, and purchasing and trials are blocked until the grant is revoked or expires. Ask a Platform Admin to change its capacity. Active or scheduled paid terms cannot be replaced. Open checkout, pending refunds and payment review must be resolved before a grant changes. Revocation returns the company to Free and requires usage to fit 1 open project / 7 people, including admins and reserved invitations. Dated expiry returns to Free immediately through timestamp-based entitlements; expired Free access or over-limit work becomes restricted while history, exports and pending reviews remain available. No paid expiry grace applies to complimentary grants. No data is deleted.
 
 Money is integer cents. Quotes/receipts retain catalog and billing snapshots. Fulfillment validates mode, environment, currency, amount and stored company/purchase identity. Raw-body webhook HMAC verification, a durable inbox and payment idempotency prevent duplicate grants. Provider/local session-write gaps are recoverable. Stale paid quotes remain recorded for review/refund. Missed payment/refund confirmations reconcile through Stripe without recharging.
 
 Receipt/reminder delivery retries without undoing payment and rechecks current billing permission before sending. Renewal notices at 30/7/1 days and expiry are deduplicated. Reminders never charge.
 
 ## Configuration and review
+
+Public policies: `/legal/privacy`, `/legal/terms`, `/legal/refunds`, `/legal/acceptable-use`, `/legal/retention`, `/legal/dpa`, `/legal/cookies` and `/legal/support`. Purchase review: `/billing/payment?quote={id}`. Payment review works when Stripe is disabled, without invoking checkout or granting access. Checkout and account creation require current versioned Terms acceptance; V66 records purchase acceptance and V67 records account acceptance. Set `VITE_SUPPORT_EMAIL` in frontend build configuration when the address is finalized. The DPA deployment schedule remains pending until hosting/provider and contact details are confirmed.
 
 Public pricing: `/pricing`. Company Admin billing: `/billing`. Public catalog: `/api/billing/catalog`. Company APIs: `/api/companies/{id}/billing`. Webhook: `POST /api/billing/stripe/webhook`.
 

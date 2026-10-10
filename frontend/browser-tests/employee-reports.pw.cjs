@@ -22,7 +22,7 @@ test('Admin Reports opens incident cases, filters, and saves the private tracker
     await route.fulfill({ json: data });
   });
   await page.goto('/confidential-reports');
-  await expect(page.getByRole('link', { name: 'Confidential Cases', exact: true })).toHaveAttribute('href', '/confidential-reports');
+  await expect(page.getByRole('link', { name: 'Workplace Reports', exact: true })).toHaveAttribute('href', '/confidential-reports');
   await expect(page.getByRole('heading', { name: 'Workplace safety concern' })).toBeVisible();
   await expect(page.locator('.report-case-meta')).toContainText('Updated');
   await page.getByRole('button', { name: 'Show filters' }).click();

@@ -31,8 +31,9 @@ for(const frequency of ['daily','weekly','monthly']) {
     await expect(firstInput).toBeEnabled();
     await firstInput.fill('5'); await firstInput.blur();
     await expect.poll(async()=> (await json(await actor.get('/api/timesheet-periods',{params:{projectId,date:first}}))).totalHours).toBe(frequency==='monthly'?9:5);
-    const singleLabel=frequency==='monthly'?'Submit for Approval':`Submit ${frequency==='daily'?'Day':'Week'}`;
+    const singleLabel=/^Submit [A-Z][a-z]{2} /;
     await page.getByRole('button',{name:singleLabel,exact:true}).click();
+  await page.getByRole('dialog',{name:'Review submission'}).getByRole('button',{name:'Submit for approval',exact:true}).click();
     await expect.poll(async()=> (await json(await actor.get('/api/timesheet-periods',{params:{projectId,date:first}}))).status).toBe('SUBMITTED');
     const duplicate=await actor.post('/api/timesheet-periods/submit',{params:{projectId,date:first}});
     expect(duplicate.status()).toBe(400);
@@ -66,11 +67,13 @@ test('daily batch submits only chosen days and rolls back if one period is alrea
   for(const date of dates) await json(await actor.post(`/api/timesheets/${sheet.id}/time-entries`,{data:{entryDate:date,projectId,hours:'4'}}));
   await authenticatePage(page,request,'employee',f.companyId);
   await page.goto(`/timesheet/${sheet.id}?projectId=${projectId}&date=${dates[0]}`);
+  await page.getByRole('button',{name:'Select multiple days',exact:true}).click();
   for(const date of dates.slice(0,2)) await page.getByRole('checkbox',{name:`Include ${date} in batch submission`,exact:true}).check();
-  await page.getByRole('button',{name:'Submit 2 periods',exact:true}).click();
+  await page.getByRole('button',{name:'Submit 2 days',exact:true}).click();
+  await page.getByRole('dialog',{name:'Review submission'}).getByRole('button',{name:'Submit for approval',exact:true}).click();
   for(const date of dates.slice(0,2)) await expect.poll(async()=> (await json(await actor.get('/api/timesheet-periods',{params:{projectId,date}}))).status).toBe('SUBMITTED');
   expect((await json(await actor.get('/api/timesheet-periods',{params:{projectId,date:dates[2]}}))).status).toBe('DRAFT');
-  await expect(page.getByRole('button',{name:/Submit \d+ periods/})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:/Submit \d+ days/})).toHaveCount(0);
   const fourth=workdays(period)[3];
   await json(await actor.post(`/api/timesheets/${sheet.id}/time-entries`,{data:{entryDate:fourth,projectId,hours:'4'}}));
   expect((await actor.post('/api/timesheet-periods/submit-batch',{params:{projectId},data:{dates:[fourth,dates[0]]}})).status()).toBe(400);

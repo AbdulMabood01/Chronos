@@ -7,7 +7,7 @@ export const billingAPI = {
   summary: company => apiClient.get(`/companies/${company}/billing`, { background: true }),
   profile: (company, data) => apiClient.put(`/companies/${company}/billing/profile`, data),
   quote: (company, data) => apiClient.post(`/companies/${company}/billing/quotes`, data),
-  checkout: (company, id) => apiClient.post(`/companies/${company}/billing/purchases/${id}/checkout`),
+  checkout: (company, id, termsVersion) => apiClient.post(`/companies/${company}/billing/purchases/${id}/checkout`, {termsVersion}),
   cancelCheckout: (company, id) => apiClient.post(`/companies/${company}/billing/purchases/${id}/cancel`),
   purchase: (company, id) => apiClient.get(`/companies/${company}/billing/purchases/${id}`, { background: true }),
   trial: company => apiClient.post(`/companies/${company}/billing/trial`),
@@ -156,7 +156,7 @@ apiClient.interceptors.response.use((response) => {
   if (error.response && typeof error.response.data === 'object' && !(error.response.data instanceof Blob)) {
     error.response.data = { ...error.response.data, message };
   }
-  if (!error.response && error.code !== 'ECONNABORTED' && typeof window !== 'undefined') {
+  if (!error.response && error.code !== 'ECONNABORTED' && error.code !== 'ERR_CANCELED' && typeof window !== 'undefined') {
     window.__chronosConnectionLost = true;
     dispatchApiActivityEvent('chronos:connection-lost');
   }
@@ -173,7 +173,7 @@ export const authAPI = {
   changePassword: data => apiClient.post('/auth/change-password', data),
   login: (email, password) => apiClient.post('/auth/login', { email, password }, { publicAuth: true }),
   validateInvitation: (token) => apiClient.post('/auth/invitations/validate', { token }, { publicAuth: true }),
-  activate: (token, password) => apiClient.post('/auth/activate', { token, password }, { publicAuth: true }),
+  activate: (token, password, termsVersion) => apiClient.post('/auth/activate', { token, password, termsVersion }, { publicAuth: true }),
   getCurrentUser: () => apiClient.get('/auth/me'),
   activity: () => apiClient.post('/auth/activity', null, { background: true }),
   logout: token => apiClient.post('/auth/logout', null, { background: true, skipSessionEvent: true,
@@ -181,6 +181,10 @@ export const authAPI = {
 };
 
 export const companyAPI = {
+  corrections: (company,user) => apiClient.get(`/companies/${company}/members/${user}/corrections`),
+  requestCorrection: (company,user,data) => apiClient.post(`/companies/${company}/members/${user}/corrections`,data),
+  decideCorrection: (company,user,id,data) => apiClient.post(`/companies/${company}/members/${user}/corrections/${id}/decision`,data),
+  memberProfile: (companyId,userId) => apiClient.get(`/companies/${companyId}/members/${userId}/profile`),
   employment: (companyId,userId) => apiClient.get(`/companies/${companyId}/members/${userId}/employment`),
   updateEmployment: (companyId,userId,data) => apiClient.put(`/companies/${companyId}/members/${userId}/employment`,data),
   context: () => apiClient.get('/companies/context', { background: true }),
@@ -495,6 +499,7 @@ export const companyGovernanceAPI = company => ({
 });
 
 export const platformAdministrationAPI={
+ overview:()=>apiClient.get('/platform/companies/overview'),
  companies:()=>apiClient.get('/platform/companies'),
  usage:id=>apiClient.get(`/platform/companies/${id}/usage`),
  billing:id=>apiClient.get(`/platform/companies/${id}/billing-metadata`),
@@ -509,4 +514,9 @@ export const platformAdministrationAPI={
  adminInvitations:id=>apiClient.get(`/platform/companies/${id}/admin-invitations`),
  resendAdmin:(id,invitation)=>apiClient.post(`/platform/companies/${id}/admin-invitations/${invitation}/resend`),
  revokeAdmin:(id,invitation)=>apiClient.delete(`/platform/companies/${id}/admin-invitations/${invitation}`),
+};
+
+export const contactAPI = {
+  status: signal => apiClient.get('/contact/status', { background: true, publicAuth: true, signal }),
+  send: data => apiClient.post('/contact/inquiries', data, { background: true, publicAuth: true }),
 };

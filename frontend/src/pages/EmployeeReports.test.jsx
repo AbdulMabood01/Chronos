@@ -29,7 +29,7 @@ it('explains anonymous retention and submits a receipt without exposing stored d
 it.each(['EMPLOYEE','PROJECT_ADMIN'])('does not load management data for %s', role => {
   user.scopedAccess=false; render(<EmployeeReports management />);
   expect(employeeReportsAPI.list).not.toHaveBeenCalled();
-  expect(screen.getByText(/Only designated confidential handlers/)).toBeTruthy();
+  expect(screen.getByText(/Only Company Admins and designated confidential handlers/)).toBeTruthy();
 });
 it('loads HR filters and displays anonymous reports without identity', async () => {
   user.scopedAccess=true;

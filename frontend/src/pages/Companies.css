@@ -196,13 +196,52 @@
 .people-access-page .company-member-controls { display: flex; flex-wrap: wrap; gap: 12px; padding: 16px; margin-top: 8px; background: var(--surface-muted); border-radius: 8px; }
 @media(max-width:900px) { .people-access-page .company-person-row { grid-template-columns: 36px minmax(0,1fr); } .people-access-page .company-person-row > .company-pills, .people-access-page .company-person-row > button, .people-access-page .company-member-actions { grid-column: 2; } }
 
-.company-employment-dialog { width: min(620px, calc(100vw - 40px)); max-height: 85vh; overflow-y: auto; padding: 28px; border: 1px solid var(--border-color); border-radius: 12px; background: var(--surface-color); color: var(--text-primary); }
-.company-employment-dialog::backdrop { background: rgba(15,23,42,.5); }
-.company-employment-dialog > header { display:flex; align-items:center; justify-content:space-between; gap:20px; margin-bottom:24px; }
-.company-employment-dialog > header h2 { margin:0 0 8px; }
-.company-employment-dialog > header p { margin:0; color:var(--text-secondary); }
-.company-employment-dialog .employment-details { padding:0; border:0; background:transparent; }
-.company-employment-dialog .employment-details > h2, .company-employment-dialog .employment-details > .eyebrow, .company-employment-dialog .employment-metrics { display:none; }
-.company-employment-dialog .employment-form { display:grid; gap:20px; }
-.company-employment-dialog .employment-form label { display:grid; gap:8px; }
-.company-employment-dialog .employment-form input { padding:12px; border:1px solid var(--border-color); border-radius:6px; background:var(--surface-color); color:var(--text-primary); width:100%; box-sizing:border-box; }
+.company-employment-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  box-sizing: border-box;
+  width: min(640px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 18px;
+  background: var(--surface-color);
+  color: var(--text-primary);
+  box-shadow: 0 24px 80px rgba(15, 23, 42, .24);
+}
+.company-employment-dialog::backdrop { background: rgba(15, 23, 42, .55); }
+.company-employment-dialog > header {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 20px;
+  padding: 24px 28px; margin: 0; border-bottom: 1px solid var(--border-color);
+  background: var(--surface-muted);
+}
+.company-employment-dialog > header h2 { margin: 0 0 6px; font-size: 1.3rem; line-height: 1.4; }
+.company-employment-dialog > header p { margin: 0; color: var(--text-secondary); overflow-wrap: anywhere; }
+.company-employment-dialog > header .button { flex-shrink: 0; }
+.company-employment-dialog .employment-details { padding: 24px 28px 28px; border: 0; border-radius: 0; background: transparent; }
+.company-employment-dialog .employment-details > h2,
+.company-employment-dialog .employment-details > .eyebrow { display: none; }
+.company-employment-dialog .employment-description { font-size: .9rem; line-height: 1.6; }
+.company-employment-dialog .employment-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; margin-top: 20px; padding-top: 20px; }
+.company-employment-dialog .employment-form label { display: grid; gap: 8px; }
+.company-employment-dialog .employment-form input { padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--surface-color); color: var(--text-primary); width: 100%; box-sizing: border-box; }
+.company-employment-dialog .employment-form .button { justify-self: end; }
+@media (max-width: 480px) {
+  .company-employment-dialog > header { padding: 20px; gap: 12px; flex-wrap: wrap; }
+  .company-employment-dialog .employment-details { padding: 20px; }
+  .company-employment-dialog .employment-form .button { width: 100%; }
+}
+
+.company-profile-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.company-member-profile-summary { padding: 20px 28px 0; display: grid; gap: 12px; }
+.company-member-profile-summary p { display: grid; gap: 4px; margin: 0; overflow-wrap: anywhere; }
+.company-member-profile-summary strong { font-size: .8rem; color: var(--text-secondary); }
+@media (max-width: 900px) { .people-access-page .company-profile-actions { grid-column: 2; } }
+
+.company-member-personal-profile { padding: 24px 28px; }
+.company-member-personal-profile .form-row, .company-member-personal-profile .profile-details-grid { grid-template-columns: minmax(0, 1fr); }
+.company-member-personal-profile .profile-section-nav { grid-template-columns: minmax(0, 1fr); }
+@media (max-width:480px) { .company-member-personal-profile { padding:20px; } }

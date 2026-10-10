@@ -3,6 +3,8 @@ import {useAuth} from '../AuthContext';
 import {useCompany} from '../CompanyContext';
 import {companyAPI} from '../api';
 import './EmploymentDetails.css';
+import DateInput from './DateInput';
+import DetailCorrectionRequests from './DetailCorrectionRequests';
 
 const fields=data=>({employeeId:data.employeeId||'',jobTitle:data.jobTitle||'',joiningDate:data.joiningDate||''});
 const errorText=error=>error?.response?.data?.message||error?.userMessage||'Unable to load employment details.';
@@ -23,7 +25,7 @@ export default function CompanyEmploymentDetails({userId,editable=false,onSaved}
   },[currentCompany?.id,targetId,platformAdmin,attempt]);
   if(!currentCompany||platformAdmin)return null;
   const record=data&&String(data.companyId)===String(currentCompany.id)&&String(data.userId)===String(targetId)?data:null;
-  const canEdit=editable&&companyCapabilities?.canManageCompanyPeople===true&&record?.membershipStatus==='ACTIVE';
+  const canEdit=editable&&companyCapabilities?.canManageCompanyPeople===true&&record?.membershipStatus==='ACTIVE'&&!record?.locked;
   const save=async event=>{
     event.preventDefault();setSaving(true);setError('');setMessage('');
     try{
@@ -36,15 +38,17 @@ export default function CompanyEmploymentDetails({userId,editable=false,onSaved}
     <span className="eyebrow">EMPLOYMENT IN {currentCompany.name}</span><h2>Company employment details</h2>
     <p className="employment-description">Employment details belong to this company. Login and personal details stay on the shared account.</p>
     {loading&&<p role="status">Loading employment details...</p>}
-    {record&&<dl className="employment-metrics"><div><dt>Employee ID</dt><dd>{record.employeeId||'Not assigned'}</dd></div>
+    {record&&!canEdit&&<dl className="employment-metrics"><div><dt>Employee ID</dt><dd>{record.employeeId||'Not assigned'}</dd></div>
       <div><dt>Job title</dt><dd>{record.jobTitle||'Not assigned'}</dd></div><div><dt>Joining date</dt><dd>{record.joiningDate||'Not assigned'}</dd></div></dl>}
     {canEdit&&<form className="employment-form" onSubmit={save}>
       <label>Employee ID<input inputMode="numeric" pattern="[1-9][0-9]{0,8}" maxLength={9} placeholder="Automatically assigned" value={form.employeeId} disabled={saving} onChange={event=>setForm({...form,employeeId:event.target.value})}/></label>
-      <label>Job title<input maxLength={120} value={form.jobTitle} disabled={saving} onChange={event=>setForm({...form,jobTitle:event.target.value})}/></label>
-      <label>Joining date<input type="date" value={form.joiningDate} disabled={saving} onChange={event=>setForm({...form,joiningDate:event.target.value})}/></label>
+      <label><span className="required-field-label">Job title</span><input required maxLength={120} value={form.jobTitle} disabled={saving} onChange={event=>setForm({...form,jobTitle:event.target.value})}/></label>
+      <label><span className="required-field-label">Joining date</span><DateInput pickerLabel="Choose employment joining date" required value={form.joiningDate} disabled={saving} onChange={event=>setForm({...form,joiningDate:event.target.value})}/></label>
       <button className="button button-primary" disabled={saving}>{saving?'Saving...':'Save employment details'}</button>
     </form>}
     {!editable&&record&&<p className="employment-description">Contact your company administrator to update these details.</p>}
+    {record?.locked&&<p role="status">Employment details are saved and locked.</p>}
+    {record?.locked&&<DetailCorrectionRequests userId={targetId} kind="EMPLOYMENT" onChanged={()=>setAttempt(v=>v+1)}/>}
     {error&&<><p className="error-message" role="alert">{error}</p><button className="button button-secondary" disabled={loading||saving} onClick={()=>setAttempt(value=>value+1)}>Reload employment details</button></>}
     {message&&<p className="employment-saved" role="status">{message}</p>}
   </section>;

@@ -74,6 +74,9 @@ public class TimesheetProjectSubmission {
     @Column(name = "correction_until")
     private LocalDateTime correctionUntil;
 
+    @Column(name = "correction_open", nullable = false)
+    private boolean correctionOpen;
+
     @Column(name = "correction_planned_hours")
     private BigDecimal correctionPlannedHours;
 

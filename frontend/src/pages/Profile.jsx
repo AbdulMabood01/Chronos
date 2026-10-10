@@ -4,10 +4,12 @@ import { useAuth } from '../AuthContext';
 
 import ProfileForm from '../components/ProfileForm';
 import ChangePassword from '../components/ChangePassword';
+import DetailCorrectionRequests from '../components/DetailCorrectionRequests';
+import CompanyEmploymentDetails from '../components/CompanyEmploymentDetails';
 import '../styles.css';
 
 export default function Profile() {
-  const { user, updateProfile } = useAuth();
+  const { user, updateProfile, refreshUser } = useAuth();
   const [saved, setSaved] = React.useState(false);
 
   const handleSave = async (profile) => {
@@ -30,6 +32,8 @@ export default function Profile() {
         <ProfileForm user={user} onSave={handleSave} />
       </div>
 
+      {(user?.profileCompleted || user?.profileDetailsSubmitted) && <DetailCorrectionRequests onChanged={refreshUser}/>}
+      <CompanyEmploymentDetails/>
       <ChangePassword />
     </div>
   );

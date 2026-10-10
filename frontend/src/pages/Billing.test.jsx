@@ -38,19 +38,19 @@ it('shows company pricing and actual prepaid totals rather than a monthly charge
   expect(screen.getByText('$804.60')).toBeInTheDocument(); expect(screen.getByText('$1,614.60')).toBeInTheDocument();
   expect(screen.getByText(/One-off payments. No automatic renewal/)).toBeInTheDocument();
 });
-it('requests an explicit quote with only company-scoped selections and keeps unconfigured checkout disabled', async () => {
+it('requests an explicit quote with only company-scoped selections and navigates to review when checkout is unavailable', async () => {
   open(); await screen.findByText('Current plan: Free');
   fireEvent.change(screen.getByLabelText('Extra employee seats beyond the selected plan'), { target: { value: '5' } });
   fireEvent.click(screen.getByRole('button', { name: 'Review prepaid quote' }));
   const quote = await screen.findByRole('region', { name: 'Purchase quote' });
   expect(api.quote).toHaveBeenCalledWith(12, { plan: 'PRO', months: 12, extraSeats: 5, kind: 'PLAN' });
   expect(within(quote).getByText(/Pay once: \$1,622.40/)).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Continue to secure payment' })).toBeDisabled(); expect(api.checkout).not.toHaveBeenCalled();
+  expect(screen.getByRole('link', { name: 'Continue to payment review' })).toHaveAttribute('href','/billing/payment?quote=quote-1'); expect(api.checkout).not.toHaveBeenCalled();
 });
 it('starts a trial only after an explicit administrator action', async () => {
   api.trial.mockResolvedValue({}); open(); await screen.findByText('Current plan: Free'); expect(api.trial).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button', { name: 'Start 30-day Pro Plus trial' }));
-  await waitFor(() => expect(api.trial).toHaveBeenCalledWith(12)); expect(await screen.findByText('Your 30-day Pro Plus trial has started.')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Start Pro Plus trial' }));
+  await waitFor(() => expect(api.trial).toHaveBeenCalledWith(12)); expect(await screen.findByText('Your Pro Plus trial has started. It ends within your original 60-day Free period.')).toBeInTheDocument();
 });
 it('quotes additional seats against the active term without renewing it', async () => {
   summary.entitlement = { ...summary.entitlement, plan: 'PRO', source: 'PAID', termId: 'term-1', projects: 3, includedUsers: 75, endsAt: '2027-01-07T00:00:00Z' };

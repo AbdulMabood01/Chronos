@@ -175,3 +175,19 @@
 @media (max-width: 700px) { .concern-management .report-filter-fields { grid-template-columns: minmax(0, 1fr); } .concern-management .concern-filters { padding: 20px; } }
 @media (max-width: 1050px) { .report-compose-layout { grid-template-columns: minmax(0, 1fr); } .report-compose-aside { position: static; grid-template-columns: repeat(3, minmax(0, 1fr)); } .report-compose-aside .report-kicker, .report-compose-aside h2, .report-compose-aside > p { grid-column: 1 / -1; } .concern-management .concern-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 700px) { .report-page-hero { padding: 0; } .report-hero-mark { display: none; } .employee-concerns .concern-view-switch { gap: 20px; } .report-case { grid-template-columns: minmax(0, 1fr); padding: 19px; } .report-case-meta span + span::before { display: none; } .employee-concerns .report-case-action:not(.button) { justify-self: start; } .report-compose-aside { grid-template-columns: 1fr; } .report-compose-aside .report-kicker, .report-compose-aside h2, .report-compose-aside > p { grid-column: auto; } .concern-management .concern-filters { grid-template-columns: 1fr; } .employee-concerns .concern-submit-bar { bottom: 8px; } .employee-concerns .concern-form-progress small { display: none; } }
+.report-simple .report-compose-layout { display: block; max-width: 800px; }
+.report-simple-header { margin-bottom: 1.5rem; }
+.report-simple-header .report-kicker, .report-simple-header .report-hero-mark { display: none; }
+.report-simple-header h1 { margin: 0 0 .5rem; font-size: 1.75rem; color: var(--text-primary); }
+.report-simple-header p { margin: 0; color: var(--text-secondary); }
+.report-simple .report-essentials { border: 0; padding-top: 0; }
+.report-simple .report-section-intro { margin-bottom: 1.25rem; }
+.report-simple .report-section-intro h2 { font-size: 1.2rem; }
+.report-optional-details { border-top: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color); margin: .5rem 0 1.25rem; }
+.report-optional-details > summary { padding: 1rem 0; cursor: pointer; font-weight: 600; font-size: .9rem; color: var(--text-primary); }
+.report-optional-details .report-form-section { border: 0; padding-top: .25rem; }
+.report-privacy-details { margin: .75rem 0; }
+.report-privacy-details summary { cursor: pointer; font-size: .85rem; font-weight: 500; }
+.report-privacy-details p { margin-top: .75rem; }
+.report-simple .report-form-section-last { border: 0; padding-top: 0; }
+.report-simple .concern-submit-bar { justify-content: flex-end; }

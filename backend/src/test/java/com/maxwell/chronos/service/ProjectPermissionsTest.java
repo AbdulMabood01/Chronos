@@ -274,6 +274,13 @@ class ProjectPermissionsTest {
         assertEquals(5L, project.getProjectManager().getId());
     }
 
+    @Test void closureBlocksReopenedPeriodsWithoutAnExpiry() {
+        when(jdbc.queryForObject(contains("opening_status='APPROVED'"), eq(Boolean.class), anyLong(), anyLong())).thenReturn(true);
+        assertTrue(assertThrows(IllegalArgumentException.class, () -> service.archiveProject(10L, admin))
+                .getMessage().contains("finalize timesheet corrections"));
+        verify(projects, never()).save(any());
+    }
+
     @Test void closureBlocksUnfinalizedApprovalPeriods() {
         when(jdbc.queryForObject(startsWith("SELECT EXISTS (SELECT 1 FROM timesheet_approval_periods"),
                 eq(Boolean.class), eq(10L), eq(10L))).thenReturn(true);

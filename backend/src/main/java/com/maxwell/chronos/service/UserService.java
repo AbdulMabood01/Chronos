@@ -159,7 +159,7 @@ public class UserService {
 
         String firstName = clean(request.getFirstName());
         String lastName = clean(request.getLastName());
-        if(Boolean.TRUE.equals(user.getProfileCompleted()) &&
+        if(!user.isProfileCorrectionOpen() && Boolean.TRUE.equals(user.getProfileCompleted()) &&
             (!java.util.Objects.equals(firstName,user.getFirstName()) || !java.util.Objects.equals(lastName,user.getLastName())
             || !java.util.Objects.equals(request.getDateOfBirth(),user.getDateOfBirth())))
             throw new IllegalArgumentException("Name and date of birth are locked after profile submission");
@@ -171,13 +171,24 @@ public class UserService {
             user.setLastName(lastName);
         }
         user.setDateOfBirth(request.getDateOfBirth());
-        if(Boolean.TRUE.equals(user.getProfileDetailsSubmitted()) &&
-            (!java.util.Objects.equals(clean(request.getGender()),user.getGender()) || !java.util.Objects.equals(clean(request.getRace()),user.getRace())
-             || !java.util.Objects.equals(clean(request.getEthnicity()),user.getEthnicity()) || !java.util.Objects.equals(request.getJoiningDate(),user.getJoiningDate())))
+        if(!user.isProfileCorrectionOpen() && Boolean.TRUE.equals(user.getProfileDetailsSubmitted()) &&
+            ((clean(user.getGender()) != null && !java.util.Objects.equals(clean(request.getGender()),user.getGender()))
+             || (clean(user.getRace()) != null && !java.util.Objects.equals(clean(request.getRace()),user.getRace()))
+             || (clean(user.getEthnicity()) != null && !java.util.Objects.equals(clean(request.getEthnicity()),user.getEthnicity()))
+             || (user.getJoiningDate() != null && !java.util.Objects.equals(request.getJoiningDate(),user.getJoiningDate()))))
             throw new IllegalArgumentException("Gender, race, ethnicity and joining date are locked after submission");
+        validateProfileChoice("Gender", request.getGender(), user.getGender(), java.util.Set.of("Male", "Female", "Other"));
+        validateProfileChoice("Race", request.getRace(), user.getRace(), java.util.Set.of("American Indian or Alaska Native", "Asian", "Black or African American", "Native Hawaiian or Other Pacific Islander", "White", "Two or more races", "Other", "Prefer not to say"));
+        validateProfileChoice("Ethnicity", request.getEthnicity(), user.getEthnicity(), java.util.Set.of("Hispanic or Latino", "Not Hispanic or Latino", "Other", "Prefer not to say"));
+        if(!user.isProfileCorrectionOpen() && Boolean.TRUE.equals(user.getProfileDetailsSubmitted()) && clean(user.getBloodGroup())!=null && !java.util.Objects.equals(clean(request.getBloodGroup()),user.getBloodGroup()))
+            throw new IllegalArgumentException("Blood group is locked after submission");
+        if(!user.isProfileCorrectionOpen() && Boolean.TRUE.equals(user.getProfileCompleted()) && clean(user.getProfileImageUrl())!=null && !java.util.Objects.equals(clean(request.getProfileImageUrl()),user.getProfileImageUrl()))
+            throw new IllegalArgumentException("Profile photo is locked after submission");
+        boolean corrected=user.isProfileCorrectionOpen();
+        user.setProfileCorrectionOpen(false);
         user.setGender(clean(request.getGender()));user.setRace(clean(request.getRace()));user.setEthnicity(clean(request.getEthnicity()));user.setJoiningDate(request.getJoiningDate());
         user.setProfileDetailsSubmitted(true);
-        if (!isPlatform(user.getId())) {
+        if (!isPlatform(user.getId()) && request.getSsnLast4() != null) {
             user.setSsnLast4(clean(request.getSsnLast4()));
         }
         user.setProfileImageUrl(clean(request.getProfileImageUrl()));
@@ -200,6 +211,7 @@ public class UserService {
         user.setProfileCompleted(true);
 
         User saved = userRepository.save(user);
+        if(corrected && jdbc!=null) jdbc.update("UPDATE member_detail_corrections SET status='COMPLETED',completed_at=now() WHERE target_user_id=? AND kind='PROFILE' AND status='APPROVED'",user.getId());
         auditService.logAction(saved.getId(), "USER_PROFILE_UPDATED", "User", saved.getId(),
                 "User updated their profile");
         UserDTO profile = toDTO(saved);
@@ -227,6 +239,12 @@ public class UserService {
 
     private boolean isPlatform(Long id){return jdbc!=null && new CompanyAccessService(jdbc).hasPlatformRole(id,"PLATFORM_ADMIN");}
 
+    private void validateProfileChoice(String label, String value, String existing, java.util.Set<String> choices) {
+        String normalized = clean(value);
+        if (normalized != null && !choices.contains(normalized) && !java.util.Objects.equals(normalized, existing))
+            throw new IllegalArgumentException("Choose a valid " + label.toLowerCase(java.util.Locale.ROOT));
+    }
+
     private String clean(String value) {
         if (value == null) {
             return null;
@@ -247,7 +265,7 @@ public class UserService {
                 .dateOfBirth(user.getDateOfBirth())
                 .ssnLast4(isPlatform(user.getId()) ? null : user.getSsnLast4())
                 .profileImageUrl(user.getProfileImageUrl())
-                .profileCompleted(Boolean.TRUE.equals(user.getProfileCompleted()))
+                .profileCompleted(Boolean.TRUE.equals(user.getProfileCompleted())).profileCorrectionOpen(user.isProfileCorrectionOpen())
                 .email(user.getEmail())
                 .platformAdmin(isPlatform(user.getId()))
                 .isActive(user.getIsActive())

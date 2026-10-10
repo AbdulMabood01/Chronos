@@ -1,3 +1,4 @@
+import { ContactUsButton } from '../components/ContactUs';
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
@@ -37,7 +38,7 @@ export default function Login() {
   };
 
   return (
-    <div className="login-experience"><section className="login-story"><span className="login-wordmark">CHRONOS <span>BY MAXWELL</span></span><div className="login-story-content">
+    <div className="login-experience"><section className="login-story"><Link to="/" className="login-wordmark" aria-label="Explore Chronos">CHRONOS <span>BY MAXWELL</span></Link><div className="login-story-content">
       <div className="login-clock-scene" aria-hidden="true">
         <div className="login-clock-orbit" />
         <div className="login-clock">
@@ -54,8 +55,8 @@ export default function Login() {
       <div className="login-card">
         <BrandLogo /><span className="eyebrow">WELCOME TO CHRONOS</span><h1>Make yourself at home.</h1><p className="signin-subtitle">{location.state?.companyName ? `Sign in to join ${location.state.companyName}.` : 'Sign in to your employee workspace.'}</p>
 
-        {location.state?.passwordChanged && <p role="status" className="inline-alert">Password changed. Sign in with your new password.</p>}
-        {sessionExpired && <p role="alert" className="inline-alert">Your session has expired. Please sign in again.</p>}
+        {location.state?.passwordChanged && <p role="status" className="login-notice">Password changed. Sign in with your new password.</p>}
+        {sessionExpired && <p role="alert" className="login-notice">Your session has expired. Please sign in again.</p>}
         <form onSubmit={handleLogin}>
           <div className="form-group">
             <label htmlFor="email">Work email</label>
@@ -74,6 +75,7 @@ export default function Login() {
           <Link className="account-link" to="/forgot-password">Forgot password?</Link>
           <Link className="button button-outline" to="/request-access">Request company access</Link>
         </div>
+        <div className="login-contact"><span>Want to discuss Chronos?</span><ContactUsButton source="LOGIN">Contact us <span aria-hidden="true">↗</span></ContactUsButton></div>
         {error && <p className="error-message" role="alert">{error}</p>}
       </div>
     </div></div>

@@ -5,7 +5,7 @@ import { useCompany } from '../CompanyContext';
 import './EmployeeReports.css';
 import SubmittedReports from './SubmittedReports';
 import Icon from '../components/Icon';
-import { EmployeeSearch } from './FeedbackReviews';
+
 
 export const categories = {
   SEXUAL_HARASSMENT: 'Sexual Harassment', WORKPLACE_HARASSMENT: 'Workplace Harassment or Bullying',
@@ -32,12 +32,11 @@ function SubmissionForm({ onSubmitted }) {
   const [configuration,setConfiguration]=useState(null);
   useEffect(()=>{let active=true;companyGovernanceAPI(companyId).configuration().then(r=>{if(active)setConfiguration(r.data);}).catch(()=>{});return()=>{active=false;};},[companyId]);
   const [form, setForm] = useState({...emptyForm,excludedUserIds:[]});
-  const [excluded,setExcluded]=useState([]); const [candidate,setCandidate]=useState(null);
+
   const [files, setFiles] = useState([]);
   const [receipt, setReceipt] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const completed = [form.category, form.subject.trim(), form.description.trim(), form.privacyAcknowledged].filter(Boolean).length;
   const change = event => setForm(current => ({ ...current, [event.target.name]: event.target.type === 'checkbox' ? event.target.checked : event.target.value }));
   async function submit(event) {
     event.preventDefault(); setError('');
@@ -50,38 +49,37 @@ function SubmissionForm({ onSubmitted }) {
       body.append('report', new Blob([JSON.stringify({ ...form, incidentAt: form.incidentAt || null })], { type: 'application/json' }));
       files.forEach(file => body.append('attachments', file));
       const response = await employeeReportsAPI.submit(body);
-      setReceipt({ ...response.data, anonymous: form.anonymous }); setForm({...emptyForm,excludedUserIds:[]}); setFiles([]);setExcluded([]);setCandidate(null); onSubmitted(response.data, form.anonymous);
+      setReceipt({ ...response.data, anonymous: form.anonymous }); setForm({...emptyForm,excludedUserIds:[]}); setFiles([]); onSubmitted(response.data, form.anonymous);
     } catch (e) { setError(errorMessage(e)); if([403,404].includes(e.response?.status)){setSelected(null);setRows([]);} } finally { setBusy(false); }
   }
   if (receipt) return <section className="concern-card" role="status"><h2>Report submitted confidentially</h2><p>Your report is retained for eligible confidential handlers to review.</p><p>Save your Report ID for reference when contacting HR. This ID does not grant access to the report.</p><strong className="report-reference">{receipt.reportId}</strong><p>Status: Submitted</p><button type="button" className="button button-primary" onClick={() => setReceipt(null)}>Submit another report</button><ReportProgress status={receipt.status} /><small>{receipt.anonymous ? "Anonymous reports are not linked to your account and do not appear in Submitted Reports. Contact HR with your Report ID for updates." : "Follow your report in Submitted Reports."}</small></section>;
   return <form className="concern-card concern-form" onSubmit={submit}>
-    {configuration && !configuration.handlerConfigured && <p role="status">No confidential handler is configured. Reports are retained privately until an eligible handler is appointed. Company Admins can configure handler access under Sensitive access.</p>}<div className="report-section-intro"><span className="report-kicker">NEW REPORT</span><h2>Tell us what happened</h2><p>Share a workplace concern directly with HR. Only authorized designated confidential handlers can review reports, attachments, and internal notes.</p></div>
+    {configuration && !configuration.handlerConfigured && <p role="status">No eligible Company Admin or confidential handler is available. Your report will be retained privately until one is available.</p>}<div className="report-section-intro"><h2>Create report</h2><p>Describe your concern. Company Admins and designated confidential handlers can review it.</p></div>
     {error && <div role="alert" className="concern-error">{error}</div>}
     <fieldset disabled={busy}>
-      <div className="report-form-section"><div className="report-section-heading"><span>01</span><div><h3>The concern</h3><p>Start with the essentials so HR can understand the situation.</p></div></div>
+      <div className="report-form-section report-essentials">
       <label>Report category<select name="category" required value={form.category} onChange={change}><option value="">Select a category</option>{Object.entries(categories).map(([key, text]) => <option key={key} value={key}>{text}</option>)}</select></label>
       <label>Report title / subject<input name="subject" required maxLength={200} value={form.subject} onChange={change} /></label>
       <label>Incident description<textarea name="description" required maxLength={20000} rows={7} value={form.description} onChange={change} /></label>
       </div>
-      <div className="report-form-section"><div className="report-section-heading"><span>02</span><div><h3>Supporting details</h3><p>Add any context that could help with the review.</p></div></div>
+      <details className="report-optional-details"><summary>Additional details &amp; attachments (optional)</summary><div className="report-form-section">
       <div className="concern-columns"><label>Date and time of incident (optional)<input type="datetime-local" name="incidentAt" value={form.incidentAt} onChange={change} /><small>Use the local time at the incident location.</small></label>
       <label>Location (optional)<input name="location" maxLength={500} value={form.location} onChange={change} /></label></div>
-      <p>Select company members involved in the concern to exclude them from handling this case. A handler who identifies another conflict must recuse themselves.</p><EmployeeSearch selected={candidate} onSelect={setCandidate}/>{candidate && <button type="button" onClick={()=>{if(!excluded.some(u=>u.id===candidate.id)){setExcluded([...excluded,candidate]);setForm({...form,excludedUserIds:[...(form.excludedUserIds||[]),candidate.id]});}setCandidate(null);}}>Exclude selected member from handling</button>}<ul>{excluded.map(u=><li key={u.id}>{u.first_name} {u.last_name} <button type="button" onClick={()=>{setExcluded(excluded.filter(x=>x.id!==u.id));setForm({...form,excludedUserIds:form.excludedUserIds.filter(id=>id!==u.id)});}}>Remove exclusion</button></li>)}</ul><label>People involved (optional)<textarea name="peopleInvolved" maxLength={5000} value={form.peopleInvolved} onChange={change} /></label>
+      <label>People involved (optional)<textarea name="peopleInvolved" maxLength={5000} value={form.peopleInvolved} onChange={change} /></label>
       <label>Witnesses (optional)<textarea name="witnesses" maxLength={5000} value={form.witnesses} onChange={change} /></label>
       <label>Supporting attachments (optional)<input type="file" multiple accept={form.anonymous ? '.png,.jpg,.jpeg,.gif,.pdf,.txt' : '.png,.jpg,.jpeg,.gif,.webp,.pdf,.doc,.docx,.txt,.odt'} onChange={e => setFiles(Array.from(e.target.files))} /><small>{form.anonymous ? 'Still PNG/JPG/GIF, PDF (up to 30 pages), or plain UTF-8 text. Export Word/ODT documents as PDF first.' : 'Images, PDF, Word, text, or ODT.'} Up to 5 files; 10 MB each, 20 MB total.</small></label>
       {files.length > 0 && <ul>{files.map((file, index) => <li key={index}>{file.name} ({Math.ceil(file.size / 1024)} KB)</li>)}</ul>}
       </div>
-      <div className="report-form-section report-form-section-last"><div className="report-section-heading"><span>03</span><div><h3>Privacy &amp; submission</h3><p>Choose how your report is identified and review what is retained.</p></div></div>
+      </details><div className="report-form-section report-form-section-last">
       <p className="concern-help">Identified reports appear in Submitted Reports. Anonymous reports cannot be linked to your account for tracking.</p><label className="concern-check"><input type="checkbox" name="anonymous" checked={form.anonymous} onChange={e => { change(e); setForm(current => ({ ...current, privacyAcknowledged: false })); }} />Report Anonymously</label>
-      <div className="concern-privacy"><h3>Before you submit</h3>
+      <div className="concern-privacy"><p>{form.anonymous ? "Your identity is hidden from case handlers. Check your text and files for identifying information. Anonymous reports do not appear in your submitted reports." : "Your name, email, report details, and attachments are retained and available to Company Admins and designated confidential handlers."}</p><details className="report-privacy-details"><summary>Privacy and information retention details</summary>
         <p>{form.anonymous ? 'Your report will not store your account ID, name, or email. A private case-specific exclusion token prevents you from handling your own report. Your identity is hidden from case handlers. You still sign in to submit. The report ID, submission time, incident details, and processed attachments are retained. Original filenames are replaced. Images are re-encoded and PDFs are flattened to remove hidden metadata, authors, comments, links, and embedded files. Original uploaded bytes are not stored for new anonymous reports.' : 'Your name and email will be available to HR with this report. The report ID, submission time, incident details, and original attachments are retained.'}</p>
         <p>Review your text and visible attachment contents for names or identifying details before submitting. Automatic metadata removal cannot hide information visible in a screenshot or document. Technical operators with database or infrastructure access may access stored data; authentication or server logs may allow timing or network correlation. This is not a guarantee of untraceability.</p>
         <p>Report contents are excluded from the general audit feed and notifications. HR review actions are retained in a confidential report history.</p>
-        <label className="concern-check"><input required type="checkbox" name="privacyAcknowledged" checked={form.privacyAcknowledged} onChange={change} />I understand what information is retained.</label>
+        </details><label className="concern-check"><input required type="checkbox" name="privacyAcknowledged" checked={form.privacyAcknowledged} onChange={change} />I understand what information is retained.</label>
       </div>
       </div>
       <footer className="concern-submit-bar">
-        <div className="concern-form-progress"><div className="concern-progress-heading"><strong>{busy ? 'Submitting report…' : completed === 4 ? 'Required fields complete' : 'Report preparation'}</strong><span>{completed} / 4</span></div><progress aria-label="Required fields completed" value={completed} max={4} /><small>Category, subject, description, and privacy acknowledgment. Optional details do not affect progress.</small></div>
         <button className="button button-primary" type="submit">{busy ? 'Submitting…' : 'Submit confidential report'}</button>
       </footer>
     </fieldset>
@@ -185,9 +183,9 @@ function Management() {
 export default function EmployeeReports({ management = false }) {
   const {currentCompany,companyCapabilities}=useCompany(); const companyId=currentCompany?.id;const employeeReportsAPI=companyEmployeeReportsAPI(companyId);
   const { user } = useAuth();
-  if (management && !companyCapabilities.canHandleConfidentialReports) return <p>Only designated confidential handlers can access employee reports.</p>;
-  return <div className={`page-container employee-concerns ${management ? 'concern-management' : ''}`}>
-    <header className="report-page-hero"><div className="report-hero-copy"><span className="report-kicker">{management ? 'HR CASE MANAGEMENT' : 'PRIVATE WORKPLACE CHANNEL'}</span><h1>{management ? 'Report review' : 'Workplace reports'}</h1><p>{management ? 'Review confidential submissions, follow case progress, and record the next step.' : 'Share a concern with HR and follow the progress of reports you submitted with your name.'}</p></div><div className="report-hero-mark" aria-hidden="true"><Icon name="file" size={30}/></div></header>
+  if (management && !companyCapabilities.canHandleConfidentialReports) return <p>Only Company Admins and designated confidential handlers can access employee reports.</p>;
+  return <div className={`page-container employee-concerns ${management ? 'concern-management' : 'report-simple'}`}>
+    <header className={management ? "report-page-hero" : "report-simple-header"}><div className="report-hero-copy"><span className="report-kicker">{management ? 'HR CASE MANAGEMENT' : 'PRIVATE WORKPLACE CHANNEL'}</span><h1>{management ? 'Report review' : 'Workplace reports'}</h1><p>{management ? 'Review confidential submissions, follow case progress, and record the next step.' : 'Share a concern with HR and follow the progress of reports you submitted with your name.'}</p></div><div className="report-hero-mark" aria-hidden="true"><Icon name="file" size={30}/></div></header>
     {management ? <Management /> : <SubmittedReports SubmissionForm={SubmissionForm} />}
   </div>;
 }

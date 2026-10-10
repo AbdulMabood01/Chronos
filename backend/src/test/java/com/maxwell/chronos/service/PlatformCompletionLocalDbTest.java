@@ -19,6 +19,9 @@ import static org.mockito.ArgumentMatchers.*;
 @EnabledIfSystemProperty(named="chronos.localDbTest",matches="true")
 @SpringBootTest(properties={"spring.datasource.url=jdbc:postgresql://localhost:5432/chronos_dev","spring.datasource.username=chronos_user","spring.datasource.password=chronos_password","chronos.jwtSigningKey=Q2hyb25vcy1kZXZlbG9wbWVudC1rZXktMzItYnl0ZXMtbWluaW11bQ==","chronos.email-alerts.enabled=false","chronos.invitation-delivery.poll-ms=3600000"}) @Transactional
 class PlatformCompletionLocalDbTest {
+ @Autowired com.fasterxml.jackson.databind.ObjectMapper json;
+ @Autowired CompanyMemberProfileService memberProfiles;
+ @Autowired CompanyEmploymentService employmentDetails;@Autowired MemberDetailCorrectionService corrections;@Autowired UserService ownProfiles;
  @Autowired JdbcTemplate db;@Autowired PlatformAdministrationService platform;@Autowired CompanyAccessService access;@Autowired CompanyManagementService companies;@Autowired CompanyWorkflowAccess flows;@Autowired InvitationDeliveryService delivery;
  @MockitoBean InvitationEmailService mail;@MockitoBean NotificationService notifications;
  long p,admin,member,a,b;String platformEmail,adminEmail,memberEmail;
@@ -93,4 +96,62 @@ class PlatformCompletionLocalDbTest {
   assertThrows(AccessDeniedException.class,()->platform.accounts(adminEmail,null,a));
   assertThrows(IllegalArgumentException.class,()->platform.accounts(platformEmail,null,0L));
  }
+ @Test void newlyProvisionedCompanyLoadsEveryPlatformAdministrationPanel() throws Exception {
+  long c=companies.createCompany("New platform company","platform-test-"+UUID.randomUUID(),"new-admin@example.com",p);
+  var row=platform.overview(platformEmail).stream().filter(r->((Number)r.get("id")).longValue()==c).findFirst().orElseThrow();
+  assertNotNull(row.get("usage"));assertEquals(List.of(),row.get("admin_contacts"));
+  assertTrue(json.writeValueAsString(row).contains("\"usage\""));
+  assertEquals("FREE",platform.usage(c,platformEmail).get("plan"));
+  assertEquals(1,platform.adminInvitations(c,platformEmail).size());
+  assertNotNull(platform.billingMetadata(c,platformEmail).get("purchases"));
+ }
+ @Test void companyOnlyUserInvitationAcceptsMembershipWithoutProjectRole(){
+  String address="company-only-"+UUID.randomUUID()+"@example.com";companies.invite(a,null,address,"USER",admin);delivery.deliver();
+  var token=ArgumentCaptor.forClass(String.class);verify(mail).sendCompanyInvitation(eq(address),eq("Platform Test"),token.capture(),any());
+  companies.claimInvitation(token.getValue(),"Company","Member","CompanyMember2026");
+  long u=db.queryForObject("SELECT id FROM users WHERE email=?",Long.class,address);
+  assertEquals("ACTIVE",db.queryForObject("SELECT status FROM company_memberships WHERE company_id=? AND user_id=?",String.class,a,u));
+  assertEquals(0,db.queryForObject("SELECT count(*) FROM role_assignments WHERE user_id=?",Integer.class,u));
+  assertEquals(0,db.queryForObject("SELECT count(*) FROM project_memberships WHERE user_id=?",Integer.class,u));
+  assertThrows(AccessDeniedException.class,()->companies.invite(a,null,"denied@example.com","USER",member));
+ }
+ @Test void companyAdminCanViewAndEditOnlyActiveCompanyMemberProfiles(){
+  db.update("UPDATE users SET ssn_last4='1234',blood_group='O+',phone_number='old' WHERE id=?",member);
+  var profile=memberProfiles.get(a,member,admin);assertEquals("old",profile.getPhoneNumber());assertNull(profile.getSsnLast4());assertNull(profile.getBloodGroup());
+  assertThrows(AccessDeniedException.class,()->memberProfiles.get(b,member,admin));
+  assertThrows(AccessDeniedException.class,()->memberProfiles.get(a,member,p));
+  assertThrows(AccessDeniedException.class,()->memberProfiles.get(a,admin,member));
+  var input=new UpdateProfileRequest();input.setFirstName("Platform");input.setLastName("Test");input.setDateOfBirth(java.time.LocalDate.of(1990,1,1));input.setGender("Other");input.setRace("Asian");input.setEthnicity("Prefer not to say");input.setJoiningDate(java.time.LocalDate.of(2024,1,1));
+  input.setPhoneNumber("5550100");input.setPersonalEmail("personal@example.com");input.setAddressLine1("12 Main St");input.setCity("Chicago");input.setStateProvince("Illinois");input.setPostalCode("60601");input.setCountry("USA");input.setEmergencyContactName("Alex");input.setEmergencyContactRelationship("Sibling");input.setEmergencyContactPhone("5550101");input.setEmergencyContactEmail("alex@example.com");
+  assertThrows(AccessDeniedException.class,()->memberProfiles.update(a,member,admin,input));
+  assertEquals("old",db.queryForObject("SELECT phone_number FROM users WHERE id=?",String.class,member));
+  assertEquals("1234",db.queryForObject("SELECT ssn_last4 FROM users WHERE id=?",String.class,member));assertEquals("O+",db.queryForObject("SELECT blood_group FROM users WHERE id=?",String.class,member));
+  assertTrue(db.queryForObject("SELECT count(*) FROM audit_logs WHERE user_id=? AND entity_type='Company' AND entity_id=?",Integer.class,admin,a)>0);
+  db.update("UPDATE company_memberships SET status='REMOVED' WHERE company_id=? AND user_id=?",a,member);
+  assertThrows(AccessDeniedException.class,()->memberProfiles.get(a,member,admin));
+ }
+ @Test void correctionRequiresDifferentAdminAndPersonalSaveConsumesOneTimePermission(){
+  var input=completeProfile();ownProfiles.updateOwnProfile(memberEmail,input);
+  input.setGender("Male");assertThrows(IllegalArgumentException.class,()->ownProfiles.updateOwnProfile(memberEmail,input));
+  long request=corrections.request(a,member,member,"PROFILE","Correct my gender selection");
+  assertThrows(AccessDeniedException.class,()->corrections.decide(a,member,request,member,true,"Self approval"));
+  assertThrows(AccessDeniedException.class,()->corrections.decide(b,member,request,admin,true,"Wrong company"));
+  corrections.decide(a,member,request,admin,true,"Verified employee request");
+  assertTrue(memberProfiles.get(a,member,admin).isProfileCorrectionOpen());
+  ownProfiles.updateOwnProfile(memberEmail,input);
+  assertFalse(memberProfiles.get(a,member,admin).isProfileCorrectionOpen());
+  assertEquals("COMPLETED",db.queryForObject("SELECT status FROM member_detail_corrections WHERE id=?",String.class,request));
+  input.setGender("Female");assertThrows(IllegalArgumentException.class,()->ownProfiles.updateOwnProfile(memberEmail,input));
+  input.setGender("Male");input.setPhoneNumber("5559999");assertEquals("5559999",ownProfiles.updateOwnProfile(memberEmail,input).getPhoneNumber());
+ }
+ @Test void employmentLocksOnSaveAndApprovedCorrectionRelocksAfterOneSave(){
+  var first=employmentDetails.update(a,member,admin,new CompanyEmploymentService.Input(null,"Engineer",java.time.LocalDate.of(2024,1,1),0L));assertTrue(first.locked());
+  assertThrows(ResponseStatusException.class,()->employmentDetails.update(a,member,admin,new CompanyEmploymentService.Input(first.employeeId(),"Lead",first.joiningDate(),first.version())));
+  long request=corrections.request(a,member,member,"EMPLOYMENT","Correct my job title");corrections.decide(a,member,request,admin,true,"Confirmed promotion");
+  var open=employmentDetails.get(a,member,admin);assertFalse(open.locked());
+  var saved=employmentDetails.update(a,member,admin,new CompanyEmploymentService.Input(open.employeeId(),"Lead",open.joiningDate(),open.version()));assertTrue(saved.locked());
+  assertEquals("COMPLETED",db.queryForObject("SELECT status FROM member_detail_corrections WHERE id=?",String.class,request));
+  assertThrows(ResponseStatusException.class,()->employmentDetails.update(a,member,admin,new CompanyEmploymentService.Input(saved.employeeId(),"Changed",saved.joiningDate(),saved.version())));
+ }
+ private UpdateProfileRequest completeProfile(){var i=new UpdateProfileRequest();i.setFirstName("Platform");i.setLastName("Test");i.setDateOfBirth(java.time.LocalDate.of(1990,1,1));i.setGender("Other");i.setRace("Asian");i.setEthnicity("Prefer not to say");i.setJoiningDate(java.time.LocalDate.of(2024,1,1));i.setPhoneNumber("5550100");i.setPersonalEmail("personal@example.com");i.setAddressLine1("12 Main St");i.setCity("Chicago");i.setStateProvince("Illinois");i.setPostalCode("60601");i.setCountry("USA");i.setEmergencyContactName("Alex");i.setEmergencyContactRelationship("Sibling");i.setEmergencyContactPhone("5550101");i.setEmergencyContactEmail("alex@example.com");return i;}
 }

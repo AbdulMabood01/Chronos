@@ -29,6 +29,7 @@ public class CompanyController {
     public record AcceptInput(String token) {}
     // Keep credentials out of generated toString methods and logs.
     public static class ClaimInput {
+        @NotBlank @Size(max=40) public String termsVersion;
         @NotBlank @Pattern(regexp="[A-Za-z0-9_-]{43}") public String token;
         @NotBlank @Size(max=100) public String firstName;
         @NotBlank @Size(max=100) public String lastName;
@@ -94,7 +95,7 @@ public class CompanyController {
     }
 
     @PostMapping("/invitations/claim") public Map<String, String> claim(@Valid @RequestBody ClaimInput input) {
-        return Map.of("email", companies.claimInvitation(input.token, input.firstName, input.lastName, input.password));
+        return Map.of("email", companies.claimInvitationAccepted(input.token, input.firstName, input.lastName, input.password,input.termsVersion));
     }
 
     @PostMapping("/access-requests") public Map<String, String> requestAccess(@Valid @RequestBody AccessRequestInput input) {

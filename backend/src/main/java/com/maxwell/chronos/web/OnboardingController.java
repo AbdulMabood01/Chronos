@@ -33,6 +33,7 @@ public class OnboardingController {
         @NotBlank @Pattern(regexp="[A-Za-z0-9_-]{43}", message="Invalid invitation") public String token;
     }
     public static class ActivationRequest extends TokenRequest {
+        @NotBlank @Size(max=40) public String termsVersion;
         @NotBlank @Size(max=72) public String password;
     }
     public static class EmployeeRequest {
@@ -50,7 +51,7 @@ public class OnboardingController {
     }
     @PostMapping("/auth/activate")
     public void activate(@Valid @RequestBody ActivationRequest request) {
-        onboarding.activate(request.token,request.password);
+        onboarding.activateAccepted(request.token,request.password,request.termsVersion);
     }
     @PostMapping("/users")
     @ResponseStatus(org.springframework.http.HttpStatus.CREATED)

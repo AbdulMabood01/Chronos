@@ -28,7 +28,7 @@ import java.util.Set;
 @RequiredArgsConstructor
 @Transactional
 public class CompanyManagementService {
-    private static final Set<String> COMPANY_ROLES = Set.of("COMPANY_ADMIN", "PROJECT_ADMIN");
+    private static final Set<String> COMPANY_ROLES = Set.of("COMPANY_ADMIN", "PROJECT_ADMIN", "USER", "PROJECT_MANAGER");
     private static final Set<String> PROJECT_ROLES = Set.of("PROJECT_ADMIN", "PROJECT_MANAGER", "USER");
     private final JdbcTemplate db;
     private final CompanyAccessService access;
@@ -316,6 +316,10 @@ public class CompanyManagementService {
         acceptInvitation(invitation, actor, actorId);
     }
 
+    public String claimInvitationAccepted(String token,String firstName,String lastName,String password,String version){
+        LegalTerms.requireCurrent(version);String email=claimInvitation(token,firstName,lastName,password);
+        User user=users.findByEmailForUpdate(email).orElseThrow();LegalTerms.accept(user,version);users.saveAndFlush(user);return email;
+    }
     public String claimInvitation(String token, String firstName, String lastName, String password) {
         OnboardingService.validatePassword(password);
         if (firstName == null || firstName.isBlank() || firstName.length() > 100
@@ -384,6 +388,8 @@ public class CompanyManagementService {
             db.update("INSERT INTO project_memberships(project_id, user_id, status, joined_at) " +
                     "VALUES (?, ?, 'ACTIVE', now()) ON CONFLICT (project_id, user_id) " +
                     "DO UPDATE SET status = 'ACTIVE', joined_at = now(), removed_at = NULL", projectId, actorId);
+        // Membership-only invitations do not grant an unscoped project role.
+        if (projectId != null || Set.of("COMPANY_ADMIN", "PROJECT_ADMIN").contains(role))
         db.update("INSERT INTO role_assignments(user_id, role_key, company_id, project_id, assigned_by_user_id) " +
                 "VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING", actorId, role, companyId, projectId,
                 invitation.get("created_by_user_id"));

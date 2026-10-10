@@ -5,12 +5,12 @@ import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {act,cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import CompanyEmploymentDetails from './CompanyEmploymentDetails';
 const {workspace,api}=vi.hoisted(()=>({workspace:{currentCompany:{id:12,name:'Company A'},platformAdmin:false,companyCapabilities:{canManageCompanyPeople:true}},
-  api:{employment:vi.fn(),updateEmployment:vi.fn()}}));
+  api:{corrections:vi.fn(),employment:vi.fn(),updateEmployment:vi.fn()}}));
 vi.mock('../AuthContext',()=>({useAuth:()=>({user:{id:5,role:'ADMIN',jobTitle:'Legacy shared title'}})}));
 vi.mock('../CompanyContext',()=>({useCompany:()=>workspace}));
 vi.mock('../api',()=>({companyAPI:api}));
 const record={companyId:12,userId:5,employeeId:'1',jobTitle:'Engineer A',joiningDate:'2020-01-01',membershipStatus:'ACTIVE',version:4};
-beforeEach(()=>{vi.resetAllMocks();workspace.currentCompany={id:12,name:'Company A'};workspace.platformAdmin=false;workspace.companyCapabilities={canManageCompanyPeople:true};api.employment.mockResolvedValue({data:record});});
+beforeEach(()=>{vi.resetAllMocks();api.corrections.mockResolvedValue({data:[]});workspace.currentCompany={id:12,name:'Company A'};workspace.platformAdmin=false;workspace.companyCapabilities={canManageCompanyPeople:true};api.employment.mockResolvedValue({data:record});});
 afterEach(cleanup);
 it('shows company employment separately from the read-only personal profile',async()=>{
   render(<CompanyEmploymentDetails/>);await screen.findByText('Engineer A');
@@ -48,4 +48,11 @@ it('shows a conflict and reloads the latest record before retry',async()=>{
 it('does not load company employment for platform administrators',()=>{
   workspace.platformAdmin=true;render(<CompanyEmploymentDetails editable/>);
   expect(api.employment).not.toHaveBeenCalled();expect(screen.queryByText('Company employment details')).toBeNull();
+});
+
+it('shows locked employment as read-only and offers a correction request',async()=>{
+ api.employment.mockResolvedValue({data:{...record,locked:true}});render(<CompanyEmploymentDetails editable/>);
+ expect(await screen.findByText('Employment details are saved and locked.')).toBeInTheDocument();
+ expect(screen.queryByLabelText('Job title')).toBeNull();expect(screen.queryByRole('button',{name:'Save employment details'})).toBeNull();
+ expect(await screen.findByRole('button',{name:'Request correction'})).toBeInTheDocument();
 });

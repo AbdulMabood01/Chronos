@@ -83,6 +83,8 @@ public class User {
     private String race;
     private String ethnicity;
     @Builder.Default
+    private boolean profileCorrectionOpen = false;
+    @Builder.Default
     private Boolean profileDetailsSubmitted = false;
     private LocalDate dateOfBirth;
     private LocalDate joiningDate;
@@ -132,6 +134,9 @@ public class User {
     @com.fasterxml.jackson.annotation.JsonIgnore private java.time.Instant lockedAt;
     @com.fasterxml.jackson.annotation.JsonIgnore private Long unlockedBy;
     @com.fasterxml.jackson.annotation.JsonIgnore private java.time.Instant unlockedAt;
+
+    @com.fasterxml.jackson.annotation.JsonIgnore @Column(length=40) private String termsVersion;
+    @com.fasterxml.jackson.annotation.JsonIgnore private java.time.Instant termsAcceptedAt;
 
     public String getAccountStatus() {
         return !Boolean.TRUE.equals(isActive) ? "INACTIVE" : passwordHash == null ? "INVITED" : "ACTIVE";

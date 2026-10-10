@@ -72,10 +72,28 @@ class CompanyCommunicationsLocalDbTest {
         db.update("UPDATE company_sensitive_grants SET ends_on=CURRENT_DATE-1,starts_on=CURRENT_DATE-2 WHERE id=?",id);assertThrows(AccessDeniedException.class,()->reports.list(f.a,f.email(f.handler),null,null,null,null,0));
         var audit=flow.audit(f.a,f.email(f.admin),0);assertEquals("SENSITIVE_ACCESS_GRANTED",audit.getFirst().get("action"));assertFalse(audit.getFirst().containsKey("purpose"));assertFalse(audit.getFirst().containsKey("details"));assertTrue(flow.audit(f.b,f.email(f.admin),0).isEmpty());
     });}
-    @Test void confidentialCasesRequireHandlerGrantAndSubjectAndReporterRecusal(){run(f->{
+    @Test void companyAdminsHandleReportsWithoutGrantsAndNotificationsFollowCurrentAccess(){run(f->{
+        assertTrue(access.companyPermissions(f.a,f.admin).capabilities().get("canHandleConfidentialReports"));
+        assertEquals(true,flow.configuration(f.a,f.email(f.member)).get("handlerConfigured"));
+        UUID id=reports.submit(f.a,f.email(f.member),f.report(false,List.of()),List.of()).reportId();
+        assertEquals(1,reports.list(f.a,f.email(f.admin),null,null,null,null,0).size());
+        assertNotNull(reports.detail(f.a,f.email(f.admin),id));
+        assertThrows(AccessDeniedException.class,()->reports.detail(f.a,f.email(f.member),id));
+        assertThrows(AccessDeniedException.class,()->reports.detail(f.b,f.email(f.admin),id));
+        assertThrows(AccessDeniedException.class,()->reports.detail(f.a,f.email(f.platform),id));
+        verify(email).enqueueCompany(eq(f.a),eq(f.admin),eq(EmailAlertService.Category.REPORTS),anyString(),eq("/confidential-reports"),eq(id),eq(true));
+        EmailAlertService alerts=new EmailAlertService(db);
+        var item=Map.<String,Object>of("company_id",f.a,"user_id",f.admin,"category","REPORTS","resource_id",id,"handler_only",true);
+        assertTrue(alerts.companyDeliveryAllowed(item));
+        reports.review(f.a,f.email(f.admin),id,new CompanyEmployeeReportService.Review(CompanyEmployeeReportService.Status.UNDER_REVIEW,"Reviewed by admin",null,null,false,0L));
+        db.update("UPDATE role_assignments SET removed_at=now() WHERE company_id=? AND user_id=? AND role_key='COMPANY_ADMIN'",f.a,f.admin);
+        assertFalse(alerts.companyDeliveryAllowed(item));
+        assertThrows(AccessDeniedException.class,()->reports.detail(f.a,f.email(f.admin),id));
+    });}
+    @Test void confidentialCasesAllowCompanyAdminsAndRespectSubjectAndReporterRecusal(){run(f->{
         f.grant(f.handler,CompanyWorkflowAccess.Permission.CONFIDENTIAL_HANDLER,null);f.grant(f.otherAdmin,CompanyWorkflowAccess.Permission.CONFIDENTIAL_HANDLER,null);
         UUID id=reports.submit(f.a,f.email(f.member),f.report(false,List.of(f.handler)),List.of()).reportId();
-        assertTrue(reports.list(f.a,f.email(f.handler),null,null,null,null,0).isEmpty());assertThrows(AccessDeniedException.class,()->reports.detail(f.a,f.email(f.handler),id));assertThrows(AccessDeniedException.class,()->reports.detail(f.a,f.email(f.admin),id));
+        assertTrue(reports.list(f.a,f.email(f.handler),null,null,null,null,0).isEmpty());assertThrows(AccessDeniedException.class,()->reports.detail(f.a,f.email(f.handler),id));assertNotNull(reports.detail(f.a,f.email(f.admin),id));
         var detail=reports.detail(f.a,f.email(f.otherAdmin),id);assertFalse(detail.containsKey("recusal_salt"));assertFalse(detail.containsKey("reporter_id"));assertNotNull(detail.get("reporter"));
         assertThrows(AccessDeniedException.class,()->reports.detail(f.b,f.email(f.otherAdmin),id));assertEquals(1,reports.mine(f.a,f.email(f.member),0).size());assertTrue(reports.mine(f.b,f.email(f.member),0).isEmpty());
         reports.recuse(f.a,f.email(f.otherAdmin),id);assertThrows(AccessDeniedException.class,()->reports.detail(f.a,f.email(f.otherAdmin),id));

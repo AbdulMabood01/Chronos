@@ -83,13 +83,6 @@ public class TimesheetPeriodService {
     }
     private long number(Map<String,Object> row, String key) { return ((Number)row.get(key)).longValue(); }
     private LocalDate date(Map<String,Object> row, String key) { Object value=row.get(key); return value instanceof LocalDate d ? d : ((java.sql.Date)value).toLocalDate(); }
-    private Instant instant(Map<String,Object> row, String key) {
-        Object value=row.get(key);
-        if (value == null) return null;
-        if (value instanceof java.sql.Timestamp t) return t.toInstant();
-        if (value instanceof OffsetDateTime t) return t.toInstant();
-        return (Instant)value;
-    }
     private Period period(Map<String,Object> row) { return new Period(date(row,"period_start"),date(row,"period_end"),(String)row.get("frequency")); }
 
     private BigDecimal hours(long userId, long projectId, Period period) {
@@ -119,8 +112,8 @@ public class TimesheetPeriodService {
         User employee=user(userId);
         Instant now=Instant.now();
         String status=(String)row.get("status");
-        Instant correction=instant(row,"correction_until");
-        boolean correctionOpen=correction!=null && now.isBefore(correction);
+        boolean correctionOpen="APPROVED".equals(row.get("opening_status"))
+                && (status.equals("APPROVED") || status.equals("DRAFT") || status.equals("REJECTED"));
         boolean required=needsSubmission(userId,projectId,period);
         boolean open=!today(employee).isBefore(period.start()) && eligible(userId,projectId,period);
         var result=new java.util.LinkedHashMap<String,Object>();
@@ -165,7 +158,7 @@ public class TimesheetPeriodService {
             item.put("sessions",entry.getSessions().stream().map(session -> Map.of("loginTime",session.getLoginTime(),"logoutTime",session.getLogoutTime())).toList());
             return item;
         }).toList());
-        result.put("correctionUntil",correction); result.put("openingStatus",row.get("opening_status"));
+        result.put("correctionUntil",null); result.put("openingStatus",row.get("opening_status"));
         result.put("openingDecisionComment",row.get("opening_decision_comment"));
         result.put("editable",requesterId==userId && open && (status.equals("DRAFT") || status.equals("REJECTED") || correctionOpen && status.equals("APPROVED")));
         result.put("reviewAllowed",requesterId!=userId && status.equals("SUBMITTED") && access.mayReview(projectId,requesterId,userId,false,"Queue preview"));
@@ -249,7 +242,7 @@ public class TimesheetPeriodService {
         if(comment!=null && comment.length()>500) throw new IllegalArgumentException("Review comment too long");
         if(fallbackReason!=null && fallbackReason.length()>500) throw new IllegalArgumentException("Fallback reason too long");
         if(approve) db.update("UPDATE timesheet_approval_periods SET status='APPROVED', reviewed_at=now(),reviewed_by_id=?,review_comment=?,fallback_reason=?,approved_bill_rate=(SELECT bill_rate FROM project_assignments WHERE project_id=? AND user_id=?) WHERE id=?",reviewerId,comment,fallbackReason,projectId,userId,id);
-        else db.update("UPDATE timesheet_approval_periods SET status='REJECTED', reviewed_at=now(),reviewed_by_id=?,review_comment=?,fallback_reason=?,approved_bill_rate=NULL,correction_until=now()+interval '7 days' WHERE id=?",reviewerId,comment,fallbackReason,id);
+        else db.update("UPDATE timesheet_approval_periods SET status='REJECTED', reviewed_at=now(),reviewed_by_id=?,review_comment=?,fallback_reason=?,approved_bill_rate=NULL,correction_until=NULL WHERE id=?",reviewerId,comment,fallbackReason,id);
         event(id,reviewerId,approve?"APPROVED":"REJECTED",
                 (comment==null?"":comment) + (fallbackReason==null?"":"; Project Admin fallback: "+fallbackReason.trim()));
         notifications.createNotification(userId,"TIMESHEET_REVIEWED",approve?"Timesheet approved":"Timesheet rejected",
@@ -266,6 +259,8 @@ public class TimesheetPeriodService {
         LocalDate today=today(user(userId));
         boolean approved="APPROVED".equals(row.get("status"));
         if(!approved) throw new IllegalArgumentException("Only approved periods require an opening; draft and rejected periods can be edited directly");
+        if ("APPROVED".equals(row.get("opening_status")))
+            throw new IllegalArgumentException("This approval period is already open for correction");
         if(!today.isAfter(period.end()) || today.isAfter(period.end().plusDays(30)))
             throw new IllegalArgumentException("Reopening is available within 30 days after the approval period closes");
         if("SUBMITTED".equals(row.get("status")) || "PENDING".equals(row.get("opening_status")))
@@ -282,8 +277,8 @@ public class TimesheetPeriodService {
         if(!"PENDING".equals(row.get("opening_status"))) throw new IllegalArgumentException("No pending reopening request");
         if (!approve && (comment==null || comment.isBlank())) throw new IllegalArgumentException("Reason required when declining a reopening");
         if(comment!=null && comment.length()>500) throw new IllegalArgumentException("Opening comment too long");
-        db.update("UPDATE timesheet_approval_periods SET opening_status=?,opening_decision_comment=?,correction_until=? WHERE id=?",
-                approve?"APPROVED":"DECLINED",comment,approve?java.sql.Timestamp.from(Instant.now().plus(Duration.ofDays(7))):null,id);
+        db.update("UPDATE timesheet_approval_periods SET opening_status=?,opening_decision_comment=?,correction_until=NULL WHERE id=?",
+                approve?"APPROVED":"DECLINED",comment,id);
         event(id,adminId,approve?"OPENING_APPROVED":"OPENING_DECLINED",comment);
         notifications.createNotification(userId,"TIMESHEET_REOPENING",approve?"Timesheet reopened":"Reopening declined",
                 comment==null?"Your reopening request was reviewed":comment,id,"TimesheetApprovalPeriod");

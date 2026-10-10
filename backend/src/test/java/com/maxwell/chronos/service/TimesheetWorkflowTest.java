@@ -64,8 +64,7 @@ class TimesheetWorkflowTest {
         lenient().doAnswer(call -> {
             Long projectId = call.getArgument(1);
             var current = submissions.findByTimesheetIdAndProjectId(4L, projectId).orElse(null);
-            boolean open = current != null && current.getCorrectionUntil() != null
-                    && current.getCorrectionUntil().isAfter(LocalDateTime.now()) && current.isEditable();
+            boolean open = current != null && current.isCorrectionOpen() && current.isEditable();
             if (!open && (sheet.isApprovalFrozen() || sheet.getStatus() == TimesheetStatus.APPROVED
                     || sheet.isLocked() || current != null && (current.getStatus() == TimesheetStatus.APPROVED
                     || current.getStatus() == TimesheetStatus.LOCKED)))
@@ -195,11 +194,12 @@ class TimesheetWorkflowTest {
         when(projectService.managesProject(3L, 6L)).thenReturn(true);
 
         service.rejectProjectSubmission(5L, "Correct hours", 6L);
-        assertNotNull(submission.getCorrectionUntil());
-        assertTrue(submission.getCorrectionUntil().isBefore(LocalDateTime.now().plusDays(8)));
+        assertTrue(submission.isCorrectionOpen());
+        assertNull(submission.getCorrectionUntil());
         service.addTimeEntry(4L, workDay, new BigDecimal("8"), "Corrected", 3L, List.of(), 1L);
         assertEquals(TimesheetStatus.SUBMITTED, service.submitProjectTimesheet(4L, 3L, 1L).getStatus());
         assertNull(submission.getCorrectionUntil());
+        assertFalse(submission.isCorrectionOpen());
     }
 
     @Test void approvalHistoryPreservesRejectionsAndResubmissionsAndRejectsStrangers() {
@@ -338,7 +338,7 @@ class TimesheetWorkflowTest {
         assertEquals(sheet.getTotalHours(), submission.getTotalHours());
     }
 
-    @Test void approvedOpeningClearsProjectApprovalAndAllowsEditingForSevenDays() {
+    @Test void approvedOpeningClearsProjectApprovalAndStaysOpenUntilResubmission() {
         admin.setRole(UserRole.PROJECT_ADMIN);
         sheet.setStatus(TimesheetStatus.APPROVED);
         sheet.setApprovalFrozen(true);
@@ -349,7 +349,8 @@ class TimesheetWorkflowTest {
         assertTrue(opened.getOpeningActive());
         assertNull(submission.getApprovedBillRate());
         assertTrue(sheet.isApprovalFrozen());
-        assertTrue(submission.getCorrectionUntil().isBefore(LocalDateTime.now().plusDays(8)));
+        assertTrue(submission.isCorrectionOpen());
+        assertNull(submission.getCorrectionUntil());
         add(workMonth.atDay(10), "8", List.of());
         assertEquals(new BigDecimal("8"), submission.getTotalHours());
         var resubmitted = service.submitProjectTimesheet(4L, 3L, 1L);
@@ -395,7 +396,7 @@ class TimesheetWorkflowTest {
         verify(entries, never()).save(any());
     }
 
-    @Test void projectAdminCanOpenPastDraftBeforeFirstHourEntry() {
+    @Test void pastDraftAllowsFirstHourEntryWithoutReopening() {
         admin.setRole(UserRole.PROJECT_ADMIN);
         YearMonth past = YearMonth.now().minusMonths(2);
         sheet.setYear(past.getYear());
@@ -411,12 +412,6 @@ class TimesheetWorkflowTest {
             return saved;
         });
 
-        assertEquals("This timesheet month is closed; request an opening from your Project Admin",
-                assertThrows(IllegalArgumentException.class,
-                        () -> add(past.atDay(10), "8", List.of())).getMessage());
-        var opened = service.openAfterApprovedRequest(4L, 3L, "Late entry approved", 2L);
-        assertNotNull(opened.getCorrectionUntil());
-        assertEquals(new BigDecimal("160"), opened.getPlannedHours());
         add(past.atDay(10), "8", List.of());
         assertEquals(new BigDecimal("8"), service.submitProjectTimesheet(4L, 3L, 1L).getTotalHours());
     }
@@ -448,7 +443,8 @@ class TimesheetWorkflowTest {
 
         assertEquals(TimesheetStatus.DRAFT, sheet.getStatus());
         assertEquals(TimesheetStatus.DRAFT, submission.getStatus());
-        assertNotNull(submission.getCorrectionUntil());
+        assertTrue(submission.isCorrectionOpen());
+        assertNull(submission.getCorrectionUntil());
         assertNull(submission.getApprovedBillRate());
         add(past.atDay(10), "8", List.of());
     }
@@ -469,11 +465,13 @@ class TimesheetWorkflowTest {
         verify(entries, never()).save(any());
     }
 
-    @Test void ordinaryEditingClosesAfterTheSeventhDayFollowingMonthEnd() {
+    @Test void ordinaryEditingRemainsOpenAfterMonthEnd() {
         sheet.setYear(2026);
         sheet.setMonth(9);
         assertTrue(TimesheetService.standardEditingOpen(sheet, LocalDate.of(2026, 10, 7)));
-        assertFalse(TimesheetService.standardEditingOpen(sheet, LocalDate.of(2026, 10, 8)));
+        assertTrue(TimesheetService.standardEditingOpen(sheet, LocalDate.of(2026, 10, 8)));
+        assertTrue(TimesheetService.standardEditingOpen(sheet, LocalDate.of(2028, 1, 1)));
+        assertFalse(TimesheetService.standardEditingOpen(sheet, LocalDate.of(2026, 8, 31)));
     }
 
     @Test void openingOneProjectKeepsOtherDraftProjectsFrozen() {

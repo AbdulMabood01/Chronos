@@ -41,7 +41,7 @@ test('assigned member opens their first timesheet through the Timesheets menu', 
   await page.goto('/dashboard');
   await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Timesheets', exact: true }).click();
   await expect(page.getByText('Timesheet not found', { exact: true })).not.toBeVisible();
-  await expect(page.getByRole('button', { name: 'Submit for Approval', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Submit [A-Z][a-z]{2} / })).toBeVisible();
   const actor = await apiAs(request, 'employee');
   const sheets = await json(await actor.get('/api/timesheets/my'));
   expect(sheets.some(sheet => sheet.companyId === fixture.companyId)).toBe(true);
@@ -54,8 +54,9 @@ test('user creates hours in browser and manager approves in browser', async ({ p
   await page.goto(`/timesheet/${sheet.id}?projectId=${fixture.projectId}`);
   const hours = page.getByRole('spinbutton', { name: `Hours for ${period.date}`, exact: true });
   await hours.fill('8'); await hours.blur();
-  await expect(page.getByRole('button', { name: 'Submit for Approval', exact: true })).toBeEnabled();
-  await page.getByRole('button', { name: 'Submit for Approval', exact: true }).click();
+  await expect(page.getByRole('button', { name: /^Submit [A-Z][a-z]{2} / })).toBeEnabled();
+  await page.getByRole('button', { name: /^Submit [A-Z][a-z]{2} / }).click();
+  await page.getByRole('dialog',{name:'Review submission'}).getByRole('button',{name:'Submit for approval',exact:true}).click();
   await expect.poll(async () => (await view(actor, period)).status).toBe('SUBMITTED');
   await authenticatePage(page, request, 'manager', fixture.companyId);
   await page.goto(`/timesheet/${sheet.id}?projectId=${fixture.projectId}`);

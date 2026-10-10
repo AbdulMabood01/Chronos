@@ -43,8 +43,6 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class TimesheetService {
     private final TimesheetPeriodService approvalPeriods;
-    public static final int EDIT_DAYS_AFTER_MONTH_END = 7;
-    public static final int APPROVED_OPENING_DAYS = 7;
     private final TimesheetRepository timesheetRepository;
     private final TimeEntryRepository timeEntryRepository;
     private final TimesheetProjectSubmissionRepository projectSubmissionRepository;
@@ -274,12 +272,13 @@ public class TimesheetService {
             timesheet.setApprovedHourlyRate(null);
             timesheetRepository.save(timesheet);
         }
-        submission.setCorrectionUntil(java.time.LocalDateTime.now().plusDays(APPROVED_OPENING_DAYS));
+        submission.setCorrectionUntil(null);
+        submission.setCorrectionOpen(true);
         projectSubmissionRepository.save(submission);
         auditService.logAction(projectAdminId, "TIMESHEET_REOPENED", "TimesheetProjectSubmission", submission.getId(),
                 "Opening request approved: " + reason.trim());
         notificationService.createNotification(timesheet.getUser().getId(), "TIMESHEET_REOPENED", "Correction window opened",
-                "You can enter or correct " + submission.getProject().getCode() + " hours until " + submission.getCorrectionUntil(),
+                "You can enter or correct " + submission.getProject().getCode() + " hours until you resubmit for approval.",
                 submission.getId(), "TimesheetProjectSubmission");
         return toProjectSubmissionDTO(submission);
     }
@@ -515,6 +514,7 @@ public class TimesheetService {
         submission.setRejectedBy(null);
         submission.setRejectionReason(null);
         submission.setCorrectionUntil(null);
+        submission.setCorrectionOpen(false);
         submission.setCorrectionPlannedHours(null);
         TimesheetProjectSubmission saved = projectSubmissionRepository.save(submission);
         updateMonthlyStatus(timesheet);
@@ -554,6 +554,7 @@ public class TimesheetService {
         submission.setRejectedBy(null);
         submission.setRejectionReason(null);
         submission.setCorrectionUntil(null);
+        submission.setCorrectionOpen(false);
         TimesheetProjectSubmission saved = projectSubmissionRepository.save(submission);
         updateMonthlyStatus(saved.getTimesheet());
 
@@ -604,7 +605,8 @@ public class TimesheetService {
         submission.setRejectedBy(rejectingUser);
         submission.setRejectionReason(rejectionReason);
         submission.setCorrectionPlannedHours(resolvePlannedHours(submission.getTimesheet(), submission.getProject()));
-        submission.setCorrectionUntil(java.time.LocalDateTime.now().plusDays(APPROVED_OPENING_DAYS));
+        submission.setCorrectionUntil(null);
+        submission.setCorrectionOpen(true);
         submission.setApprovedAt(null);
         submission.setApprovedBy(null);
         TimesheetProjectSubmission saved = projectSubmissionRepository.save(submission);
@@ -620,7 +622,7 @@ public class TimesheetService {
                 "TIMESHEET_REJECTED",
                 "Project Timesheet Rejected",
                 saved.getProject().getCode() + " for " + saved.getTimesheet().getMonth() + "/" + saved.getTimesheet().getYear()
-                        + " was rejected. Reason: " + rejectionReason + ". Correction window ends " + saved.getCorrectionUntil(),
+                        + " was rejected. Reason: " + rejectionReason + ". Correct the hours and resubmit for approval.",
                 saved.getId(),
                 "TimesheetProjectSubmission");
 
@@ -840,9 +842,7 @@ public class TimesheetService {
     }
 
     private boolean correctionOpen(Timesheet timesheet, TimesheetProjectSubmission submission) {
-        return submission.getCorrectionUntil() != null
-                && submission.getCorrectionUntil().isAfter(java.time.LocalDateTime.now())
-                && submission.isEditable();
+        return submission.isCorrectionOpen() && submission.isEditable();
     }
 
     private boolean standardEditingOpen(Timesheet timesheet) {
@@ -851,8 +851,7 @@ public class TimesheetService {
 
     static boolean standardEditingOpen(Timesheet timesheet, java.time.LocalDate today) {
         YearMonth period = YearMonth.of(timesheet.getYear(), timesheet.getMonth());
-        return !period.isAfter(YearMonth.from(today))
-                && !today.isAfter(period.atEndOfMonth().plusDays(EDIT_DAYS_AFTER_MONTH_END));
+        return !period.isAfter(YearMonth.from(today));
     }
 
     private void requireEditingPeriod(Timesheet timesheet, TimesheetProjectSubmission submission) {
@@ -861,7 +860,7 @@ public class TimesheetService {
             throw new IllegalArgumentException("This timesheet was approved; request an opening from your Project Admin");
         }
         if (!standardEditingOpen(timesheet) && !correctionOpen(timesheet, submission)) {
-            throw new IllegalArgumentException("This timesheet month is closed; request an opening from your Project Admin");
+            throw new IllegalArgumentException("Future timesheets are read-only until that month begins");
         }
     }
 

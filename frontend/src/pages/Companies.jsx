@@ -1,3 +1,5 @@
+import {TERMS_VERSION} from './Legal';
+import PlatformCompanyDirectory from '../components/PlatformCompanyDirectory';
 import { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
@@ -8,6 +10,7 @@ import ScreenTitle from '../components/ScreenTitle';
 import './Companies.css';
 import './PlatformAdministration.css';
 import CompanyEmploymentDetails from '../components/CompanyEmploymentDetails';
+import CompanyMemberProfile from '../components/CompanyMemberProfile';
 import {PlatformCompanyTools} from './PlatformAdministration';
 
 const errorText = error => error?.response?.data?.message || error?.userMessage || 'Request failed';
@@ -44,15 +47,17 @@ function EmptyState({ icon, title, description }) {
   </div>;
 }
 
-function EmploymentDialog({member,onClose,onSaved}) {
+function EmploymentDialog({member,onClose,onSaved,profile=false}) {
   const dialog=useRef(null);
   useEffect(()=>{const previous=document.activeElement;dialog.current?.showModal();return()=>{dialog.current?.close();previous?.focus();};},[]);
   return <dialog ref={dialog} className="company-employment-dialog" aria-labelledby="employment-dialog-title" onCancel={event=>{event.preventDefault();onClose();}}>
-    <header><div><h2 id="employment-dialog-title">Employment details</h2><p>{[member?.first_name,member?.last_name].filter(Boolean).join(' ')||member?.email}</p></div><button type="button" className="button button-secondary" onClick={onClose}>Close employment details</button></header>
-    <CompanyEmploymentDetails userId={member?.user_id} editable onSaved={onSaved}/>
+    <header><div><h2 id="employment-dialog-title">{profile ? 'View Profile' : 'Employment details'}</h2><p>{[member?.first_name,member?.last_name].filter(Boolean).join(' ')||member?.email}</p></div><button type="button" className="button button-secondary" onClick={onClose}>{profile ? 'Close profile' : 'Close employment details'}</button></header>
+    {profile && <section className="company-member-profile-summary" aria-label="Member profile"><p><strong>Email</strong><span>{member?.email}</span></p><p><strong>Membership</strong><span>{member?.status}</span></p></section>}
+    {profile ? <><CompanyMemberProfile userId={member?.user_id} onSaved={onSaved}/><CompanyEmploymentDetails userId={member?.user_id} editable onSaved={onSaved}/></> : <CompanyEmploymentDetails userId={member?.user_id} editable onSaved={onSaved}/>}
   </dialog>;
 }
 export function CompanyInvitation() {
+  const [acceptedTerms,setAcceptedTerms]=useState(false);
   const { user, login, logout, refreshUser } = useAuth();
   const navigate = useNavigate();
   const [message, setMessage] = useState('');
@@ -112,9 +117,9 @@ export function CompanyInvitation() {
     finally { setBusy(false); }
   };
   const claim = async event => {
-    event.preventDefault(); setBusy(true); setMessage('');
+    event.preventDefault();if(!acceptedTerms){setMessage('Accept the Terms of Use before continuing.');return;} setBusy(true); setMessage('');
     try {
-      await companyAPI.claimInvitation({ token, ...account });
+      await companyAPI.claimInvitation({termsVersion:TERMS_VERSION, token, ...account });
       sessionStorage.removeItem('chronos:company-invite');
       setToken(''); setPreview(null);
       try {
@@ -153,6 +158,7 @@ export function CompanyInvitation() {
           <label className="company-field">Last name<input required maxLength={100} autoComplete="family-name" value={account.lastName} onChange={event => setAccount({ ...account, lastName: event.target.value })} /></label>
           <label className="company-field">Password<input required type="password" minLength={12} maxLength={72} autoComplete="new-password" value={account.password} onChange={event => setAccount({ ...account, password: event.target.value })} /></label>
           <small>At least 12 characters, including uppercase, lowercase and a number.</small>
+          <label><input type="checkbox" required checked={acceptedTerms} onChange={e=>setAcceptedTerms(e.target.checked)}/> I agree to the <Link to="/legal/terms">Terms of Use</Link>.</label><p><Link to="/legal/privacy">Privacy Policy</Link></p>
           <button className="button button-primary" disabled={busy}>{busy ? 'Creating account...' : 'Create account and join'}</button>
         </form>}
       </>}
@@ -194,6 +200,7 @@ export default function Companies() {
   const [grant, setGrant] = useState({ projectId: '', userId: '', timesheets: true, expenses: false, startsOn: '', endsOn: '' });
   const [newCompany, setNewCompany] = useState({ name: '', slug: '', adminEmail: '' });
   const [employmentUser,setEmploymentUser]=useState(null);
+  const [profileDialog,setProfileDialog]=useState(false);
   const [peopleSearch,setPeopleSearch]=useState('');
   const [peopleStatus,setPeopleStatus]=useState('ACTIVE');
   const [roleDrafts,setRoleDrafts]=useState({});
@@ -317,6 +324,7 @@ export default function Companies() {
       <button className="button button-primary" disabled={busy}>{busy ? 'Creating company and queuing invitation...' : 'Create company and invite admin'}</button>
     </form>}
 
+    {platformAdmin && <PlatformCompanyDirectory />}
     {companies.length > 0 && <section className="company-overview" aria-label="Company overview">
       <div className="company-overview-top">
         <div className="company-identity">
@@ -352,7 +360,7 @@ export default function Companies() {
         </button>)}
       </nav>
 
-      {employmentUser&&companyAdmin&&<EmploymentDialog member={members.find(member=>member.user_id===employmentUser)} onClose={()=>setEmploymentUser(null)} onSaved={load}/>}
+      {employmentUser&&companyAdmin&&<EmploymentDialog profile={profileDialog} member={members.find(member=>member.user_id===employmentUser)} onClose={()=>setEmploymentUser(null)} onSaved={load}/>}
       {tab === 'people' && <section className="company-card">
         <div className="company-section-heading"><div><h2>People</h2><p>Membership and company roles in {active.name}.</p></div><span className="company-count">{shownMembers.length} members</span></div>
         <div className="company-people-tools"><label className="company-field">Search people<input maxLength={100} value={peopleSearch} onChange={event=>setPeopleSearch(event.target.value)} placeholder="Name, email, employee ID or job title"/></label>
@@ -366,7 +374,7 @@ export default function Companies() {
           <div className="company-pills"><span className={`company-status company-status-${member.status.toLowerCase()}`}>{roleName(member.status)}</span>
             {(member.roles || []).length ? member.roles.map(role => <span className="company-pill" key={role}>{companyRoleLabel(role)}</span>) : <span className="company-pill">Member</span>}
             {companyAdmin&&member.account_available===false&&<span className="company-pill">Account unavailable</span>}</div>
-          {companyAdmin&&<button className="company-text-button" onClick={()=>setEmploymentUser(member.user_id)}>Employment details</button>}
+          {companyAdmin&&<div className="company-profile-actions"><button className="company-text-button" onClick={()=>{setProfileDialog(true);setEmploymentUser(member.user_id);}}>View Profile</button><button className="company-text-button" onClick={()=>{setProfileDialog(false);setEmploymentUser(member.user_id);}}>Employment details</button></div>}
           {companyAdmin&&<details className="company-member-actions"><summary>Manage access</summary><div className="company-member-controls">
             {member.status==='ACTIVE'&&<>
               <label className="company-field">Company role<select aria-label={`Company role for ${member.email}`} value={roleDrafts[member.user_id]||''} disabled={busy||!member.account_available||member.platform_account} onChange={event=>setRoleDrafts({...roleDrafts,[member.user_id]:event.target.value})}>
@@ -392,24 +400,23 @@ export default function Companies() {
 
       {tab === 'invitations' && <div className="company-content-grid">
         <form className="company-card company-side-form" onSubmit={event => { event.preventDefault(); run(() => companyAPI.invite(selected, {
-          email: invite.email, role: invite.role, projectId: invite.projectId ? Number(invite.projectId) : null,
+          email: invite.email, role: invite.role, projectId: !companyAdmin && invite.projectId ? Number(invite.projectId) : null,
           accessRequestId: invite.accessRequestId || null,
         }), 'Invitation sent.', () => setInvite(current => ({ ...current, email: '', accessRequestId: null }))); }}>
-          <div className="company-section-heading"><div><h2>Invite a person</h2><p>They can use the same email across multiple companies. New people create an account from the invitation link.</p></div></div>
+          <div className="company-section-heading"><div><h2>Invite a person</h2><p>Invite someone to the company now; assign projects and project roles afterward. New people create an account from the invitation link.</p></div></div>
           {invite.accessRequestId && <p className="company-request-selected">Responding to an access request. The email stays linked to this request.</p>}
           <label className="company-field">Email address<input type="email" required value={invite.email} readOnly={!!invite.accessRequestId} onChange={event => setInvite({ ...invite, email: event.target.value })} placeholder="name@company.com" /></label>
           <label className="company-field">Role<select value={invite.role} onChange={event => setInvite({ ...invite, role: event.target.value,
             projectId: ['COMPANY_ADMIN', 'MODERATOR'].includes(event.target.value) ? '' : invite.projectId })}>
             {companyAdmin && <><option value="COMPANY_ADMIN">Company Admin</option><option value="PROJECT_ADMIN">Project Admin</option></>}
-            <option value="PROJECT_MANAGER">Project Manager</option>
+            {!companyAdmin && <option value="PROJECT_MANAGER">Project Manager</option>}
             <option value="USER">User</option></select></label>
-          {!['COMPANY_ADMIN', 'MODERATOR'].includes(invite.role) && <label className="company-field">Project<select value={invite.projectId}
+          {!companyAdmin && !['COMPANY_ADMIN', 'MODERATOR'].includes(invite.role) && <label className="company-field">Project<select value={invite.projectId}
             onChange={event => setInvite({ ...invite, projectId: event.target.value })}>
-            <option value="">{invite.role === 'PROJECT_ADMIN' && companyAdmin ? 'Company scope' : 'Select project'}</option>
+            <option value="">{invite.role === 'PROJECT_ADMIN' && companyAdmin ? 'Company scope' : companyAdmin ? 'No project — assign later' : 'Select project'}</option>
             {companyProjects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
           </select></label>}
-          <button className="button button-primary" disabled={busy || ((['USER', 'PROJECT_MANAGER'].includes(invite.role)
-            || invite.role === 'PROJECT_ADMIN' && !companyAdmin) && !invite.projectId)}>Send invitation</button>
+          <button className="button button-primary" disabled={busy || (!companyAdmin && !invite.projectId)}>Send invitation</button>
         </form>
         <section className="company-card">
           <div className="company-section-heading"><div><h2>Invitations</h2><p>Track invitations sent for this company.</p></div><span className="company-count">{invitations.length} total</span></div>

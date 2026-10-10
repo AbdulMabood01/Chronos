@@ -80,11 +80,7 @@ public class UserController {
     public ResponseEntity<UserDTO> updateMyProfile(@Valid @RequestBody UpdateProfileRequest request,
                                                     @AuthenticationPrincipal Jwt jwt) {
         String email = jwt.getClaimAsString("preferred_username");
-        try {
-            return ResponseEntity.ok(userService.updateOwnProfile(email, request));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(403).build();
-        }
+        return ResponseEntity.ok(userService.updateOwnProfile(email, request));
     }
 
 }
