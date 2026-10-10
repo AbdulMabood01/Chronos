@@ -2,13 +2,13 @@ import React from 'react';
 import Icon from './Icon';
 import './ProfileChecklist.css';
 const groups = [
-  ['Personal details', [['firstName', 'profile-first-name'], ['lastName', 'profile-last-name'], ['dateOfBirth', 'profile-dob']]],
-  ['Phone number', [['phoneNumber', 'profile-phoneNumber']]],
-  ['Home address', [['addressLine1', 'profile-addressLine1'], ['city', 'profile-city'], ['country', 'profile-country']]],
-  ['Emergency contact', [['emergencyContactName', 'profile-emergencyContactName'], ['emergencyContactRelationship', 'profile-emergencyContactRelationship'], ['emergencyContactPhone', 'profile-emergencyContactPhone']]],
+  ['Personal details', [['firstName', 'profile-first-name'], ['lastName', 'profile-last-name'], ['dateOfBirth', 'profile-dob'], ['gender', 'profile-gender'], ['race', 'profile-race'], ['ethnicity', 'profile-ethnicity'], ['joiningDate', 'profile-joining-date']]],
+  ['Contact details', [['phoneNumber', 'profile-phoneNumber'], ['personalEmail', 'profile-personalEmail']]],
+  ['Home address', [['addressLine1', 'profile-addressLine1'], ['city', 'profile-city'], ['stateProvince', 'profile-stateProvince'], ['postalCode', 'profile-postalCode'], ['country', 'profile-country']]],
+  ['Emergency contact', [['emergencyContactName', 'profile-emergencyContactName'], ['emergencyContactRelationship', 'profile-emergencyContactRelationship'], ['emergencyContactPhone', 'profile-emergencyContactPhone'], ['emergencyContactEmail', 'profile-emergencyContactEmail']]],
 ];
 export default function ProfileChecklist({ profile }) {
-  const items = groups.map(([label, fields], index) => ({ label, fields, required: index === 0,
+  const items = groups.map(([label, fields], index) => ({ label, fields, required: true,
     completed: fields.filter(([key]) => String(profile?.[key] || '').trim()).length,
     missing: fields.find(([key]) => !String(profile?.[key] || '').trim()) }));
   const count = items.filter(item => !item.missing).length;

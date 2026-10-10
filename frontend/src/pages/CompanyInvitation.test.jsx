@@ -73,9 +73,10 @@ it('creates an account and accepts access from the invitation link', async () =>
   fireEvent.change(screen.getByLabelText('First name'), { target: { value: 'Alice' } });
   fireEvent.change(screen.getByLabelText('Last name'), { target: { value: 'Smith' } });
   fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'StrongPassword123' } });
+  fireEvent.click(screen.getByRole('checkbox'));
   fireEvent.click(screen.getByRole('button', { name: 'Create account and join' }));
   await waitFor(() => expect(claimInvitation).toHaveBeenCalledWith({
-    token: 'invitation-secret', firstName: 'Alice', lastName: 'Smith', password: 'StrongPassword123',
+    termsVersion:'2026-10-09', token: 'invitation-secret', firstName: 'Alice', lastName: 'Smith', password: 'StrongPassword123',
   }));
   await waitFor(() => expect(auth.login).toHaveBeenCalledWith('alice@example.com', 'StrongPassword123'));
   expect(sessionStorage.getItem('chronos:company-invite')).toBeNull();

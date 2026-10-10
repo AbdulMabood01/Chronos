@@ -49,7 +49,7 @@ public class AuthController {
                 .stateProvince(user.getStateProvince())
                 .postalCode(user.getPostalCode())
                 .country(user.getCountry())
-                .bloodGroup(user.getBloodGroup()).gender(user.getGender()).race(user.getRace()).ethnicity(user.getEthnicity()).joiningDate(user.getJoiningDate()).profileDetailsSubmitted(Boolean.TRUE.equals(user.getProfileDetailsSubmitted()))
+                .bloodGroup(user.getBloodGroup()).gender(user.getGender()).race(user.getRace()).ethnicity(user.getEthnicity()).joiningDate(user.getJoiningDate()).profileDetailsSubmitted(Boolean.TRUE.equals(user.getProfileDetailsSubmitted())).profileCorrectionOpen(user.isProfileCorrectionOpen())
                 .emergencyContactName(user.getEmergencyContactName())
                 .emergencyContactRelationship(user.getEmergencyContactRelationship())
                 .emergencyContactPhone(user.getEmergencyContactPhone())

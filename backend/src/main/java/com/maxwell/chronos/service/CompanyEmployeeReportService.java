@@ -40,7 +40,7 @@ public class CompanyEmployeeReportService {
 
     private User requireUser(long company,String email, boolean handler) {
         User user=flow.lockMember(company,email,false);
-        if(handler && !flow.permitted(company,user.getId(),"CONFIDENTIAL_HANDLER",null))throw new AccessDeniedException("An active confidential-handler grant is required");
+        if(handler && !flow.canHandleReports(company,user.getId()))throw new AccessDeniedException("Company Admin or designated confidential-handler access is required");
         return user;
     }
     private void eligible(UUID id,long actor) {
@@ -206,7 +206,7 @@ public class CompanyEmployeeReportService {
         return download;
     }
     private void notifyHandlers(long company,UUID id) {
-        var handlers=db.queryForList("SELECT DISTINCT g.user_id FROM company_sensitive_grants g JOIN company_memberships m ON m.company_id=g.company_id AND m.user_id=g.user_id JOIN users u ON u.id=g.user_id WHERE g.company_id=? AND g.permission='CONFIDENTIAL_HANDLER' AND g.revoked_at IS NULL AND g.starts_on<=(CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date AND g.ends_on>=(CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date AND m.status='ACTIVE' AND u.is_active AND NOT u.admin_locked AND NOT EXISTS(SELECT 1 FROM role_assignments p WHERE p.user_id=u.id AND p.role_key='PLATFORM_ADMIN' AND p.removed_at IS NULL)",Long.class,company);
+        var handlers=db.queryForList(CompanyWorkflowAccess.REPORT_HANDLERS_SQL,Long.class,company);
         for(long handler:handlers){try{eligible(id,handler);}catch(AccessDeniedException denied){continue;}emailAlerts.enqueueCompany(company,handler,EmailAlertService.Category.REPORTS,"Chronos: confidential case activity","/confidential-reports",id,true);}
     }
     private boolean blank(String value) { return value == null || value.isBlank(); }

@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from './AuthContext';
 import { GlobalApiLoader, LoadingIndicator } from './components/Hourglass';
 import ProfileCompletionPrompt from './components/ProfileCompletionPrompt';
 import Login from './pages/Login';
+import Landing from './pages/Landing';
 import RequestAccess from './pages/RequestAccess';
 import Activate from './pages/Activate';
 import { ForgotPassword, ResetPassword } from './pages/PasswordRecovery';
@@ -33,6 +34,8 @@ import Profile from './pages/Profile';
 import { MissingTimesheetsPage, TeamLeaveCalendarPage } from './pages/TeamManagement';
 import NotFound from './pages/NotFound';
 import Billing, { Pricing } from './pages/Billing';
+import PurchaseReview from './pages/PurchaseReview';
+import Legal, {LegalFooter} from './pages/Legal';
 import './styles.css';
 import './workspace.css';
 import Layout from './components/WorkspaceLayout';
@@ -69,13 +72,16 @@ function ProtectedRoute({ children }) {
 
 function AppContent({ darkBackground, onToggleBackground }) {
   const { loading, user } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return <div className="page-container"><div className="loading-panel"><LoadingIndicator /></div></div>;
   }
 
   return (
-    <Routes>
+    <><Routes>
+      <Route path="/legal/:policy" element={<Legal />} />
+      <Route path="/billing/payment" element={<ProtectedRoute><Layout darkBackground={darkBackground} onToggleBackground={onToggleBackground}><PurchaseReview /></Layout></ProtectedRoute>} />
       <Route path="/pricing" element={<Pricing />} />
       <Route path="/billing" element={<ProtectedRoute><Layout darkBackground={darkBackground} onToggleBackground={onToggleBackground}><Billing /></Layout></ProtectedRoute>} />
       <Route path="/announcements" element={<ProtectedRoute><Layout darkBackground={darkBackground} onToggleBackground={onToggleBackground}><Announcements /></Layout></ProtectedRoute>} />
@@ -97,7 +103,7 @@ function AppContent({ darkBackground, onToggleBackground }) {
       <Route path="/activate" element={<Activate />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
-      <Route path="/" element={user ? <Navigate to="/dashboard" /> : <Navigate to="/login" />} />
+      <Route path="/" element={user ? <Navigate to="/dashboard" replace /> : <Landing />} />
       <Route
         path="/dashboard"
         element={
@@ -249,7 +255,7 @@ function AppContent({ darkBackground, onToggleBackground }) {
         }
       />
       <Route path="*" element={<NotFound />} />
-    </Routes>
+    </Routes>{location.pathname !== '/' && <LegalFooter />}</>
   );
 }
 

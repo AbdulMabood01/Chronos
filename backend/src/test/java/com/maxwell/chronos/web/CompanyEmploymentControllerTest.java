@@ -26,6 +26,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class CompanyEmploymentControllerTest {
     @Autowired MockMvc mvc;
     @MockitoBean CompanyEmploymentService employment;
+    @MockitoBean CompanyMemberProfileService profiles;
+    @MockitoBean MemberDetailCorrectionService corrections;
     @MockitoBean UserService users;
     @MockitoBean UserRepository repository;
     @MockitoBean AuthSessionService sessions;

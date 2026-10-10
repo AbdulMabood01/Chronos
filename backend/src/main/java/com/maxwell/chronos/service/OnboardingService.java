@@ -61,6 +61,10 @@ public class OnboardingService {
         check(invitation,user,token);
         return new InvitationInfo(user.getFirstName(),user.getLastName(),user.getEmail());
     }
+    public void activateAccepted(String token,String password,String version){
+        LegalTerms.requireCurrent(version);activate(token,password);
+        User user=users.findForUpdate(findEmployee(token)).orElseThrow(this::invalid);LegalTerms.accept(user,version);users.save(user);
+    }
     public void activate(String token, String password) {
         validatePassword(password);
         Long id=findEmployee(token);

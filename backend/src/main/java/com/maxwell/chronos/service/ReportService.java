@@ -126,10 +126,7 @@ public class ReportService {
         companyAccess.requireActiveCompanyAccess(companyAccess.companyId(projectId),requesterId);
         if(requesterId!=userId && !canReadProjectReport(projectId,requesterId))
             throw new org.springframework.security.access.AccessDeniedException("Timesheet access denied");
-        Object correction=row.get("correction_until");
-        java.time.Instant correctionUntil=correction instanceof java.sql.Timestamp stamp ? stamp.toInstant()
-                : correction instanceof java.time.OffsetDateTime offset ? offset.toInstant() : null;
-        if(!"APPROVED".equals(row.get("status")) || correctionUntil!=null && correctionUntil.isAfter(java.time.Instant.now()))
+        if(!"APPROVED".equals(row.get("status")) || "APPROVED".equals(row.get("opening_status")))
             throw new IllegalArgumentException("Approval period must be finalized before PDF export");
         LocalDate start=row.get("period_start") instanceof LocalDate d ? d : ((java.sql.Date)row.get("period_start")).toLocalDate();
         LocalDate end=row.get("period_end") instanceof LocalDate d ? d : ((java.sql.Date)row.get("period_end")).toLocalDate();

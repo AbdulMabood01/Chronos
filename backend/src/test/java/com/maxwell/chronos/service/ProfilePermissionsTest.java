@@ -43,7 +43,7 @@ class ProfilePermissionsTest {
         assertEquals("Asia/Kolkata", user.getTimezone());
     }
 
-    @Test void optionalDetailsAreSavedClearedAndExcludedFromGeneralUserResponses() throws Exception {
+    @Test void contactDetailsAreSavedClearedAndExcludedFromGeneralUserResponses() throws Exception {
         var users = mock(UserRepository.class);
         var service = new UserService(users, mock(AuditService.class), mock(AuthSessionService.class));
         var user = User.builder().id(1L).email("employee@example.com").role(UserRole.EMPLOYEE).build();
@@ -51,10 +51,11 @@ class ProfilePermissionsTest {
         when(users.findForUpdate(user.getId())).thenReturn(Optional.of(user));
         when(users.save(user)).thenReturn(user);
         var request = new UpdateProfileRequest();
-        String[] fields = {"PhoneNumber", "PersonalEmail", "AddressLine1", "AddressLine2", "City", "StateProvince", "PostalCode", "Country", "BloodGroup", "EmergencyContactName", "EmergencyContactRelationship", "EmergencyContactPhone", "EmergencyContactEmail"};
+        String[] fields = {"PhoneNumber", "PersonalEmail", "AddressLine1", "AddressLine2", "City", "StateProvince", "PostalCode", "Country", "EmergencyContactName", "EmergencyContactRelationship", "EmergencyContactPhone", "EmergencyContactEmail"};
         for (String field : fields) {
             UpdateProfileRequest.class.getMethod("set" + field, String.class).invoke(request, " value ");
         }
+        request.setBloodGroup("O+");
         var saved = service.updateOwnProfile(user.getEmail(), request);
         var general = service.findByEmail(user.getEmail());
         for (String field : fields) {
@@ -79,7 +80,11 @@ class ProfilePermissionsTest {
             request.setJobTitle("Engineer");
             request.setDateOfBirth(java.time.LocalDate.of(1990, 1, 1));
             request.setBloodGroup("O+");
-            request.setPersonalEmail("");
+            request.setGender("Other");request.setRace("Asian");request.setEthnicity("Prefer not to say");
+            request.setJoiningDate(java.time.LocalDate.of(2024,1,1));
+            request.setPhoneNumber("5550100");request.setPersonalEmail("test@example.com");
+            request.setAddressLine1("12 Main St");request.setCity("Chicago");request.setStateProvince("Illinois");request.setPostalCode("60601");request.setCountry("USA");
+            request.setEmergencyContactName("Alex");request.setEmergencyContactRelationship("Sibling");request.setEmergencyContactPhone("5550101");request.setEmergencyContactEmail("alex@example.com");
             assertTrue(validator.validate(request).isEmpty());
             request.setBloodGroup("X+");
             request.setEmergencyContactEmail("invalid");
@@ -139,5 +144,34 @@ class ProfilePermissionsTest {
         var request=new UpdateProfileRequest();request.setJobTitle("New title");
         assertThrows(IllegalArgumentException.class,()->service.updateOwnProfile("employee@example.com",request));
         verifyNoInteractions(users);
+    }
+    @Test void requiredProfileDetailsCannotBeOmittedOrBlank() {
+        try (var factory = jakarta.validation.Validation.buildDefaultValidatorFactory()) {
+            var request = new UpdateProfileRequest();
+            var fields = factory.getValidator().validate(request).stream().map(v -> v.getPropertyPath().toString()).collect(java.util.stream.Collectors.toSet());
+            assertTrue(fields.containsAll(java.util.Set.of("gender", "race", "ethnicity", "joiningDate", "phoneNumber", "personalEmail", "addressLine1", "city", "stateProvince", "postalCode", "country", "emergencyContactName", "emergencyContactRelationship", "emergencyContactPhone", "emergencyContactEmail")));
+            request.setPhoneNumber("   ");
+            assertTrue(factory.getValidator().validate(request).stream().anyMatch(v -> v.getPropertyPath().toString().equals("phoneNumber")));
+            assertFalse(fields.contains("addressLine2"));
+        }
+    }
+    @Test void submittedMissingDetailsCanBeCompletedButExistingChoicesStayLocked() {
+        var users=mock(UserRepository.class);
+        var user=User.builder().id(1L).email("employee@example.com").role(UserRole.EMPLOYEE).profileDetailsSubmitted(true).race("Asian").build();
+        when(users.findByEmail(user.getEmail())).thenReturn(Optional.of(user));when(users.findForUpdate(1L)).thenReturn(Optional.of(user));when(users.save(user)).thenReturn(user);
+        var service=new UserService(users,mock(AuditService.class),mock(AuthSessionService.class));
+        var request=new UpdateProfileRequest();request.setGender("Other");request.setRace("Asian");request.setEthnicity("Prefer not to say");request.setJoiningDate(java.time.LocalDate.of(2024,1,1));
+        assertEquals("Other",service.updateOwnProfile(user.getEmail(),request).getGender());
+        request.setRace("White");assertThrows(IllegalArgumentException.class,()->service.updateOwnProfile(user.getEmail(),request));
+    }
+    @Test void invalidDemographicChoicesAreRejected() {
+        var users=mock(UserRepository.class);
+        var user=User.builder().id(1L).email("employee@example.com").role(UserRole.EMPLOYEE).build();
+        when(users.findByEmail(user.getEmail())).thenReturn(Optional.of(user));when(users.findForUpdate(1L)).thenReturn(Optional.of(user));
+        var service=new UserService(users,mock(AuditService.class),mock(AuthSessionService.class));var request=new UpdateProfileRequest();
+        request.setGender("invalid");assertThrows(IllegalArgumentException.class,()->service.updateOwnProfile(user.getEmail(),request));
+        request.setGender("Male");request.setRace("invalid");assertThrows(IllegalArgumentException.class,()->service.updateOwnProfile(user.getEmail(),request));
+        request.setRace("Asian");request.setEthnicity("invalid");assertThrows(IllegalArgumentException.class,()->service.updateOwnProfile(user.getEmail(),request));
+        verify(users,never()).save(any());
     }
 }

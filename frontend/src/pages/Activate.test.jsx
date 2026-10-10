@@ -19,15 +19,17 @@ it('validates the token, removes it from the URL, and activates with matching pa
   expect(window.location.search).toBe('');
   fireEvent.change(screen.getByLabelText('Create password'), { target: { value: 'StrongPassword123' } });
   fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: 'StrongPassword123' } });
+  fireEvent.click(screen.getByRole('checkbox'));
   fireEvent.click(screen.getByRole('button', { name: 'Activate account' }));
   await screen.findByRole('link', { name: 'Sign in' });
-  expect(authAPI.activate).toHaveBeenCalledWith('invitation-secret', 'StrongPassword123');
+  expect(authAPI.activate).toHaveBeenCalledWith('invitation-secret', 'StrongPassword123','2026-10-09');
 });
 it('prevents submission when password confirmation differs', async () => {
   render(<MemoryRouter><Activate /></MemoryRouter>);
   await screen.findByText(/Welcome, Alice Smith/);
   fireEvent.change(screen.getByLabelText('Create password'), { target: { value: 'StrongPassword123' } });
   fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: 'DifferentPassword123' } });
+  fireEvent.click(screen.getByRole('checkbox'));
   fireEvent.click(screen.getByRole('button', { name: 'Activate account' }));
   expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Passwords do not match.');
   expect(authAPI.activate).not.toHaveBeenCalled();

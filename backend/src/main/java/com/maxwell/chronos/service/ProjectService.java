@@ -246,8 +246,8 @@ public class ProjectService {
     }
 
     private void requireFinalizedExpenses(Long projectId){
-        if(projectId!=null&&Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM project_expenses WHERE project_id=? AND status='PENDING_APPROVAL') OR EXISTS(SELECT 1 FROM timesheet_approval_periods WHERE project_id=? AND correction_until>now())",Boolean.class,projectId,projectId)))
-            throw new IllegalArgumentException("Review pending expenses and close correction windows before archiving or completing this project");
+        if(projectId!=null&&Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM project_expenses WHERE project_id=? AND status='PENDING_APPROVAL') OR EXISTS(SELECT 1 FROM timesheet_approval_periods WHERE project_id=? AND opening_status='APPROVED' AND status IN ('APPROVED','DRAFT','REJECTED'))",Boolean.class,projectId,projectId)))
+            throw new IllegalArgumentException("Review pending expenses and finalize timesheet corrections before archiving or completing this project");
     }
     public ProjectDTO archiveProject(long projectId,User requester){
         long company=access.companyId(projectId);access.requireActiveCompanyAccess(company,requester.getId());access.lockCompanyAdministration(company);

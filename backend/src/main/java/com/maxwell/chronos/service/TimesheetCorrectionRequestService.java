@@ -61,16 +61,13 @@ public class TimesheetCorrectionRequestService {
                 .orElse(TimesheetStatus.DRAFT);
         boolean approved = projectStatus == TimesheetStatus.APPROVED || projectStatus == TimesheetStatus.LOCKED
                 || sheet.isApprovalFrozen() || sheet.getStatus() == TimesheetStatus.APPROVED || sheet.isLocked();
-        if (!approved && !today.isAfter(period.atEndOfMonth()
-                .plusDays(TimesheetService.EDIT_DAYS_AFTER_MONTH_END)))
+        if (!approved)
             throw new IllegalArgumentException("This timesheet is still open for editing");
         if (submission.isPresent()) {
             TimesheetStatus status = submission.get().getStatus();
             if (status == TimesheetStatus.SUBMITTED || status == TimesheetStatus.CHANGE_REQUESTED)
                 throw new IllegalArgumentException("This project timesheet is already awaiting review");
-            if (submission.get().getCorrectionUntil() != null
-                    && submission.get().getCorrectionUntil().isAfter(LocalDateTime.now(clock.withZone(ZoneId.systemDefault())))
-                    && submission.get().isEditable())
+            if (submission.get().isCorrectionOpen() && submission.get().isEditable())
                 throw new IllegalArgumentException("A correction window is already open");
         }
         if (requests.existsByTimesheetIdAndProjectIdAndStatus(timesheetId, projectId, TimesheetCorrectionStatus.PENDING))

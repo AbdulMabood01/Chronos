@@ -107,3 +107,16 @@ it('shows an administrator lock message only for locked sign-in responses', asyn
   await expect(apiClient.post('/another-action', {}, { adapter: locked }))
     .rejects.toMatchObject({ userMessage: 'Unable to complete the request. Please try again.' });
 });
+
+
+it('closing a contact readiness request does not announce lost connectivity', async () => {
+  const lost = vi.fn();
+  window.addEventListener('chronos:connection-lost', lost);
+  try {
+    await expect(apiClient.get('/contact/status', { publicAuth: true, background: true,
+      adapter: config => Promise.reject(new axios.CanceledError('dialog closed', config))
+    })).rejects.toMatchObject({ code: 'ERR_CANCELED' });
+    expect(lost).not.toHaveBeenCalled();
+    expect(window.__chronosConnectionLost).toBe(false);
+  } finally { window.removeEventListener('chronos:connection-lost', lost); }
+});

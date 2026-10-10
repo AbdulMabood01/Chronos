@@ -42,6 +42,33 @@ class CompanyBillingLocalDbTest {
         assertEquals("FULFILLED",billing.purchaseStatus(company,email,id).get("status"));return id;
     }
     void event(ObjectNode object,String type,String id){var e=json.createObjectNode().put("id",id).put("type",type).put("created",Instant.now().getEpochSecond()).put("livemode",false);e.putObject("data").set("object",object);byte[] bytes=e.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);when(stripe.verify(bytes,"signed")).thenReturn(e);billing.webhook(bytes,"signed");}
+    @Test void freeExpiresAtDeadlineEvenBelowCapacityAndDoesNotRestart(){run(()->{
+        Instant end=entitlements.freeEnd(company);
+        assertFalse(new CompanyEntitlements(db,Clock.fixed(end.minusSeconds(1),ZoneOffset.UTC)).state(company).restricted());
+        var at=new CompanyEntitlements(db,Clock.fixed(end,ZoneOffset.UTC));
+        assertTrue(at.state(company).restricted());assertEquals(end,at.state(company).endsAt());
+        assertThrows(ResponseStatusException.class,()->at.requireWork(company,admin));
+        assertThrows(ResponseStatusException.class,()->at.requireProjectSlot(company));
+        assertThrows(ResponseStatusException.class,()->at.requirePerson(company,"new@example.com",true));
+        assertDoesNotThrow(()->at.requirePerson(company,email,true));
+        assertNotNull(billing.summary(company,email));
+        assertEquals(1,db.queryForObject("SELECT count(*) FROM company_memberships WHERE company_id=?",Integer.class,company));
+    });}
+    @Test void trialEndsAtOriginalFreeDeadlineAndExpiredCompaniesCannotStartTrial(){run(()->{
+        db.update("UPDATE companies SET free_ends_at=now()+interval '2 days' WHERE id=?",company);
+        billing.trial(company,email);assertEquals(entitlements.freeEnd(company),entitlements.state(company).endsAt());
+        db.update("UPDATE company_billing_terms SET status='SUPERSEDED' WHERE company_id=?",company);
+        db.update("UPDATE company_billing_profiles SET trial_used=false WHERE company_id=?",company);
+        db.update("UPDATE companies SET free_ends_at=now()-interval '1 second' WHERE id=?",company);
+        assertThrows(ResponseStatusException.class,()->billing.trial(company,email));
+    });}
+    @Test void checkoutAcceptanceIsVersionedAndScoped(){run(()->{
+        UUID id=quote("PRO",3,0);
+        assertThrows(IllegalArgumentException.class,()->billing.checkoutAccepted(company,email,id,new CompanyBillingService.CheckoutAcceptance("old")));
+        assertThrows(ResponseStatusException.class,()->billing.checkoutAccepted(company,email,id,new CompanyBillingService.CheckoutAcceptance("2026-10-09")));
+        assertEquals("2026-10-09",db.queryForObject("SELECT terms_version FROM company_billing_purchases WHERE id=?",String.class,id));
+        assertEquals(admin,db.queryForObject("SELECT terms_accepted_by FROM company_billing_purchases WHERE id=?",Long.class,id));
+    });}
     @Test void newFreeCompanyCountsAdminsAndDeduplicatesInvitations(){run(()->{
         assertEquals(1,entitlements.state(company).activeUsers());
         for(int i=0;i<6;i++){String person="reserve-"+i+"-"+UUID.randomUUID()+"@example.com";entitlements.requirePerson(company,person,true);db.update("INSERT INTO company_invitations(company_id,invitee_email,role_key,token_hash,created_by_user_id,expires_at) VALUES (?,?,'PROJECT_ADMIN',?,?,now()+interval '1 day')",company,person,UUID.randomUUID().toString().replace("-","").repeat(2),admin);}
@@ -51,7 +78,7 @@ class CompanyBillingLocalDbTest {
     @Test void trialIsOnceOnlyPaidAdminsAreFreeAndExpiryPreservesRecords(){run(()->{
         billing.trial(company,email);assertEquals("TRIAL",entitlements.state(company).source());assertEquals(0,entitlements.state(company).activeUsers());assertEquals(175,entitlements.state(company).capacity());assertThrows(ResponseStatusException.class,()->billing.trial(company,email));
         UUID term=entitlements.state(company).termId();db.update("UPDATE company_billing_terms SET starts_at=now()-interval '40 days',ends_at=now()-interval '1 day' WHERE id=?",term);
-        assertTrue(entitlements.state(company).grace());assertEquals("FREE",entitlements.state(company).plan());
+        assertFalse(entitlements.state(company).grace());assertEquals("FREE",entitlements.state(company).plan());
         for(int i=0;i<8;i++)db.update("INSERT INTO company_memberships(company_id,user_id,status) VALUES (?,?,'ACTIVE')",company,user(UUID.randomUUID()+"@example.com"));
         db.update("UPDATE company_billing_terms SET ends_at=now()-interval '8 days' WHERE id=?",term);assertTrue(entitlements.state(company).restricted());assertThrows(ResponseStatusException.class,()->entitlements.requireWork(company,admin));assertEquals(9,db.queryForObject("SELECT count(*) FROM company_memberships WHERE company_id=?",Integer.class,company));
     });}
@@ -138,7 +165,7 @@ class CompanyBillingLocalDbTest {
         UUID purchase=pay(quote("PRO",3,0));long operator=user(UUID.randomUUID()+"@example.com");String address=db.queryForObject("SELECT email FROM users WHERE id=?",String.class,operator);db.update("INSERT INTO role_assignments(user_id,role_key) VALUES (?,'PLATFORM_ADMIN')",operator);
         var repository=mock(com.maxwell.chronos.repository.UserRepository.class);when(repository.findByEmail(address)).thenReturn(Optional.of(com.maxwell.chronos.domain.User.builder().id(operator).email(address).build()));
         var platform=new PlatformAdministrationService(db,access,repository,mock(OnboardingService.class),mock(AuthSessionService.class));
-        var metadata=platform.billingMetadata(company,address);assertEquals(Set.of("purchases","events"),metadata.keySet());
+        var metadata=platform.billingMetadata(company,address);assertEquals(Set.of("purchases","events","audit","deliveries"),metadata.keySet());
         @SuppressWarnings("unchecked") var purchases=(List<Map<String,Object>>)metadata.get("purchases");assertEquals(1,purchases.size());assertFalse(purchases.getFirst().containsKey("billing_snapshot"));assertFalse(purchases.getFirst().containsKey("billing_email"));
         String event="evt_"+purchase.toString().replace("-","");assertDoesNotThrow(()->platform.authorizeBillingRetry(company,address,event,"Retry confirmed provider event"));assertThrows(AccessDeniedException.class,()->platform.authorizeBillingRetry(company+10000,address,event,"Wrong scope"));
     });}
