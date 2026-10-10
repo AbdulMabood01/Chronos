@@ -182,7 +182,7 @@ public class CompanyAccessService {
         var capabilities=new LinkedHashMap<>(companyCapabilities(companyAdmin,creator,projects));
         var sensitive=db.queryForList("SELECT DISTINCT permission FROM company_sensitive_grants WHERE company_id=? AND user_id=? AND revoked_at IS NULL AND starts_on<=(CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date AND ends_on>=(CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date",String.class,companyId,userId);
         capabilities.put("canManagePerformanceReviews",sensitive.contains("PERFORMANCE_REVIEW"));
-        capabilities.put("canHandleConfidentialReports",sensitive.contains("CONFIDENTIAL_HANDLER"));
+        capabilities.put("canHandleConfidentialReports",companyAdmin || sensitive.contains("CONFIDENTIAL_HANDLER"));
         capabilities.put("canManageSensitiveGrants",companyAdmin);
         return new ScopedPermissions.Company(companyId, List.copyOf(roles), Map.copyOf(capabilities), List.copyOf(projects));
     }

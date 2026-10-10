@@ -1,0 +1,8 @@
+.date-input-control { position:relative; width:100%; min-width:0; }
+.date-input-control input { width:100%; box-sizing:border-box; padding-right:44px !important; }
+.date-input-control input::-webkit-calendar-picker-indicator { opacity:0; width:0; margin:0; padding:0; }
+.date-picker-button { position:absolute; right:4px; top:50%; transform:translateY(-50%); display:grid; place-items:center; width:34px; height:30px; border:0; border-radius:6px; background:transparent; color:var(--text-secondary); cursor:pointer; }
+.date-picker-button:hover:not(:disabled) { background:var(--surface-tint); color:var(--primary-color); }
+.date-picker-button:focus-visible { outline:2px solid var(--primary-color); outline-offset:2px; }
+.date-picker-button:disabled { cursor:default; opacity:.5; }
+.required-field-label::after { content:' *'; color:var(--danger-color, #c0392b); font-weight:700; }

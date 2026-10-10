@@ -47,3 +47,9 @@ mvn -f backend/pom.xml "-Dtest=TimesheetPeriodBoundaryTest,PlanCatalogBoundaryTe
 ```
 
 The database timesheet tests check inclusive assignment boundaries, inactive assignments, zero-hour submission, duplicate-week rollback, reviewer revocation, rejection audit, and seven-day opening expiry. The database billing tests use transaction rollback and simulated Stripe responses to cover payment fulfillment, duplicate/reordered events, upgrades, renewals, refunds, trial expiry, all tier capacities and exact grace boundaries. PostgreSQL stores timestamps at microsecond precision. Browser project-capacity tests use explicit platform contract grants; they do not represent paid purchases. Live Stripe Checkout is not exercised by this suite.
+
+## Free expiry, payment review and platform visibility
+
+`project-admin-approval-browser.spec.cjs` exercises Project Admin approval of employee and Manager hours across daily/weekly/monthly periods, required fallback reasons and rejection. `platform-company-overview.spec.cjs` covers platform-only metadata, directory filters, dated Free grants, public policy pages and responsive layout. `billing.spec.cjs` navigates to payment review while checkout is unavailable. The account-creation flow in `critical-workflows.spec.cjs` accepts the current Terms version.
+
+See [validation handoff](../../reports/free-billing-platform-policy-validation.md) for results and pending configuration.

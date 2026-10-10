@@ -53,6 +53,7 @@ public class UserDTO {
     private String gender;
     private String race;
     private String ethnicity;
+    private boolean profileCorrectionOpen;
     private Boolean profileDetailsSubmitted;
     private LocalDate dateOfBirth;
     private LocalDate joiningDate;

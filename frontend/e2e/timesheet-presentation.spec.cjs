@@ -10,8 +10,8 @@ test('timesheet remains usable on desktop, mobile and dark theme',async({page,re
  await authenticatePage(page,request,'employee',f.companyId);
  await page.setViewportSize({width:1440,height:1000});
  await page.goto(`/timesheet/${sheet.id}?projectId=${f.projectId}`);
- await expect(page.getByRole('button',{name:'Submit for Approval',exact:true})).toBeEnabled();
- await expect(page.getByRole('meter',{name:'Monthly hours against project plan'})).toHaveAttribute('aria-valuenow','8');
+ await expect(page.getByRole('button',{name:/^Submit [A-Z][a-z]{2} /})).toBeEnabled();
+ await expect(page.getByRole('region',{name:'Hours overview'})).toContainText('8.00');
  await page.screenshot({path:testInfo.outputPath('desktop.png'),fullPage:true});
  await page.setViewportSize({width:390,height:844});
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
@@ -25,6 +25,7 @@ test('timesheet remains usable on desktop, mobile and dark theme',async({page,re
  await page.getByRole('button',{name:'Switch to dark theme',exact:true}).click();
  await page.evaluate(()=>window.scrollTo(0,0));
  await page.screenshot({path:testInfo.outputPath('dark.png'),fullPage:true});
- await page.getByRole('button',{name:'Submit for Approval',exact:true}).click();
+ await page.getByRole('button',{name:/^Submit [A-Z][a-z]{2} /}).click();
+  await page.getByRole('dialog',{name:'Review submission'}).getByRole('button',{name:'Submit for approval',exact:true}).click();
  await expect.poll(async()=> (await json(await actor.get('/api/timesheet-periods',{params:{projectId:f.projectId,date:period.date}}))).status).toBe('SUBMITTED');
 });

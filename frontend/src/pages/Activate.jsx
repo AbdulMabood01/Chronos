@@ -3,12 +3,14 @@ import { Link } from 'react-router-dom';
 import { authAPI } from '../api';
 import { BrandLogo } from '../components/Hourglass';
 import './Login.css';
+import {TERMS_VERSION} from './Legal';
 
 export default function Activate() {
   const [token] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get('token') || new URLSearchParams(window.location.search).get('token') || '');
   const [employee, setEmployee] = useState(null);
   const [password, setPassword] = useState('');
   const [confirmation, setConfirmation] = useState('');
+  const [accepted,setAccepted]=useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [done, setDone] = useState(false);
@@ -25,12 +27,13 @@ export default function Activate() {
   }, [token]);
   const submit = async event => {
     event.preventDefault();
+    if(!accepted){setError('Accept the Terms of Use before continuing.');return;}
     if (password !== confirmation) { setError('Passwords do not match.'); return; }
     if (password.length < 12 || new TextEncoder().encode(password).length > 72 || !/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
       setError('Use at least 12 characters with uppercase, lowercase and a number (maximum 72 UTF-8 bytes).'); return;
     }
     setLoading(true); setError('');
-    try { await authAPI.activate(token, password); setPassword(''); setConfirmation(''); setDone(true); }
+    try { await authAPI.activate(token, password,TERMS_VERSION); setPassword(''); setConfirmation(''); setDone(true); }
     catch (err) { setError(err.response?.data?.message || 'Activation failed. Please retry or contact your administrator.'); }
     finally { setLoading(false); }
   };
@@ -46,6 +49,7 @@ export default function Activate() {
           <input id="new-password" type="password" autoComplete="new-password" aria-describedby="password-help" required minLength={12} maxLength={72} value={password} onChange={e => setPassword(e.target.value)} /></div>
         <div className="form-group"><label htmlFor="confirm-password">Confirm password</label>
           <input id="confirm-password" type="password" autoComplete="new-password" required maxLength={72} value={confirmation} onChange={e => setConfirmation(e.target.value)} /></div>
+        <label><input type="checkbox" required checked={accepted} onChange={e=>setAccepted(e.target.checked)}/> I agree to the <Link to="/legal/terms">Terms of Use</Link>.</label><p><Link to="/legal/privacy">Privacy Policy</Link></p>
         <button className="button button-primary" disabled={loading}>Activate account</button>
       </form>
     </>}

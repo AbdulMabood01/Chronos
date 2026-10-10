@@ -15,10 +15,23 @@ import java.util.*;
 
 @Service @RequiredArgsConstructor @Transactional
 public class CompanyWorkflowAccess {
+    // One definition shared by configuration, notifications, and delivery checks.
+    static final String REPORT_HANDLERS_SQL = """
+        SELECT m.user_id FROM company_memberships m JOIN users u ON u.id=m.user_id
+        WHERE m.company_id=? AND m.status='ACTIVE' AND u.is_active AND NOT u.admin_locked
+        AND NOT EXISTS(SELECT 1 FROM role_assignments p WHERE p.user_id=u.id AND p.role_key='PLATFORM_ADMIN' AND p.removed_at IS NULL)
+        AND (EXISTS(SELECT 1 FROM role_assignments r WHERE r.company_id=m.company_id AND r.user_id=m.user_id AND r.role_key='COMPANY_ADMIN' AND r.removed_at IS NULL)
+          OR EXISTS(SELECT 1 FROM company_sensitive_grants g WHERE g.company_id=m.company_id AND g.user_id=m.user_id
+            AND g.permission='CONFIDENTIAL_HANDLER' AND g.revoked_at IS NULL
+            AND g.starts_on<=(CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date AND g.ends_on>=(CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date))
+        """;
     private final JdbcTemplate db;
     private final CompanyAccessService access;
     private final UserRepository users;
     public enum Permission { PERFORMANCE_REVIEW, CONFIDENTIAL_HANDLER }
+    public boolean canHandleReports(long company,long user) {
+        return access.hasCompanyRole(company,user,"COMPANY_ADMIN") || permitted(company,user,"CONFIDENTIAL_HANDLER",null);
+    }
     public record Grant(@NotNull Long userId,@NotNull Permission permission,Long subjectUserId,
         @NotNull LocalDate startsOn,@NotNull LocalDate endsOn,@NotBlank @Size(max=500) String purpose) {}
     public User member(long company,String email) {
@@ -72,7 +85,7 @@ public class CompanyWorkflowAccess {
     }
     public Map<String,Object> configuration(long company,String email) {
         member(company,email);
-        return Map.of("companyId",company,"handlerConfigured",Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS(SELECT 1 FROM company_sensitive_grants g JOIN company_memberships m ON m.company_id=g.company_id AND m.user_id=g.user_id JOIN users u ON u.id=g.user_id WHERE g.company_id=? AND g.permission='CONFIDENTIAL_HANDLER' AND g.revoked_at IS NULL AND g.starts_on<=(CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date AND g.ends_on>=(CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date AND m.status='ACTIVE' AND u.is_active AND NOT u.admin_locked AND NOT EXISTS(SELECT 1 FROM role_assignments r WHERE r.user_id=g.user_id AND r.role_key='PLATFORM_ADMIN' AND r.removed_at IS NULL))",Boolean.class,company)));
+        return Map.of("companyId",company,"handlerConfigured",Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS(" + REPORT_HANDLERS_SQL + ")",Boolean.class,company)));
     }
     public List<Map<String,Object>> audit(long company,String email,int page) {
         User actor=member(company,email);boolean admin=access.hasCompanyRole(company,actor.getId(),"COMPANY_ADMIN");

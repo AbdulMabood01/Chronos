@@ -3,7 +3,7 @@ const path=require('node:path');
 async function fixture(page,{platform=true}={}){
  const companies=[{id:12,name:'Company A',slug:'company-a',plan_tier:'FREE',project_limit:3,team_limit:6,is_suspended:false,platform_version:0},{id:14,name:'Company B',slug:'company-b',plan_tier:'FREE',project_limit:1,team_limit:7,is_suspended:false,platform_version:0}],writes=[],calls=[],errors=[];
  const accounts=[{id:5,email:'operator@example.com',first_name:'Platform',last_name:'Operator',is_active:true,admin_locked:false,platform_admin:true,active_memberships:0,account_status:'ACTIVE',platform_access_version:0},{id:7,email:'member@example.com',first_name:'Sam',last_name:'Member',is_active:true,admin_locked:false,platform_admin:false,companies:[{id:12,name:'Company A'}],active_memberships:1,account_status:'ACTIVE',platform_access_version:2}];
- const usage={project_count:2,active_users:4,reservations:0,user_capacity:7,project_limit:1,plan:'FREE',source:'FREE',ends_at:null};
+ const usage={project_count:2,active_users:4,reservations:0,user_capacity:7,project_limit:1,plan:'FREE',source:'FREE',ends_at:new Date(Date.now()+60*86400000).toISOString()};
  let invitations=[{id:31,invitee_email:'admin@example.com',role_key:'COMPANY_ADMIN',expires_at:'2026-11-05T12:00:00Z',created_at:'2026-10-05T12:00:00Z',delivery_status:'FAILED',attempts:5,last_error:'Delivery unavailable. Check email configuration or resend the invitation.'}];
  page.on('pageerror',e=>errors.push(e.message));
  await page.addInitScript(({platform})=>{localStorage.setItem('authToken',`test.${btoa(JSON.stringify({exp:Math.floor(Date.now()/1000)+3600}))}.test`);localStorage.setItem('chronos:company:5','12');},{platform});
@@ -14,7 +14,8 @@ async function fixture(page,{platform=true}={}){
   else if(/\/companies\/\d+\/context$/.test(path))body={...companies.find(c=>String(c.id)===path.split('/')[3]),permissions:{companyId:Number(path.split('/')[3]),companyRoles:platform?[]:['COMPANY_ADMIN'],capabilities:platform?{}:{canManageCompanyPeople:true},projects:[]}};
   else if(path==='/api/billing/catalog')body={plans:[{key:'FREE',name:'Free',projects:1,users:7},{key:'PRO',name:'Pro',projects:3,users:75},{key:'PRO_PLUS',name:'Pro Plus',projects:7,users:175},{key:'PRO_MAX',name:'Pro Max',projects:15,users:375}]};
   else if(path==='/api/platform/settings')body={version:0,values:{'platform.timesheet.reminders.enabled':'true'}};
-  else if(path.endsWith('/billing-metadata'))body={purchases:[],events:[]};
+  else if(path.endsWith('/billing-metadata'))body={purchases:[],events:[],audit:[],deliveries:[]};
+  else if(path==='/api/platform/companies/overview')body=companies.map(c=>({...c,admin_contacts:[],usage:{plan:usage.plan,source:usage.source,endsAt:usage.ends_at,projects:usage.project_limit,includedUsers:usage.user_capacity,extraSeats:0,activeUsers:usage.active_users,openProjects:usage.project_count,reservations:usage.reservations},billing_issues:0,delivery_issues:0}));
   else if(path==='/api/platform/companies')body=companies;
   else if(path.endsWith('/usage'))body=usage;
   else if(path.endsWith('/plan')&&req.method()==='DELETE'){writes.push({action:'revoke-plan',input:req.postDataJSON()});Object.assign(usage,{plan:'FREE',source:'FREE',ends_at:null});companies[0].platform_version++;body=null;}
@@ -33,7 +34,7 @@ async function fixture(page,{platform=true}={}){
  });return{calls,writes,errors,usage};
 }
 test('platform changes company plan with revision and sees only provisioning data',async({page})=>{
- const state=await fixture(page);await page.goto('/companies');await page.getByLabel('Plan',{exact:true}).selectOption('CUSTOM');await page.getByLabel('Open-project limit',{exact:true}).fill('10');await page.getByLabel('Company user allowance',{exact:true}).fill('12');await page.getByLabel('Reason for grant',{exact:true}).fill('Growth');await page.getByRole('button',{name:'Assign complimentary plan',exact:true}).click();await expect(page.getByText('Complimentary plan assigned. No payment is required.',{exact:true})).toBeVisible();expect(state.writes[0]).toEqual({action:'plan',input:{tier:'CUSTOM',projectLimit:10,teamLimit:12,version:0,reason:'Growth',grantType:'COMPLIMENTARY',endsAt:null}});expect(state.calls).not.toContain('/api/companies/12/members');expect(state.errors).toEqual([]);
+ const state=await fixture(page);await page.goto('/companies');await page.getByLabel('Plan',{exact:true}).selectOption('CUSTOM');await page.getByLabel('Expiry',{exact:true}).selectOption('NONE');await page.getByLabel('Open-project limit',{exact:true}).fill('10');await page.getByLabel('Company user allowance',{exact:true}).fill('12');await page.getByLabel('Reason for grant',{exact:true}).fill('Growth');await page.getByRole('button',{name:'Assign complimentary plan',exact:true}).click();await expect(page.getByText('Complimentary plan assigned. No payment is required.',{exact:true})).toBeVisible();expect(state.writes[0]).toEqual({action:'plan',input:{tier:'CUSTOM',projectLimit:10,teamLimit:12,version:0,reason:'Growth',grantType:'COMPLIMENTARY',endsAt:null}});expect(state.calls).not.toContain('/api/companies/12/members');expect(state.errors).toEqual([]);
 });
 test('platform suspends and resumes a company without operating company workflows',async({page})=>{
  const state=await fixture(page);await page.goto('/companies');await page.getByLabel('Reason for availability change',{exact:true}).fill('Review');await page.getByRole('button',{name:'Suspend company',exact:true}).click();await expect(page.getByText('Company suspended.',{exact:true})).toBeVisible();await page.getByRole('button',{name:'Resume company',exact:true}).click();await expect(page.getByText('Company resumed.',{exact:true})).toBeVisible();expect(state.writes).toEqual([{action:'status',input:{suspended:true,version:0,reason:'Review'}},{action:'status',input:{suspended:false,version:1,reason:'Review'}}]);expect(state.errors).toEqual([]);
@@ -58,7 +59,7 @@ test('company creation reports queued delivery instead of claiming an email was 
 });
 
 test('platform assigns a permanent catalog plan and can revoke it with a reason',async({page})=>{
- const state=await fixture(page);await page.goto('/companies');await page.getByLabel('Plan',{exact:true}).selectOption('PRO_PLUS');
+ const state=await fixture(page);await page.goto('/companies');await page.getByLabel('Plan',{exact:true}).selectOption('PRO_PLUS');await page.getByLabel('Expiry',{exact:true}).selectOption('NONE');
  await expect(page.getByLabel('Open-project limit',{exact:true})).toHaveValue('7');await expect(page.getByLabel('Company user allowance',{exact:true})).toHaveValue('175');
  await page.getByLabel('Reason for grant',{exact:true}).fill('Owned company');await page.getByRole('button',{name:'Assign complimentary plan',exact:true}).click();
  await expect(page.getByText('Complimentary plan assigned. No payment is required.',{exact:true})).toBeVisible();

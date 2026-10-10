@@ -13,7 +13,7 @@ const { api, workspace } = vi.hoisted(() => ({ workspace: { companies: [], curre
 } }));
 vi.mock('../AuthContext', () => ({ useAuth: () => ({ user: { id: 1, role: 'ADMIN', roles: ['PLATFORM_ADMIN'] } }) }));
 vi.mock('../CompanyContext', () => ({ useCompany: () => workspace }));
-vi.mock('../api', () => ({ companyAPI: api, projectAPI: { getProjects: vi.fn().mockResolvedValue({ data: [] }) } }));
+vi.mock('../api', () => ({ platformAdministrationAPI: {overview:vi.fn().mockResolvedValue({data:[]})}, companyAPI: api, projectAPI: { getProjects: vi.fn().mockResolvedValue({ data: [] }) } }));
 beforeEach(() => {
   vi.clearAllMocks();
   api.mine.mockResolvedValue({ data: [] });

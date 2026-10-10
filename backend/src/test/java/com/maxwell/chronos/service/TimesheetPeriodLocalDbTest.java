@@ -98,21 +98,22 @@ class TimesheetPeriodLocalDbTest {
         assertEquals("APPROVED",service.view(employee,employee,projectId,date).get("status"));
     });}
 
-    @Test void expiredApprovedOpeningRefreezesHoursAndCanBeRequestedAgain(){run(()->{
+    @Test void approvedOpeningRemainsEditableUntilResubmission(){run(()->{
         LocalDate date=LocalDate.now().minusDays(10);var submitted=service.submit(employee,projectId,date);
         service.decide(manager,id(submitted),true,null,null);service.requestOpening(employee,projectId,date,"Correct historical hours");
-        Instant before=Instant.now();
         var opened=service.decideOpening(owner,id(submitted),true,null);
-        Instant deadline=(Instant)opened.get("correctionUntil");
-        assertFalse(deadline.isBefore(before.plus(Duration.ofDays(7))));
-        assertFalse(deadline.isAfter(Instant.now().plus(Duration.ofDays(7))));
+        assertNull(opened.get("correctionUntil"));
         assertEquals(true,opened.get("openingActive"));assertEquals(false,opened.get("pdfExportEligible"));
         assertThrows(IllegalArgumentException.class,()->service.decideOpening(owner,id(submitted),true,null));
         db.update("UPDATE timesheet_approval_periods SET correction_until=now()-interval '1 second' WHERE id=?",id(submitted));
-        var expired=service.view(employee,employee,projectId,date);
-        assertEquals(false,expired.get("editable"));assertEquals(false,expired.get("openingActive"));assertEquals(true,expired.get("pdfExportEligible"));
-        assertThrows(IllegalArgumentException.class,()->service.requireEditable(employee,projectId,date));
-        assertEquals("PENDING",service.requestOpening(employee,projectId,date,"New correction review").get("openingStatus"));
+        var stillOpen=service.view(employee,employee,projectId,date);
+        assertEquals(true,stillOpen.get("editable"));assertEquals(true,stillOpen.get("openingActive"));assertEquals(false,stillOpen.get("pdfExportEligible"));
+        assertThrows(IllegalArgumentException.class,()->service.requestOpening(employee,projectId,date,"Duplicate opening"));
+        service.requireEditable(employee,projectId,date);
+        assertEquals("DRAFT",service.view(employee,employee,projectId,date).get("status"));
+        assertTrue(service.history(employee,id(submitted)).stream().anyMatch(item->"CORRECTION_STARTED".equals(item.get("event"))));
+        var resubmitted=service.submit(employee,projectId,date);
+        assertEquals(false,resubmitted.get("editable"));assertEquals(false,resubmitted.get("openingActive"));
     });}
     @Test void removedReviewerRoleIsCheckedAtDecisionTimeWithoutChangingSubmittedWork(){run(()->{
         LocalDate date=LocalDate.now().minusDays(10);var submitted=service.submit(employee,projectId,date);

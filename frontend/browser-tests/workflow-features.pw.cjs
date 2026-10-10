@@ -17,13 +17,13 @@ async function setup(page, role = 'EMPLOYEE') {
     else if (url.pathname.endsWith('/projects/assigned') || url.pathname === '/api/projects') data = [{ id: 4, code: 'ATLAS', name: 'Atlas platform', status: 'ACTIVE', assignments: [{ userId: 1, isActive: true, startDate: prefix + '-01', endDate: prefix + '-' + new Date(year, month, 0).getDate() }] }];
     else if (url.pathname.endsWith('/timesheets/missing')) data = [{ userId: 8, userName: 'Sam Jones', projectId: 4, projectCode: 'ATLAS', status: 'NOT_STARTED', hours: 0 }];
     else if (url.pathname.endsWith('/timesheet-periods/submit')) { status = 'SUBMITTED'; data = {}; }
-    else if (url.pathname.endsWith('/timesheet-periods')) data = {
+    else if (url.pathname.endsWith('/timesheet-periods') || url.pathname.endsWith('/timesheet-periods/month')) { data = {
       id: 3, timesheetId: 2, userId: 1, projectId: 4, periodStart: prefix + '-01',
       periodEnd: prefix + '-' + new Date(year, month, 0).getDate(), frequency: 'MONTHLY',
       status, editable: status === 'REJECTED', totalHours: 8, plannedHours: 160,
       rejectionReason: status === 'REJECTED' ? 'Please verify Monday hours.' : null,
       rejectedByName: 'Taylor Manager', correctionUntil: '2026-09-30T00:00:00Z',
-    };
+    };if(url.pathname.endsWith('/month'))data=[data];}
     else if (url.pathname.endsWith('/submission')) data = { id: 3, timesheetId: 2, projectId: 4, status, totalHours: 8, plannedHours: 160, rejectionReason: status === 'REJECTED' ? 'Please verify Monday hours.' : null, rejectedByName: 'Taylor Manager' };
     else if (url.pathname === '/api/timesheets' || url.pathname.includes('/timesheets/id/') || /\/timesheets\/\d{4}\/\d+$/.test(url.pathname)) data = sheet;
     else if (url.pathname.endsWith('/leave-balance') || url.pathname.includes('/leave/balance/')) { const bucket = { allowanceDays: 10, extraDays: 0, usedDays: 2, remainingDays: 8, unpaidDays: 0 }; data = { configured: true, vacation: bucket, sick: bucket, bereavement: bucket }; }
@@ -44,7 +44,8 @@ test('employee resubmits corrections without copy-week controls', async ({ page 
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await expect(page.getByText('Copy last week', { exact: true })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Resubmit for Approval' }).click();
+  await page.getByRole('button', { name: /^Resubmit /  }).click();
+  await page.getByRole('dialog',{name:'Review submission'}).getByRole('button',{name:'Submit for approval',exact:true}).click();
   await expect(page.getByRole('region', { name: 'Requested corrections' })).toHaveCount(0);
 });
 

@@ -114,10 +114,29 @@ final class CompanyLetterPdf implements AutoCloseable {
         // Retain the company's existing verification identifiers and contact details.
         List<String> details = new ArrayList<>();
         List<String> labels = new ArrayList<>();
+        if (branding != null) {
+            rows = new String[]{"Employer Information", "Company: " + branding.name(),
+                "Address: " + branding.address(), "Email: " + branding.email(),
+                branding.phone() == null || branding.phone().isBlank() ? "" : "Telephone: " + branding.phone(),
+                branding.website() == null || branding.website().isBlank() ? "" : "Website: " + branding.website(),
+                Objects.toString(branding.identifiers(), "")};
+        }
         for (int i = 1; i < rows.length; i++) {
+            if (rows[i].isBlank()) continue;
             String label=i==1?"Company":i==2?"Address":rows[i].contains("@")?"Email":rows[i].matches("(?i)^(https?://|www\\.).*")?"Website":"Contact details";
-            var lines=wrap(rows[i],PDType1Font.HELVETICA,8,WIDTH-150);
-            for(int n=0;n<lines.size();n++){details.add(lines.get(n));labels.add(n==0?label:"");}
+            for (String row : rows[i].split("\\R")) {
+                int separator = row.indexOf(':');
+                boolean labeled = separator > 0 && !row.matches("(?i)^https?://.*");
+                String rowLabel = labeled ? row.substring(0, separator).strip() : label;
+                String value = labeled ? row.substring(separator + 1).strip() : row;
+                var lines=wrap(value,PDType1Font.HELVETICA,8,WIDTH-180);
+                var headings=wrap(rowLabel,PDType1Font.HELVETICA_BOLD,8,140);
+                for(int n=0;n<Math.max(lines.size(),headings.size());n++){
+                    details.add(n<lines.size()?lines.get(n):"");
+                    labels.add(n<headings.size()?headings.get(n):"");
+                }
+                label = "";
+            }
         }
         float height = 32 + details.size() * 11;
         ensure(height + 8);
@@ -127,7 +146,7 @@ final class CompanyLetterPdf implements AutoCloseable {
         y -= 33;
         for (int i=0;i<details.size();i++) {
             text(labels.get(i), LEFT + 13, y, 8, PDType1Font.HELVETICA_BOLD, NAVY);
-            text(details.get(i), LEFT + 135, y, 8, PDType1Font.HELVETICA, MUTED);
+            text(details.get(i), LEFT + 165, y, 8, PDType1Font.HELVETICA, MUTED);
             y -= 11;
         }
         y -= 12;

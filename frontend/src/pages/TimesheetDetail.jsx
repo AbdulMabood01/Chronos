@@ -145,7 +145,14 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
   const [approvalPeriods, setApprovalPeriods] = useState([]);
   const [batchDates, setBatchDates] = useState([]);
   const [submissionNotice, setSubmissionNotice] = useState('');
-  useEffect(() => { setBatchDates([]); setSubmissionNotice(''); }, [selectedProjectId, approvalMonth]);
+  const [batchMode, setBatchMode] = useState(false);
+  const [submissionReview, setSubmissionReview] = useState(null);
+  const [saveNotice, setSaveNotice] = useState('');
+  const submissionDialog = useRef(null);
+  const submissionTrigger = useRef(null);
+  const submissionPanel = useRef(null);
+  useEffect(() => { if (submissionReview) submissionDialog.current?.showModal(); }, [submissionReview]);
+  useEffect(() => { setBatchDates([]); setBatchMode(false); setSubmissionNotice(''); setSaveNotice(''); }, [selectedProjectId, approvalMonth]);
   const projectSubmissionRequest = useRef(0);
   const projectSubmission = [projectSubmissionState,...approvalPeriods].find(period => period
     && String(period.projectId) === String(selectedProjectId)
@@ -383,9 +390,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
   const projectUnavailable = projectEnded || (selectedProject?.status && selectedProject.status !== 'ACTIVE');
   const correctionOpen = typeof projectSubmission?.openingActive === 'boolean'
     ? projectSubmission.openingActive
-    : Boolean(projectSubmission?.correctionUntil
-      && new Date(projectSubmission.correctionUntil).getTime() > Date.now()
-      && ['DRAFT', 'REJECTED'].includes(projectSubmission.status));
+    : projectSubmission?.openingStatus === 'APPROVED';
   const assignmentLastMonth = selectedAssignment?.endDate ? startOfMonth(new Date(selectedAssignment.endDate + 'T00:00:00')) : currentMonthStart;
   const assignmentMonthOptions = isAfter(assignmentLastMonth, currentMonthStart) ? buildMonthOptions(assignmentLastMonth) : allMonthOptions;
   const isFutureMonth = timesheetMonthStart && isAfter(timesheetMonthStart, currentMonthStart);
@@ -430,14 +435,15 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
   const dayPeriod = day => approvalPeriods.find(period => String(period.projectId) === String(selectedProjectId)
     && String(period.userId) === String(timesheet?.userId) && day.dateStr >= period.periodStart && day.dateStr <= period.periodEnd)
     || (projectSubmission && day.dateStr >= projectSubmission.periodStart && day.dateStr <= projectSubmission.periodEnd ? projectSubmission : null);
-  const canEditDay = day => Boolean(day && isOwner && !projectSubmissionLoading && !platformAdmin && !isFutureMonth
-    && projectSubmission && dayPeriod(day)?.periodStart === projectSubmission.periodStart
+  const canEditDay = day => Boolean(day && isOwner && !platformAdmin && !isFutureMonth
+    && dayPeriod(day)
     && (!isOffboarded || dayPeriod(day)?.openingActive)
     && permissionsForProject(selectedProjectId)?.capabilities.canSubmitWork && dayPeriod(day)?.editable
     && (!projectUnavailable || dayPeriod(day)?.openingActive) && !day.isApprovedVacation
     && (!selectedAssignment?.startDate || day.dateStr >= selectedAssignment.startDate)
     && (!selectedAssignment?.endDate || day.dateStr <= selectedAssignment.endDate));
-  const readyPeriods = approvalPeriods.filter(period => period.editable && ['DRAFT','REJECTED'].includes(period.status)
+  const readyPeriods = approvalPeriods.filter(period => period.frequency === projectSubmission?.frequency
+    && period.editable && ['DRAFT','REJECTED'].includes(period.status)
     && Number(period.totalHours)>0 && period.requiresSubmission && period.periodStart <= profileToday
     && (!selectedAssignment?.startDate || period.periodEnd >= selectedAssignment.startDate)
     && (!selectedAssignment?.endDate || period.periodStart <= selectedAssignment.endDate));
@@ -461,7 +467,40 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
   const selectedRejectionReason = projectSubmission?.rejectionReason;
   const selectedApprovedAt = projectSubmission?.approvedAt;
   const selectedApprovedByName = projectSubmission?.approvedByName;
-  const canSubmitProjectTimesheet = isEditable && Number(projectSubmission?.totalHours || 0) <= plannedHours;
+  const hasUnsavedHours = days.some(day => Number(day.hours || 0) !== Number(day.originalHours || 0));
+  const canSubmitProjectTimesheet = isEditable && !hasUnsavedHours && Number(projectSubmission?.totalHours || 0) <= plannedHours;
+  const selectedHours = days.filter(day => day.dateStr >= projectSubmission?.periodStart && day.dateStr <= projectSubmission?.periodEnd)
+    .reduce((sum, day) => sum + Number(day.hours || 0), 0)
+    + (projectSubmission?.timeEntries || []).filter(entry => !entry.entryDate.startsWith(approvalMonth))
+      .reduce((sum, entry) => sum + Number(entry.hours || 0), 0);
+  const periodLabel = period => period ? `${format(new Date(`${period.periodStart}T12:00:00`), 'MMM d')}${period.periodEnd !== period.periodStart
+    ? ` – ${format(new Date(`${period.periodEnd}T12:00:00`), 'MMM d')}` : ''}` : '';
+  const toggleBatch = (period, checked) => setBatchDates(current => checked
+    ? [...new Set([...current, period.selectionDate])] : current.filter(date => date !== period.selectionDate));
+  const reviewSubmission = (event, batch = false) => {
+    if (savingDayKeys.length || hasUnsavedHours || projectSubmissionLoading || submitting) return;
+    const periods = batch ? readyPeriods.filter(period => batchDates.includes(period.selectionDate)) : [projectSubmission];
+    if (!periods.length || periods.some(period => !period?.editable) || (!batch && !canSubmitProjectTimesheet)) return;
+    submissionTrigger.current = event.currentTarget;
+    setSubmissionReview({ batch, dates: batch ? periods.map(period => period.selectionDate) : [periodDate],
+      periods: periods.map(period => ({ ...period, totalHours: batch ? Number(period.totalHours) : selectedHours })) });
+  };
+  const closeSubmissionReview = () => { if (!submitting) { setSubmissionReview(null); submissionTrigger.current?.focus(); } };
+  const dayLockReason = day => {
+    const period = dayPeriod(day);
+    if (isReviewView) return '';
+    if (day.isApprovedVacation) return 'Approved vacation';
+    if (['SUBMITTED', 'CHANGE_REQUESTED'].includes(period?.status)) return 'Awaiting approval';
+    if (['APPROVED', 'LOCKED'].includes(period?.status) && !period?.openingActive) return 'Approved';
+    if (isFutureMonth || period?.periodStart > profileToday) return 'Upcoming period';
+    if ((selectedAssignment?.startDate && day.dateStr < selectedAssignment.startDate)
+      || (selectedAssignment?.endDate && day.dateStr > selectedAssignment.endDate)) return 'Outside assignment';
+    if ((isOffboarded || projectUnavailable) && !period?.openingActive) return membershipLabel;
+    if (!permissionsForProject(selectedProjectId)?.capabilities.canSubmitWork) return 'No editing permission';
+    if (!period?.editable) return 'Status unavailable';
+    if (remainingHours <= 0 && Number(day.originalHours || 0) === 0) return 'Planned hours reached';
+    return '';
+  };
 
   useEffect(() => {
     if (projectOptions.length === 0) {
@@ -533,6 +572,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
     const period = dayPeriod(day);
     if (period?.late && Number(day.hours)>0) classes.push('calendar-day-late');
     if (period?.periodStart === projectSubmission?.periodStart) classes.push('calendar-day-selected-period');
+    if (batchDates.includes(period?.selectionDate)) classes.push('calendar-day-batch-selected');
     return classes.join(' ');
   };
 
@@ -551,6 +591,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
       setError('');
     }
     setDays((prev) => prev.map((d, i) => (i === index ? { ...d, hours: value } : d)));
+    setSaveNotice(proposedHours !== Number(days[index]?.originalHours || 0) ? 'Unsaved hours — leave the cell to save.' : '');
   };
 
   const buildEntryPayload = (day, hours, sessions = day.sessions || []) => ({
@@ -610,17 +651,20 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
       await loadProjectSubmission();
       await loadAvailableTimesheets();
       setError('');
+      setSaveNotice(`Saved hours for ${format(day.date, 'MMM d')}.`);
     } catch (err) {
       setDays((prev) => prev.map((d, i) => (i === index ? { ...d, hours: d.originalHours } : d)));
       setError(day.isApprovedVacation
         ? 'Approved vacation days must stay at 0 hours'
         : apiErrorMessage(err, `Failed to save hours for ${day.dateStr}. Check project code and time entries.`));
+      setSaveNotice('Hours could not be saved. Please try again.');
     } finally {
       setSavingDayKeys((current) => current.filter((dateStr) => dateStr !== day.dateStr));
     }
   };
 
   const openTimeDialog = (index) => {
+    setApprovalDate(days[index].dateStr);
     setTimeDialogDay(index);
     const sessions = days[index]?.sessions?.length ? days[index].sessions : [{ loginTime: '', logoutTime: '' }];
     setTimeDrafts(sessions.map((session) => ({
@@ -697,23 +741,27 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
     }
   };
 
-  const handleSubmit = async (batch = false) => {
+  const handleSubmit = async (review) => {
     if (submitting) return;
+    const { batch, dates } = review;
     setSubmitting(true);
     try {
-      if (batch) await timesheetAPI.submitApprovalPeriods(selectedProjectId, batchDates);
-      else await timesheetAPI.submitApprovalPeriod(selectedProjectId, periodDate);
+      if (batch) await timesheetAPI.submitApprovalPeriods(selectedProjectId, dates);
+      else await timesheetAPI.submitApprovalPeriod(selectedProjectId, dates[0]);
       await loadTimesheetById(timesheet.id);
       await loadProjectSubmission();
       await loadAvailableTimesheets();
-      setSubmissionNotice(batch ? `${batchDates.length} periods submitted for approval. Other draft periods remain available.`
+      setSubmissionNotice(batch ? `${dates.length} periods submitted for approval. Other draft periods remain available.`
         : `This ${periodUnit} has been submitted for approval. Select another period to continue entering hours.`);
       setBatchDates([]);
+      setBatchMode(false);
       setError('');
     } catch (err) {
       setError(apiErrorMessage(err, 'Failed to submit timesheet'));
     } finally {
       setSubmitting(false);
+      setSubmissionReview(null);
+      submissionTrigger.current?.focus();
     }
   };
 
@@ -824,11 +872,75 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
 
       <section className="timesheet-workspace-card" aria-label="Timesheet workspace">
       <div className="month-select-row timesheet-filter-row" aria-label="Timesheet filters">
+        <label htmlFor="timesheet-project-select">Project</label>
+        <select
+          id="timesheet-project-select"
+          value={selectedProjectId}
+          onChange={(event) => setSelectedProjectId(event.target.value)}
+          disabled={projectOptions.length === 0 || savingDayKeys.length > 0 || hasUnsavedHours || submitting}
+        >
+          {projectOptions.length === 0 ? (
+            <option value="">No assigned projects</option>
+          ) : projectOptions.map((project) => (
+            <option key={project.id} value={project.id}>{favorites.includes(String(project.id)) ? '\u2605 ' : ''}{project.code}{project.name ? ` - ${project.name}` : ''}</option>
+          ))}
+        </select>
+      </div>
+
+      {isOwner && isFutureMonth && <p className="login-note" role="status">This month is read-only. You can enter hours when this month begins.</p>}
+      {isOwner && membershipNotice && <div className={`offboarding-notice notice-${membershipLabel.toLowerCase().replaceAll(" ", "-")}`} role="status" aria-live="polite"><span className="offboarding-notice-label">{selectedProject?.name || selectedProject?.code} - {membershipLabel}</span><strong>{membershipNotice}</strong><p>{projectOnHold ? "Hour entry is paused while this project is on hold. Your timesheet history remains available to view." : isOffboarded || projectEnded ? "Your timesheet history is available below for reference. You can no longer enter or change hours for this project." : "Your assignment dates have ended. Hours can only be recorded within your assigned dates and the permitted timesheet period."}</p></div>}
+      {isOwner && assignmentsLoaded && !hasCurrentProject && projectOptions.length > 0 && openCurrentMonth && <div className="empty-state" role="status"><h2>No projects assigned</h2><p>You aren't currently assigned to any active projects. Contact your Project Admin if you believe this is incorrect.</p></div>}
+      {isOwner && assignmentsLoaded && projectOptions.length === 0 ? (
+        <div className="empty-state">
+          <h2>No projects assigned</h2>
+          <p>You aren't currently assigned to any active projects. Contact your Project Admin if you believe this is incorrect.</p>
+        </div>
+      ) : (
+        <>
+
+      <section className="timesheet-overview" aria-label="Hours overview">
+        <div className="timesheet-summary-grid">
+          <div className="summary-tile"><span>Hours this month</span><strong>{totalHours.toFixed(2)}<small> hrs</small></strong>
+            {projectSubmission?.loggedHoursToDate != null && <small>{Number(projectSubmission.loggedHoursToDate).toFixed(2)} total to date</small>}
+          </div>
+          <div className="summary-tile remaining-hours-tile"><span>Hours remaining</span><strong>{remainingHours.toFixed(2)}</strong><small>{plannedHours.toFixed(2)} allocated</small></div>
+          <div className="summary-tile"><span>Gross pay</span><strong>{currency(grossPay)}</strong></div>
+          <div className="summary-tile approver-tile"><span>Approver</span><strong>{approvingManagerName}</strong></div>
+          <div className="summary-tile"><span>Hourly rate</span><strong>{currency(numericBillRate)}</strong></div>
+        </div>
+      </section>
+
+      <div className="card timesheet-calendar-card">
+        {isOwner && projectSubmission?.frequency === 'WEEKLY' && (projectSubmission.periodStart.slice(0,7) !== approvalMonth || projectSubmission.periodEnd.slice(0,7) !== approvalMonth) &&
+          <div className="cross-month-period-navigation"><span>This week spans two months. Its hours share one approval.</span>
+            {[projectSubmission.periodStart,projectSubmission.periodEnd].filter(date => date.slice(0,7)!==approvalMonth).map(date =>
+              <button type="button" className="button button-secondary" key={date} disabled={submitting || savingDayKeys.length>0}
+                onClick={() => openPeriodMonth(date)}>Open {format(new Date(`${date}T12:00:00`),'MMMM')} Days</button>)}
+          </div>}
+        <div className="timesheet-card-heading">
+          <h2>Hours calendar</h2>
+          <details className="timesheet-tools">
+            <summary>More actions</summary>
+            <div className="timesheet-tools-content">
+              <button className="button button-secondary" onClick={loadProjectSubmission} type="button" disabled={projectSubmissionLoading || !selectedProjectId}>Refresh status</button>
+              <button className="button button-secondary" onClick={handleExport} type="button" disabled={projectSubmissionLoading || !projectSubmission?.id || !projectSubmission?.pdfExportEligible}>Export PDF</button>
+      {selectedProjectId && approvalHistory.length > 0 && <details className="approval-history-panel" aria-label="Approval history">
+        <summary>Approval history <span>{approvalHistory.length} events</span></summary>
+        <ol>{approvalHistory.map((item,index)=><li key={index}><div><strong>{String(item.event).replaceAll('_',' ')}</strong><span>{item.actor_name || 'System'}</span></div><time>{item.created_at ? new Date(item.created_at).toLocaleString() : ''}</time>{item.comment&&<p>{item.comment}</p>}</li>)}</ol>
+      </details>}
+            </div>
+          </details>
+        </div>
+        <div className="timesheet-toolbar calendar-month-toolbar">
+          {openCurrentMonth && <button className="button button-secondary" onClick={() => handleMonthNavigation('previous')}
+            disabled={!canGoPreviousMonth || savingDayKeys.length > 0 || hasUnsavedHours || submitting} type="button"><Icon name="arrow" className="previous-month-arrow" /> Previous Month</button>}
+          <div className="calendar-month-selection">
         {showMonthScroller && (
           <>
             <label htmlFor="timesheet-month-select">Month</label>
             <select
               id="timesheet-month-select"
+              disabled={savingDayKeys.length > 0 || hasUnsavedHours || submitting}
               value={`${timesheet.year}-${timesheet.month}`}
               onChange={(event) => {
                 const [year, month] = event.target.value.split('-').map(Number);
@@ -848,92 +960,166 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
             </select>
           </>
         )}
-        <label htmlFor="timesheet-project-select">Project</label>
-        <select
-          id="timesheet-project-select"
-          value={selectedProjectId}
-          onChange={(event) => setSelectedProjectId(event.target.value)}
-          disabled={projectOptions.length === 0}
-        >
-          {projectOptions.length === 0 ? (
-            <option value="">No assigned projects</option>
-          ) : projectOptions.map((project) => (
-            <option key={project.id} value={project.id}>{favorites.includes(String(project.id)) ? '\u2605 ' : ''}{project.code}{project.name ? ` - ${project.name}` : ''}</option>
-          ))}
-        </select>
-      </div>
-
-      {projectSubmission && <section className="period-workspace-navigation" aria-label="Period navigation">
-        <div className="period-navigation-heading"><div><h2>{projectSubmission.frequency === 'MONTHLY' ? 'Monthly Approval' : `Choose a ${periodUnit}`}</h2>
-          <p>{projectSubmission.frequency === 'MONTHLY' ? 'This project uses monthly approval. Weekly or daily approval can be configured by your Project Admin in Project settings.'
-            : `Select a ${periodUnit} to edit its entries or view its approval status. Each ${periodUnit} is submitted separately.`}</p>
-          {selectedProject?.pendingApprovalFrequency && <p>{selectedProject.pendingApprovalFrequency.toLowerCase()} approval starts {selectedProject.approvalFrequencyEffectiveOn}.</p>}
-        </div></div>
-        {projectSubmission.frequency !== 'MONTHLY' && <div className={`period-card-list period-card-list-${periodUnit}`} role="group" aria-label={`${projectSubmission.frequency === 'WEEKLY' ? 'Weekly' : 'Daily'} approval periods`}>
-          {visiblePeriods.map(period => {
-            const selected = period.periodStart === projectSubmission.periodStart;
-            const ready = readyPeriods.some(item => item.selectionDate === period.selectionDate);
-            return <div key={period.periodStart} className={`period-card${selected ? ' is-selected' : ''}`}>
-              <button type="button" className="period-card-select" aria-label={`Select ${period.frequency === 'WEEKLY' ? 'week' : 'day'} starting ${period.periodStart}`}
-                aria-pressed={selected} disabled={savingDayKeys.length>0 || submitting}
-                onClick={() => { setApprovalDate(period.selectionDate); setSubmissionNotice(''); }}>
-                <strong>{format(new Date(`${period.periodStart}T12:00:00`),period.frequency === 'DAILY' ? 'EEE, MMM d' : 'MMM d')}{period.frequency === 'WEEKLY' && ` – ${format(new Date(`${period.periodEnd}T12:00:00`),'MMM d')}`}</strong>
-                <span className={`period-card-status status-${period.status.toLowerCase()}`}>{periodStatus(period)}</span>
-                <span>{Number(period.totalHours).toFixed(2)} hrs{period.late ? period.submittedAt ? ' · Late' : ' · Past Deadline' : ''}</span>
-              </button>
-              {canBatchSubmit && ready && <label className="period-batch-select"><input type="checkbox" aria-label={`Include ${period.periodStart} in batch submission`}
-                disabled={submitting || savingDayKeys.length>0} checked={batchDates.includes(period.selectionDate)}
-                onChange={event => setBatchDates(current => event.target.checked ? [...current,period.selectionDate] : current.filter(date => date !== period.selectionDate))} />Include in batch</label>}
-            </div>;
-          })}
-        </div>}
-        {canBatchSubmit && projectSubmission.frequency !== 'MONTHLY' && readyPeriods.length>0 && <div className="period-batch-actions">
-          <span>{batchDates.length ? `${batchDates.length} selected` : 'Select ready periods above to submit them together.'}</span>
-          <button type="button" className="button button-secondary" disabled={submitting || savingDayKeys.length>0 || !batchDates.length} onClick={() => handleSubmit(true)}>
-            Submit {batchDates.length || 'selected'} {batchDates.length === 1 ? 'period' : 'periods'}
-          </button>
-        </div>}
-      </section>}
-      {submissionNotice && <p className="period-submission-notice" role="status">{submissionNotice}</p>}
-
-      {isOwner && isFutureMonth && <p className="login-note" role="status">This month is read-only. You can enter hours when this month begins.</p>}
-      {isOwner && membershipNotice && <div className={`offboarding-notice notice-${membershipLabel.toLowerCase().replaceAll(" ", "-")}`} role="status" aria-live="polite"><span className="offboarding-notice-label">{selectedProject?.name || selectedProject?.code} - {membershipLabel}</span><strong>{membershipNotice}</strong><p>{projectOnHold ? "Hour entry is paused while this project is on hold. Your timesheet history remains available to view." : isOffboarded || projectEnded ? "Your timesheet history is available below for reference. You can no longer enter or change hours for this project." : "Your assignment dates have ended. Hours can only be recorded within your assigned dates and the permitted timesheet period."}</p></div>}
-      {isOwner && assignmentsLoaded && !hasCurrentProject && projectOptions.length > 0 && openCurrentMonth && <div className="empty-state" role="status"><h2>No projects assigned</h2><p>You aren't currently assigned to any active projects. Contact your Project Admin if you believe this is incorrect.</p></div>}
-      {isOwner && assignmentsLoaded && projectOptions.length === 0 ? (
-        <div className="empty-state">
-          <h2>No projects assigned</h2>
-          <p>You aren't currently assigned to any active projects. Contact your Project Admin if you believe this is incorrect.</p>
-        </div>
-      ) : (
-        <>
-
-      <section className="timesheet-overview" aria-label="Hours overview">
-      <div className="timesheet-summary-grid">
-        <div className="summary-tile hours-feature">
-          <span>Hours This Month</span>
-          <strong>{totalHours.toFixed(2)}<small> hrs</small></strong>
-          <div className="hours-plan-track" role="meter" aria-label="Monthly hours against project plan" aria-valuemin={0} aria-valuemax={Math.max(plannedHours,totalHours,1)} aria-valuenow={totalHours}>
-            <span style={{width:`${Math.min(100,totalHours / Math.max(plannedHours,1)*100)}%`}} />
+            {!showMonthScroller && <h3>{format(new Date(timesheet.year, timesheet.month - 1, 1), 'MMMM yyyy')}</h3>}
           </div>
-          <p>{plannedHours.toFixed(2)} hours allocated{projectSubmission?.loggedHoursToDate != null && <> · {Number(projectSubmission.loggedHoursToDate).toFixed(2)} total to date</>}</p>
+          {openCurrentMonth && <button className="button button-secondary" onClick={() => handleMonthNavigation('next')}
+            disabled={!canGoNextMonth || savingDayKeys.length > 0 || hasUnsavedHours || submitting} type="button">Next Month <Icon name="arrow" /></button>}
         </div>
-        <div className="summary-tile remaining-hours-tile">
-          <span>Hours Remaining</span>
-          <strong>{remainingHours.toFixed(2)}</strong>
+        {projectSubmission?.frequency === 'WEEKLY' && <section className="period-workspace-navigation" aria-label="Period navigation">
+          <div className="period-navigation-heading"><h3>Weeks in this calendar</h3><p>Choose a week or click an hours cell to start editing.</p></div>
+          <div className="period-card-list period-card-list-week" role="group" aria-label="Weekly approval periods">
+            {visiblePeriods.filter(period => period.frequency === 'WEEKLY').map(period => {
+              const selected = period.periodStart === projectSubmission.periodStart;
+              const ready = readyPeriods.some(item => item.selectionDate === period.selectionDate);
+              return <div key={period.periodStart} className={['period-card', selected ? 'is-selected' : ''].join(' ')}>
+                <button type="button" className="period-card-select" aria-label={'Select week starting ' + period.periodStart}
+                  aria-pressed={selected} disabled={savingDayKeys.length > 0 || hasUnsavedHours || submitting}
+                  onClick={() => { setApprovalDate(period.selectionDate); setSubmissionNotice(''); }}>
+                  <strong>{periodLabel(period)}</strong>
+                  <span className={'period-card-status status-' + period.status.toLowerCase()}>{periodStatus(period)}</span>
+                  <span>{Number(period.totalHours).toFixed(2)} hrs{period.late ? period.submittedAt ? ' · Late' : ' · Past deadline' : ''}</span>
+                  {selected && <span className="period-selected-label">Selected week</span>}
+                </button>
+                {batchMode && canBatchSubmit && ready && <label className="period-batch-select"><input type="checkbox"
+                  aria-label={'Include ' + period.periodStart + ' in batch submission'} disabled={submitting || savingDayKeys.length > 0 || hasUnsavedHours}
+                  checked={batchDates.includes(period.selectionDate)} onChange={event => toggleBatch(period, event.target.checked)} />Include in batch</label>}
+              </div>;
+            })}
+          </div>
+        </section>}
+        {selectedProject?.pendingApprovalFrequency && <p className="timesheet-period-note">{selectedProject.pendingApprovalFrequency.toLowerCase()} approval starts {selectedProject.approvalFrequencyEffectiveOn}.</p>}
+        <div className="calendar-selection-heading">
+          <div><span>{projectSubmission?.frequency || 'PROJECT'} APPROVAL</span><strong>Selected {periodUnit}: {periodLabel(projectSubmission)}</strong></div>
+          <p>{projectSubmission?.frequency === 'DAILY' ? 'Click a day or its hours to select the day for submission.' : 'Enter hours directly in the calendar. Edits save when you leave the cell.'}</p>
         </div>
-        <div className="summary-tile gross-pay-tile">
-          <span>Gross Pay</span>
-          <strong>{currency(grossPay)}</strong>
+        <div className={`calendar-grid timesheet-calendar-grid${showReadOnlyHours ? " approved-calendar" : ""}`}>
+          {(mondayFirst ? ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']).map((weekday) => (
+            <div key={weekday} className="calendar-weekday">{weekday}</div>
+          ))}
+          {Array.from({ length: leadingBlanks }).map((_, i) => (
+            <div key={`blank-${i}`} className="calendar-day calendar-day-empty" />
+          ))}
+          {days.map((day, index) => {
+            const isSavingDay = savingDayKeys.includes(day.dateStr);
+            const originalHours = Number(day.originalHours || 0);
+            const withinAssignment = (!selectedAssignment?.startDate || day.dateStr >= selectedAssignment.startDate) && (!selectedAssignment?.endDate || day.dateStr <= selectedAssignment.endDate);
+            const period = dayPeriod(day);
+            const isDayEditable = canEditDay(day) && withinAssignment && savingDayKeys.length === 0 && !submitting && (remainingHours > 0 || originalHours > 0);
+            const readOnlyDay = showReadOnlyHours || (period && !period.editable && ['SUBMITTED','APPROVED','LOCKED','CHANGE_REQUESTED'].includes(period.status));
+            const vacationLabel = day.vacationDay ? `${day.vacationDay.vacationType} - ${day.vacationDay.status}` : '';
+            return (
+              <div key={day.dateStr} className={getDayClassName(day)} title={dayLockReason(day) || undefined}>
+                <div className="calendar-day-topline">
+                  <button type="button" className="calendar-day-number calendar-period-select" aria-label={`Select approval period for ${day.dateStr}`}
+                    disabled={savingDayKeys.length>0 || submitting}
+                    onClick={() => setApprovalDate(day.dateStr)} aria-pressed={Boolean(period && period.periodStart === projectSubmission?.periodStart)}>
+                    {format(day.date, 'd')}<span className="day-weekday-label">{format(day.date, 'EEE')}</span>
+                  </button>
+                  {day.vacationDay && <span className="day-status-pill">{day.vacationDay.status}</span>}
+                  {period?.late && Number(day.hours)>0 && <span className="timesheet-late-badge" aria-label={`Late entry for ${day.dateStr}`}>Late</span>}
+                </div>
+                {batchMode && period?.frequency === 'DAILY' && canBatchSubmit && readyPeriods.some(item => item.periodStart === period?.periodStart) &&
+                  <label className="calendar-batch-select"><input type="checkbox" aria-label={'Include ' + period.periodStart + ' in batch submission'}
+                    checked={batchDates.includes(period.selectionDate)} disabled={submitting || savingDayKeys.length > 0 || hasUnsavedHours}
+                    onChange={event => toggleBatch(period, event.target.checked)} />Include day</label>}
+                {dayLockReason(day) && <small className="calendar-lock-reason">{dayLockReason(day)}</small>}
+                {day.vacationDay && <div className="day-status-label">{vacationLabel}</div>}
+                {readOnlyDay ? <button type="button" className="approved-day-hours" aria-label={`Hours for ${day.dateStr}`}
+                  disabled={savingDayKeys.length > 0 || submitting} onClick={() => {
+                    setApprovalDate(day.dateStr);
+                    submissionPanel.current?.scrollIntoView?.({ block: 'start' });
+                  }}>
+                  {Number(day.hours) > 0 ? <><strong>{Number(day.hours).toFixed(2)}</strong><span>hrs</span></> : <span className="approved-day-empty">-</span>}
+                </button> : <label className="day-hours-field">
+                  <span>{isSavingDay ? <LoadingIndicator label="Saving" /> : 'Hours'}</span>
+                  <div className="day-entry-controls">
+                    <input
+                      type="number"
+                      min="0"
+                      max={Math.min(24, originalHours + remainingHours)}
+                      step="0.5"
+                      className="calendar-day-input"
+                      aria-label={`Hours for ${day.dateStr}`}
+                      value={day.hours}
+                      disabled={!isDayEditable}
+                      onFocus={() => { setApprovalDate(day.dateStr); setSubmissionNotice(''); }}
+                      onChange={(e) => handleHoursChange(index, e.target.value)}
+                      onBlur={() => handleHoursSave(index)}
+                    />
+                    <button
+                      className="clock-time-button"
+                      type="button"
+                      disabled={!isDayEditable}
+                      onClick={() => openTimeDialog(index)}
+                      title="Login / logout time"
+                      aria-label={`Add login and logout time for ${day.dateStr}`}
+                    >
+                      <Icon name="clock" size={16}/>
+                    </button>
+                    <button type="button" className={`clock-time-button notes-button${day.notes ? ' has-notes' : ''}`}
+                      aria-label={`Notes for ${day.dateStr}`} title="Daily task notes"
+                      disabled={savingDayKeys.length > 0 || submitting}
+                      onClick={(event) => { notesTrigger.current = event.currentTarget; setApprovalDate(day.dateStr); setNotesDay({ ...day, editable: Boolean(canEditDay(day)) }); setNotesDraft(day.notes); setNotesError(''); }}>
+                      <Icon name="file" size={16} />
+                    </button>
+                  </div>
+                </label>}
+                {readOnlyDay && <button type="button" className={`clock-time-button notes-button${day.notes ? ' has-notes' : ''}`} aria-label={`Notes for ${day.dateStr}`}
+                  onClick={(event) => { notesTrigger.current = event.currentTarget; setNotesDay({ ...day, editable: false }); setNotesDraft(day.notes); setNotesError(''); }}><Icon name="file" size={16} /></button>}
+                {day.sessions?.length > 0 && (
+                  <div className="time-session-list">
+                    {day.sessions.map((session, sessionIndex) => (
+                      <span key={`${day.dateStr}-${sessionIndex}`}>{session.loginTime} - {session.logoutTime}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
-      </div>
-
-      <div className="timesheet-context-row">
-        <span><span>Approver</span><strong>{approvingManagerName}</strong></span>
-        <span><span>Hourly Rate</span><strong>{currency(numericBillRate)}</strong></span>
-        <span><span>Selected Period</span><strong>{Number(projectSubmission?.totalHours || 0).toFixed(2)} hrs</strong></span>
-      </div>
-      </section>
-
+        {projectSubmission?.timeEntries?.some(entry => !entry.entryDate.startsWith(approvalMonth)) &&
+          <section className="cross-month-days" aria-label="Approval days outside this month">
+            <h3>This week continues outside the displayed month</h3>
+            <p>These entries are included in the selected approval period.</p>
+            {projectSubmission.timeEntries.filter(entry => !entry.entryDate.startsWith(approvalMonth)).map(entry =>
+              <div key={entry.entryDate}><strong>{entry.entryDate}</strong><span>{Number(entry.hours).toFixed(2)} hours</span>
+                {entry.late && <span className="timesheet-late-badge">Late</span>}
+                <p>{entry.notes || 'No daily notes'}{entry.sessions?.length>0 && <small>{entry.sessions.map(session => `${session.loginTime} – ${session.logoutTime}`).join(', ')}</small>}</p>
+              </div>)}
+          </section>}
+        {projectSubmission && <section ref={submissionPanel} className="approval-period-toolbar submission-panel" aria-label="Selected approval period">
+          <div className="submission-context">
+            <span className="eyebrow">{projectSubmission.frequency} APPROVAL</span>
+            <h3>{batchMode && batchDates.length ? batchDates.length + ' ' + periodUnit + (batchDates.length === 1 ? '' : 's') + ' selected' : 'Selected ' + periodUnit + ': ' + periodLabel(projectSubmission)}</h3>
+            <p className="submission-exact-dates">{batchMode && batchDates.length
+              ? readyPeriods.filter(period => batchDates.includes(period.selectionDate)).map(periodLabel).join(', ')
+              : projectSubmission.periodStart + (projectSubmission.periodStart !== projectSubmission.periodEnd ? ' – ' + projectSubmission.periodEnd : '')}</p>
+            {!batchMode && <div className="approval-period-state"><span className={'status-badge status-' + selectedStatus.toLowerCase()}>{periodStatus(projectSubmission)}</span>
+              {projectSubmission.late && <span className="timesheet-late-badge">{projectSubmission.submittedAt ? 'Late' : 'Past deadline'}</span>}
+            </div>}
+            {batchMode ? <p>Select ready {periodUnit}s in this calendar month. Each is reviewed separately.</p>
+              : <p>Due {projectSubmission.periodEnd} at 11:59 pm ({projectSubmission.employeeTimezone || user?.timezone || 'employee timezone'}).</p>}
+            {!batchMode && projectSubmission.submittedAt && <p>Submitted {new Date(projectSubmission.submittedAt).toLocaleString()}</p>}
+          </div>
+          <div className="submission-total"><span>{batchMode && batchDates.length ? 'Selected hours' : 'Selected period hours'}</span>
+            <strong>{(batchMode && batchDates.length ? readyPeriods.filter(period => batchDates.includes(period.selectionDate)).reduce((sum, period) => sum + Number(period.totalHours), 0) : selectedHours).toFixed(2)}<small> hrs</small></strong>
+            <span role="status">{savingDayKeys.length ? 'Saving hours...' : hasUnsavedHours ? 'Unsaved hours' : saveNotice}</span>
+          </div>
+          <div className="submission-actions">
+            {canBatchSubmit && projectSubmission.frequency !== 'MONTHLY' && readyPeriods.length > 0 && <button type="button" className="button button-secondary"
+              aria-pressed={batchMode} disabled={submitting || savingDayKeys.length > 0 || hasUnsavedHours}
+              onClick={() => { setBatchMode(value => !value); setBatchDates([]); }}>{batchMode ? 'Cancel multiple selection' : 'Select multiple ' + periodUnit + 's'}</button>}
+            {batchMode ? <button type="button" className="button button-primary" disabled={submitting || savingDayKeys.length > 0 || hasUnsavedHours || projectSubmissionLoading || !batchDates.length}
+              onClick={event => reviewSubmission(event, true)}>Submit {batchDates.length || 'selected'} {periodUnit}{batchDates.length === 1 ? '' : 's'}</button>
+              : isEditable && <button type="button" className="button button-primary" onClick={event => reviewSubmission(event)}
+                disabled={submitting || !canSubmitProjectTimesheet || savingDayKeys.length > 0 || projectSubmissionLoading}>
+                {submitting ? 'Submitting...' : (selectedStatus === 'REJECTED' || correctionOpen ? 'Resubmit ' : 'Submit ') + periodLabel(projectSubmission)}
+              </button>}
+            {isOwner && projectSubmission.frequency !== 'MONTHLY' && ['SUBMITTED','APPROVED','LOCKED'].includes(selectedStatus) && <button type="button" className="button button-secondary"
+              disabled={!canSelectNextPeriod || submitting || savingDayKeys.length > 0 || hasUnsavedHours} onClick={goToNextPeriod}>Go to Next {periodUnit === 'week' ? 'Week' : 'Day'}</button>}
+          </div>
+        </section>}
+        {submissionNotice && <p className="period-submission-notice" role="status">{submissionNotice}</p>}
       {selectedApprovedAt && (
         <p className="login-note">Approved on {format(new Date(selectedApprovedAt), 'MMM dd, yyyy')} by {selectedApprovedByName || 'approver'}.</p>
       )}
@@ -948,84 +1134,13 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
             <span className="correction-status">Needs attention</span>
           </div>
           <div className="correction-feedback"><span>What to update</span><p>{selectedRejectionReason}</p></div>
-          {isOwner && <p className="correction-next-step"><strong>Next step</strong> Update the hours or daily notes below, then choose Resubmit for Approval.</p>}
+          {isOwner && <p className="correction-next-step"><strong>Next step</strong> Update the hours or daily notes in the calendar, then resubmit the selected period.</p>}
         </section>
       )}
 
-      {selectedProjectId && approvalHistory.length > 0 && <details className="approval-history-panel" aria-label="Approval history">
-        <summary>Approval history <span>{approvalHistory.length} events</span></summary>
-        <ol>{approvalHistory.map((item,index)=><li key={index}><div><strong>{String(item.event).replaceAll('_',' ')}</strong><span>{item.actor_name || 'System'}</span></div><time>{item.created_at ? new Date(item.created_at).toLocaleString() : ''}</time>{item.comment&&<p>{item.comment}</p>}</li>)}</ol>
-      </details>}
-      <div className="card timesheet-calendar-card">
-        {projectSubmission && <section className="approval-period-toolbar" aria-label="Selected approval period">
-          <div><span className="eyebrow">{projectSubmission.frequency} APPROVAL</span>
-            <h3>{projectSubmission.periodStart === projectSubmission.periodEnd ? projectSubmission.periodStart : `${projectSubmission.periodStart} – ${projectSubmission.periodEnd}`}</h3>
-            <p>Due {projectSubmission.periodEnd} at 11:59 pm ({projectSubmission.employeeTimezone || user?.timezone || 'employee timezone'}).</p>
-            {projectSubmission.submittedAt && <p>Submitted {new Date(projectSubmission.submittedAt).toLocaleString()}</p>}
-          </div>
-          <div className="approval-period-state"><span className={`status-badge status-${selectedStatus.toLowerCase()}`}>{periodStatus(projectSubmission)}</span>
-            {projectSubmission.late && <span className="timesheet-late-badge">{projectSubmission.submittedAt ? 'Late' : 'Past Deadline'}</span>}
-            {isEditable && ['DRAFT','REJECTED'].includes(selectedStatus) && <button type="button" className="button button-primary"
-              onClick={() => handleSubmit()} disabled={submitting || !canSubmitProjectTimesheet || savingDayKeys.length>0}>
-              {submitting ? 'Submitting...' : selectedStatus === 'REJECTED' || correctionOpen ? 'Resubmit for Approval'
-                : projectSubmission.frequency === 'DAILY' ? 'Submit Day' : projectSubmission.frequency === 'WEEKLY' ? 'Submit Week' : 'Submit for Approval'}
-            </button>}
-            {isOwner && projectSubmission.frequency !== 'MONTHLY' && ['SUBMITTED','APPROVED','LOCKED'].includes(selectedStatus) && <button type="button" className="button button-secondary"
-              disabled={!canSelectNextPeriod || submitting || savingDayKeys.length>0} onClick={goToNextPeriod}>Go to Next {periodUnit === 'week' ? 'Week' : 'Day'}</button>}
-          </div>
-        </section>}
-        {isOwner && projectSubmission?.frequency === 'WEEKLY' && (projectSubmission.periodStart.slice(0,7) !== approvalMonth || projectSubmission.periodEnd.slice(0,7) !== approvalMonth) &&
-          <div className="cross-month-period-navigation"><span>This week spans two months. Its hours share one approval.</span>
-            {[projectSubmission.periodStart,projectSubmission.periodEnd].filter(date => date.slice(0,7)!==approvalMonth).map(date =>
-              <button type="button" className="button button-secondary" key={date} disabled={submitting || savingDayKeys.length>0}
-                onClick={() => openPeriodMonth(date)}>Open {format(new Date(`${date}T12:00:00`),'MMMM')} Days</button>)}
-          </div>}
-        <div className="timesheet-card-heading">
-          <div>
-            <h2>{selectedProject ? selectedProject.code : 'No Project'} - {format(new Date(timesheet.year, timesheet.month - 1, 1), 'MMMM yyyy')}</h2>
-            <div className="calendar-legend">
-              <span><i className="legend-dot legend-workday" /> Workday</span>
-              <span><i className="legend-dot legend-weekend" /> Weekend</span>
-              <span><i className="legend-dot legend-vacation" /> Approved vacation</span>
-              <span><i className="legend-dot legend-pending" /> Other request</span>
-            </div>
-          </div>
-          <div className="compact-actions">
-            <button className="button button-secondary" onClick={loadProjectSubmission} type="button" disabled={projectSubmissionLoading || !selectedProjectId}>
-              Refresh status
-            </button>
-            <button className="button button-secondary" onClick={handleExport} type="button" disabled={projectSubmissionLoading || !projectSubmission?.id || !projectSubmission?.pdfExportEligible}>
-              Export PDF
-            </button>
-          </div>
-        </div>
-        {openCurrentMonth && (
-          <div className="timesheet-toolbar calendar-month-toolbar">
-            <button
-              className="button button-secondary"
-              onClick={() => handleMonthNavigation('previous')}
-              disabled={!canGoPreviousMonth}
-              type="button"
-            >
-              <Icon name="arrow" className="previous-month-arrow" /> Previous Month
-            </button>
-            <div className="month-title">
-              <span>{format(new Date(timesheet.year, timesheet.month - 1, 1), 'MMMM')}</span>
-              <strong>{timesheet.year}</strong>
-            </div>
-            <button
-              className="button button-secondary"
-              onClick={() => handleMonthNavigation('next')}
-              disabled={!canGoNextMonth}
-              type="button"
-            >
-              Next Month <Icon name="arrow" />
-            </button>
-          </div>
-        )}
         {isOwner && !correctionOpen && ['DRAFT', 'REJECTED'].includes(projectSubmission?.status) &&
           <p className="timesheet-period-note" role="status">Past draft days remain editable within your assignment dates. Submissions after the deadline are marked late.</p>}
-        {correctionOpen && <p className="timesheet-period-note" role="status">Correction window open through {format(new Date(projectSubmission.correctionUntil), 'MMM d, yyyy h:mm a')}. Update this project's hours and resubmit.</p>}
+        {correctionOpen && <p className="timesheet-period-note" role="status">Reopened for correction. Editing stays available until you resubmit for approval.</p>}
         {isOwner && approvedOrLocked && !correctionOpen && projectSubmission
           && !['SUBMITTED', 'CHANGE_REQUESTED'].includes(selectedStatus) &&
           <section className="timesheet-opening-panel" aria-label="Timesheet opening">
@@ -1063,7 +1178,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
           </div>
         </form>}
         {selectedStatus === 'SUBMITTED' && !isAdminReview && (
-          <p className="login-note">This submitted project timesheet is read-only until a Project Manager approves or rejects it. Other draft periods remain available in the period selector.</p>
+          <p className="login-note">This submitted project timesheet is read-only until a Project Manager approves or rejects it. Other draft periods remain editable in the calendar.</p>
         )}
         {isAdminReview && canApprove && (
           <p className="login-note">Review the hours and daily notes, then approve or request corrections by rejecting the timesheet.</p>
@@ -1081,89 +1196,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
         {!projectSubmissionLoading && projectSubmission && projectSubmission.periodStart <= profileToday && !isEditable && !isReviewView && !approvedOrLocked && !['CHANGE_REQUESTED','SUBMITTED'].includes(selectedStatus) && (
           <p className="login-note">This project timesheet is {selectedStatus.toLowerCase()} and frozen for editing.</p>
         )}
-        <div className={`calendar-grid timesheet-calendar-grid${showReadOnlyHours ? " approved-calendar" : ""}`}>
-          {(mondayFirst ? ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']).map((weekday) => (
-            <div key={weekday} className="calendar-weekday">{weekday}</div>
-          ))}
-          {Array.from({ length: leadingBlanks }).map((_, i) => (
-            <div key={`blank-${i}`} className="calendar-day calendar-day-empty" />
-          ))}
-          {days.map((day, index) => {
-            const isSavingDay = savingDayKeys.includes(day.dateStr);
-            const originalHours = Number(day.originalHours || 0);
-            const withinAssignment = (!selectedAssignment?.startDate || day.dateStr >= selectedAssignment.startDate) && (!selectedAssignment?.endDate || day.dateStr <= selectedAssignment.endDate);
-            const period = dayPeriod(day);
-            const isDayEditable = canEditDay(day) && withinAssignment && !isSavingDay && (remainingHours > 0 || originalHours > 0);
-            const readOnlyDay = showReadOnlyHours || (period && !period.editable && ['SUBMITTED','APPROVED','LOCKED','CHANGE_REQUESTED'].includes(period.status));
-            const vacationLabel = day.vacationDay ? `${day.vacationDay.vacationType} - ${day.vacationDay.status}` : '';
-            return (
-              <div key={day.dateStr} className={getDayClassName(day)}>
-                <div className="calendar-day-topline">
-                  <button type="button" className="calendar-day-number calendar-period-select" aria-label={`Select approval period for ${day.dateStr}`}
-                    disabled={savingDayKeys.length>0 || submitting}
-                    onClick={() => setApprovalDate(day.dateStr)} aria-pressed={Boolean(period && period.periodStart === projectSubmission?.periodStart)}>
-                    {format(day.date, 'd')}<span className="day-weekday-label">{format(day.date, 'EEE')}</span>
-                  </button>
-                  {day.vacationDay && <span className="day-status-pill">{day.vacationDay.status}</span>}
-                  {period?.late && Number(day.hours)>0 && <span className="timesheet-late-badge" aria-label={`Late entry for ${day.dateStr}`}>Late</span>}
-                </div>
-                {day.vacationDay && <div className="day-status-label">{vacationLabel}</div>}
-                {readOnlyDay ? <div className="approved-day-hours" aria-label={`Hours for ${day.dateStr}`}>{Number(day.hours) > 0 ? <><strong>{Number(day.hours).toFixed(2)}</strong><span>hrs</span></> : <span className="approved-day-empty">-</span>}</div> : <label className="day-hours-field">
-                  <span>{isSavingDay ? <LoadingIndicator label="Saving" /> : 'Hours'}</span>
-                  <div className="day-entry-controls">
-                    <input
-                      type="number"
-                      min="0"
-                      max={Math.min(24, originalHours + remainingHours)}
-                      step="0.5"
-                      className="calendar-day-input"
-                      aria-label={`Hours for ${day.dateStr}`}
-                      value={day.hours}
-                      disabled={!isDayEditable}
-                      onChange={(e) => handleHoursChange(index, e.target.value)}
-                      onBlur={() => handleHoursSave(index)}
-                    />
-                    <button
-                      className="clock-time-button"
-                      type="button"
-                      disabled={!isDayEditable}
-                      onClick={() => openTimeDialog(index)}
-                      title="Login / logout time"
-                      aria-label={`Add login and logout time for ${day.dateStr}`}
-                    >
-                      <Icon name="clock" size={16}/>
-                    </button>
-                    <button type="button" className={`clock-time-button notes-button${day.notes ? ' has-notes' : ''}`}
-                      aria-label={`Notes for ${day.dateStr}`} title="Daily task notes"
-                      disabled={isSavingDay}
-                      onClick={(event) => { notesTrigger.current = event.currentTarget; setNotesDay({ ...day, editable: Boolean(canEditDay(day)) }); setNotesDraft(day.notes); setNotesError(''); }}>
-                      <Icon name="file" size={16} />
-                    </button>
-                  </div>
-                </label>}
-                {readOnlyDay && <button type="button" className={`clock-time-button notes-button${day.notes ? ' has-notes' : ''}`} aria-label={`Notes for ${day.dateStr}`}
-                  onClick={(event) => { notesTrigger.current = event.currentTarget; setNotesDay({ ...day, editable: false }); setNotesDraft(day.notes); setNotesError(''); }}><Icon name="file" size={16} /></button>}
-                {day.sessions?.length > 0 && (
-                  <div className="time-session-list">
-                    {day.sessions.map((session, sessionIndex) => (
-                      <span key={`${day.dateStr}-${sessionIndex}`}>{session.loginTime} - {session.logoutTime}</span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-        {projectSubmission?.timeEntries?.some(entry => !entry.entryDate.startsWith(approvalMonth)) &&
-          <section className="cross-month-days" aria-label="Approval days outside this month">
-            <h3>This week continues outside the displayed month</h3>
-            <p>These entries are included in the selected approval period.</p>
-            {projectSubmission.timeEntries.filter(entry => !entry.entryDate.startsWith(approvalMonth)).map(entry =>
-              <div key={entry.entryDate}><strong>{entry.entryDate}</strong><span>{Number(entry.hours).toFixed(2)} hours</span>
-                {entry.late && <span className="timesheet-late-badge">Late</span>}
-                <p>{entry.notes || 'No daily notes'}{entry.sessions?.length>0 && <small>{entry.sessions.map(session => `${session.loginTime} – ${session.logoutTime}`).join(', ')}</small>}</p>
-              </div>)}
-          </section>}
+
       </div>
 
 
@@ -1197,6 +1230,21 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
       </div>
 
       </section>
+      {submissionReview && <dialog ref={submissionDialog} className="modal-card timesheet-submit-dialog" aria-labelledby="submission-review-title"
+        onCancel={event => { event.preventDefault(); closeSubmissionReview(); }}>
+        <div className="modal-header"><h2 id="submission-review-title">Review submission</h2></div>
+        <p>{selectedProject?.code} &middot; {approvingManagerName}</p>
+        <ul className="submission-review-list">{submissionReview.periods.map(period => <li key={period.periodStart}>
+          <div><strong>{periodLabel(period)}</strong><span>{period.periodStart}{period.periodEnd !== period.periodStart && ' - ' + period.periodEnd}</span></div>
+          <strong>{Number(period.totalHours).toFixed(2)} hrs</strong>{period.late && <span className="timesheet-late-badge">Late</span>}
+        </li>)}</ul>
+        <p className="submission-review-total">Total <strong>{submissionReview.periods.reduce((sum, period) => sum + Number(period.totalHours), 0).toFixed(2)} hrs</strong></p>
+        <p>Submitted hours lock until review. Each period is approved separately.</p>
+        <div className="action-bar compact-actions">
+          <button type="button" className="button button-secondary" disabled={submitting} onClick={closeSubmissionReview}>Cancel</button>
+          <button type="button" className="button button-primary" disabled={submitting} onClick={() => handleSubmit(submissionReview)}>{submitting ? 'Submitting...' : 'Submit for approval'}</button>
+        </div>
+      </dialog>}
       {notesDay && <dialog ref={notesDialog} className="modal-card daily-notes-dialog" aria-labelledby="daily-notes-title"
         onCancel={(event) => { event.preventDefault(); closeNotes(); }}>
         <div className="modal-header"><h2 id="daily-notes-title">Daily notes · {format(notesDay.date, 'MMM d, yyyy')}</h2></div>
@@ -1213,6 +1261,7 @@ export default function TimesheetDetail({ openCurrentMonth = false, showMonthScr
               if (notesDay.entryId) await timesheetAPI.updateTimeEntry(timesheet.id, notesDay.entryId, payload);
               else await timesheetAPI.addTimeEntry(timesheet.id, payload);
               await loadTimesheetById(timesheet.id);
+              await loadProjectSubmission();
               setNotesDay(null); notesTrigger.current?.focus();
             } catch (err) { setNotesError(apiErrorMessage(err, 'Could not save notes. Please try again.')); }
             finally { setNotesSaving(false); }

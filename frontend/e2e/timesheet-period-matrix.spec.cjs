@@ -132,13 +132,14 @@ for(const [date,expected] of [['2026-03-07','2026-03-08T06:00:00Z'],['2026-03-08
   });
 }
 
-for(const [frequency,label] of [['DAILY','Submit Day'],['WEEKLY','Submit Week']]) test(`${frequency}: browser submits selected period and manager approves`,async({page,request})=>{
+for(const frequency of ['DAILY','WEEKLY']) test(`${frequency}: browser submits selected period and manager approves`,async({page,request})=>{
   const { authenticatePage } = require('./support/auth.cjs');
   const employee=await apiAs(request,'employee'),id=project(frequency),date=shift(f.today,-14);
   const { s }=await entry(employee,id,date);
   await authenticatePage(page,request,'employee',f.companyId);
   await page.goto(`/timesheet/${s.id}?projectId=${id}&date=${date}`);
-  await page.getByRole('button',{name:label,exact:true}).click();
+  await page.getByRole('button',{name:/^Submit [A-Z][a-z]{2} /}).click();
+  await page.getByRole('dialog',{name:'Review submission'}).getByRole('button',{name:'Submit for approval',exact:true}).click();
   await expect.poll(async()=>(await view(employee,id,date)).status).toBe('SUBMITTED');
   await authenticatePage(page,request,'manager',f.companyId);
   await page.goto(`/timesheet/${s.id}?projectId=${id}&date=${date}`);

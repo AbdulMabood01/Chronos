@@ -16,7 +16,10 @@ test('company billing shows actual prepaid prices and never activates a plan fro
   await page.getByRole('button', { name: 'Review prepaid quote' }).click();
   const quote = page.getByRole('region', { name: 'Purchase quote' });
   await expect(quote.getByText('Pay once: $1,430.40')).toBeVisible();
-  await expect(quote.getByRole('button', { name: 'Continue to secure payment' })).toBeDisabled();
+  await quote.getByRole('link', { name: 'Continue to payment review' }).click();
+  await expect(page).toHaveURL(/\/billing\/payment\?quote=/);
+  await expect(page.getByRole('heading',{name:'Online payment is not available yet'})).toBeVisible();
+  await page.getByRole('link',{name:'Return to billing'}).click();
   const after = await json(await admin.get(`/api/companies/${company.id}/billing`));
   expect(after.entitlement.source).toBe('CONTRACT');
   expect(after.purchases[0].status).toBe('QUOTED');
@@ -41,7 +44,7 @@ test('a new company enforces seven people under concurrent invitations and start
   expect((await other.post(`/api/companies/${company.id}/invitations`, { data: { email: `${key}-0@example.com`, role: 'PROJECT_ADMIN' } })).ok()).toBeTruthy();
   state = await json(await other.get(`/api/companies/${company.id}/billing`)); expect(state.entitlement.reservations).toBe(6);
   await authenticatePage(page, request, 'otherAdmin', company.id); await page.goto('/billing');
-  await page.getByRole('button', { name: 'Start 30-day Pro Plus trial' }).click();
+  await page.getByRole('button', { name: 'Start Pro Plus trial' }).click();
   await expect(page.getByText('Current plan: Pro Plus')).toBeVisible();
   state = await json(await other.get(`/api/companies/${company.id}/billing`));
   expect(state.entitlement.source).toBe('TRIAL'); expect(state.entitlement.includedUsers).toBe(175); expect(state.profile.trial_used).toBe(true);

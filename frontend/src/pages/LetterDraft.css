@@ -1,0 +1,56 @@
+.letter-draft {
+  margin: 1.5rem 0;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-secondary, #f3f4f6);
+  overflow: hidden;
+}
+.letter-draft-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-size: .85rem;
+}
+.letter-draft-toolbar span { color: var(--text-secondary); font-size: .75rem; }
+.letter-draft-sheet {
+  margin: 1.5rem;
+  padding: clamp(1.25rem, 4vw, 3rem);
+  background: #fff;
+  color: #243441;
+  border: 1px solid #e0e4e8;
+  box-shadow: 0 2px 8px #14233208;
+  font-size: .9rem;
+  line-height: 1.7;
+}
+.letter-draft-letterhead { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid #cfd6dc; }
+.letter-draft-letterhead img { max-width: 150px; max-height: 64px; object-fit: contain; }
+.letter-draft-letterhead div { margin-left: auto; text-align: right; max-width: 65%; }
+.letter-draft-letterhead strong { display: block; font-size: .95rem; line-height: 1.4; }
+.letter-draft-letterhead span { display: block; color: #64717d; font-size: .75rem; margin-top: .3rem; }
+.letter-draft-sheet .letter-draft-date { text-align: right; color: #64717d; font-size: .78rem; margin: 1rem 0 1.75rem; }
+.letter-draft-sheet h3 { font-size: 1.3rem; font-weight: 600; letter-spacing: -.02em; color: #183344; margin: 0 0 1.5rem; }
+.letter-draft-body, .letter-draft-salutation, .letter-draft-signatory p { font-family: Georgia, 'Times New Roman', serif; font-size: .96rem; }
+.letter-draft-body p { white-space: pre-wrap; margin: 0 0 1rem; overflow-wrap: anywhere; }
+.letter-draft-signatory { margin: 1.75rem 0; }
+.letter-draft-signatory p { margin: 0 0 1rem; }
+.letter-draft-signatory strong, .letter-draft-signatory span { display: block; }
+.letter-draft-signatory span { font-size: .8rem; color: #64717d; }
+.letter-draft-employer { border-top: 1px solid #dce2e7; padding-top: 1rem; }
+.letter-draft-employer h4 { font-size: .78rem; font-weight: 600; margin: 0 0 .75rem; color: #243441; }
+.letter-draft-employer dl { margin: 0; font-size: .76rem; line-height: 1.6; }
+.letter-draft-employer dl div { display: grid; grid-template-columns: 125px minmax(0, 1fr); gap: 1rem; margin: .3rem 0; }
+.letter-draft-employer dt { color: #435362; font-weight: 600; }
+.letter-draft-employer dd { margin: 0; color: #64717d; white-space: pre-wrap; overflow-wrap: anywhere; }
+.letter-draft-note, .letter-draft-empty { padding: 0 1.5rem 1rem; margin: 0; color: var(--text-secondary); font-size: .78rem; line-height: 1.5; }
+.letter-draft-empty { padding-top: 1.5rem; }
+@media (max-width: 600px) {
+  .letter-draft-toolbar { align-items: flex-start; flex-direction: column; }
+  .letter-draft-sheet { margin: .75rem; }
+  .letter-draft-letterhead { align-items: flex-start; flex-direction: column; gap: 1rem; }
+  .letter-draft-letterhead div { margin-left: 0; max-width: 100%; text-align: left; }
+  .letter-draft-employer dl div { grid-template-columns: 95px minmax(0, 1fr); gap: .75rem; }
+}

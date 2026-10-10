@@ -35,6 +35,7 @@ export default function RequestAccess() {
           <input id="lastName" name="lastName" required maxLength={100} autoComplete="family-name" value={form.lastName} onChange={change} /></div>
         <div className="form-group"><label htmlFor="requestEmail">Work email</label>
           <input id="requestEmail" name="email" type="email" required maxLength={255} autoComplete="email" value={form.email} onChange={change} /></div>
+        <p>Review the <Link to="/legal/terms">Terms of Use</Link> and <Link to="/legal/privacy">Privacy Policy</Link> before continuing.</p>
         <button className="button button-primary" disabled={busy}>{busy ? 'Sending...' : 'Send request'}</button>
       </form>
     </>}

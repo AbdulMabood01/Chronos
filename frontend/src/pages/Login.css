@@ -130,3 +130,18 @@
 .account-link:hover { color: var(--primary-dark); }
 .account-card { max-width: 440px; }
 .account-card .account-link { margin-top: 20px; }
+
+.login-experience .login-card .login-notice {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  min-height: 0;
+  border: 1px solid color-mix(in srgb, var(--text-secondary) 20%, transparent);
+  border-radius: 6px;
+  background: var(--surface-tint);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+  text-align: left;
+  overflow-wrap: anywhere;
+}

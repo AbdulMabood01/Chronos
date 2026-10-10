@@ -1,4 +1,5 @@
 import ProfileChecklist from './ProfileChecklist';
+import DateInput from './DateInput';
 import React, { useState } from 'react';
 import { LoadingIndicator } from './Hourglass';
 import './ProfileForm.css';
@@ -9,15 +10,21 @@ const timezones = Intl.supportedValuesOf?.('timeZone') || ['America/Chicago', 'A
 const additionalSections = [["Contact details",[["phoneNumber","Phone number","tel","tel"],["personalEmail","Personal email","email","email"]]],["Address",[["addressLine1","Address line 1","text","address-line1"],["addressLine2","Address line 2","text","address-line2"],["city","City","text","address-level2"],["stateProvince","State / Province","text","address-level1"],["postalCode","Postal code","text","postal-code"],["country","Country","text","country-name"]]],["Emergency contact",[["emergencyContactName","Contact name"],["emergencyContactRelationship","Relationship"],["emergencyContactPhone","Contact phone","tel"],["emergencyContactEmail","Contact email","email"]]]];
 const additionalFieldLimits = {"phoneNumber":40,"personalEmail":255,"addressLine1":200,"addressLine2":200,"city":100,"stateProvince":100,"postalCode":20,"country":100,"bloodGroup":3,"emergencyContactName":200,"emergencyContactRelationship":100,"emergencyContactPhone":40,"emergencyContactEmail":255};
 
+const demographicOptions = {
+  gender: ['Male', 'Female', 'Other'],
+  race: ['American Indian or Alaska Native', 'Asian', 'Black or African American', 'Native Hawaiian or Other Pacific Islander', 'White', 'Two or more races', 'Other', 'Prefer not to say'],
+  ethnicity: ['Hispanic or Latino', 'Not Hispanic or Latino', 'Other', 'Prefer not to say'],
+};
+const requiredDetails = additionalSections.flatMap(([, fields]) => fields.filter(([field]) => field !== 'addressLine2').map(([field, label]) => [field, label]));
+
 const emptyProfile = {
   firstName: '',
   lastName: '',
   dateOfBirth: '',
-  ssnLast4: '',
   profileImageUrl: '',
 };
 
-export default function ProfileForm({ user, onSave, submitLabel = 'Save Profile' }) {
+export default function ProfileForm({ user, onSave, submitLabel = 'Save Profile', showBloodGroup = true, readOnly = false }) {
   const [formData, setFormData] = useState({
     ...emptyProfile,
     timezone: user?.timezone || 'America/Chicago',
@@ -26,7 +33,6 @@ export default function ProfileForm({ user, onSave, submitLabel = 'Save Profile'
     lastName: user?.lastName || '',
     dateOfBirth: user?.dateOfBirth || '',
     gender:user?.gender||'',race:user?.race||'',ethnicity:user?.ethnicity||'',joiningDate:user?.joiningDate||'',
-    ssnLast4: user?.ssnLast4 || '',
     profileImageUrl: user?.profileImageUrl || '',
   });
   const [saving, setSaving] = useState(false);
@@ -97,16 +103,12 @@ export default function ProfileForm({ user, onSave, submitLabel = 'Save Profile'
       ['firstName', 'First name'],
       ['lastName', 'Last name'],
       ['dateOfBirth', 'DOB'],
+      ['gender', 'Gender'], ['race', 'Race'], ['ethnicity', 'Ethnicity'], ['joiningDate', 'Joining date'],
+      ...requiredDetails,
     ];
     const missingField = requiredFields.find(([field]) => !String(formData[field] || '').trim());
     if (missingField) {
       setError(`${missingField[1]} is required.`);
-      return;
-    }
-
-    const ssnLast4 = user?.platformAdmin===true ? '' : formData.ssnLast4.trim();
-    if (ssnLast4 && !/^\d{4}$/.test(ssnLast4)) {
-      setError('SSN last 4 must be blank or exactly 4 digits.');
       return;
     }
 
@@ -115,12 +117,11 @@ export default function ProfileForm({ user, onSave, submitLabel = 'Save Profile'
     try {
       await onSave({
         timezone: formData.timezone,
-        ...Object.fromEntries(Object.keys(additionalFieldLimits).map((field) => [field, formData[field].trim()])),
+        ...Object.fromEntries(Object.keys(additionalFieldLimits).filter(field => showBloodGroup || field !== 'bloodGroup').map((field) => [field, formData[field].trim()])),
         firstName: formData.firstName,
         lastName: formData.lastName,
         dateOfBirth: formData.dateOfBirth || null,
         gender:formData.gender,race:formData.race,ethnicity:formData.ethnicity,joiningDate:formData.joiningDate||null,
-        ...(user?.platformAdmin!==true ? { ssnLast4 } : {}),
         profileImageUrl: formData.profileImageUrl || null,
       });
     } catch (err) {
@@ -137,9 +138,17 @@ export default function ProfileForm({ user, onSave, submitLabel = 'Save Profile'
       {error && <div className="error-message">{error}</div>}
 
       <ProfileChecklist profile={formData} />
-      <section className="profile-additional-details"><h3>Personal details</h3><p className="profile-field-note">These details lock when submitted. Gender, race and ethnicity are optional.</p><div className="form-row">
-        {['gender','race','ethnicity'].map(field=><div className="form-group" key={field}><label htmlFor={`profile-${field}`}>{field.charAt(0).toUpperCase()+field.slice(1)}</label><input id={`profile-${field}`} maxLength={100} value={formData[field]} readOnly={user?.profileDetailsSubmitted===true} placeholder="Optional" onChange={event=>updateField(field,event.target.value)}/></div>)}
-        <div className="form-group"><label htmlFor="profile-joining-date">Joining date</label><input id="profile-joining-date" type="date" value={formData.joiningDate} readOnly={user?.profileDetailsSubmitted===true} onChange={event=>updateField('joiningDate',event.target.value)}/></div>
+      <fieldset disabled={readOnly} className="profile-fields-wrapper">
+      <section className="profile-additional-details"><h3>Personal details</h3><p className="profile-field-note">All fields are required unless marked optional. These personal details lock when submitted.</p><div className="form-row">
+        {Object.entries(demographicOptions).map(([field, options]) => <div className="form-group" key={field}>
+          <label className="required-field-label" htmlFor={`profile-${field}`}>{field.charAt(0).toUpperCase()+field.slice(1)}</label>
+          <select id={`profile-${field}`} required value={formData[field]} disabled={user?.profileDetailsSubmitted===true && !user?.profileCorrectionOpen && !!user?.[field]} onChange={event=>updateField(field,event.target.value)}>
+            <option value="">Select {field}</option>
+            {user?.[field] && !options.includes(user[field]) && <option value={user[field]}>{user[field]}</option>}
+            {options.map(option => <option key={option} value={option}>{option}</option>)}
+          </select>
+        </div>)}
+        <div className="form-group"><label className="required-field-label" htmlFor="profile-joining-date">Joining date</label><DateInput pickerLabel="Choose joining date" id="profile-joining-date" required value={formData.joiningDate} readOnly={user?.profileDetailsSubmitted===true && !user?.profileCorrectionOpen && !!user?.joiningDate} onChange={event=>updateField('joiningDate',event.target.value)}/></div>
       </div></section>
 
       <div className="profile-photo-section">
@@ -155,10 +164,11 @@ export default function ProfileForm({ user, onSave, submitLabel = 'Save Profile'
           <input
             id="profile-photo"
             type="file"
+            disabled={user?.profileCompleted===true && !user?.profileCorrectionOpen && !!user?.profileImageUrl}
             accept="image/*"
             onChange={handlePhotoChange}
           />
-          {formData.profileImageUrl && (
+          {formData.profileImageUrl && (!user?.profileCompleted || user?.profileCorrectionOpen) && (
             <button
               type="button"
               className="button button-small button-secondary"
@@ -172,36 +182,36 @@ export default function ProfileForm({ user, onSave, submitLabel = 'Save Profile'
 
       <div className="form-row">
         <div className="form-group">
-          <label htmlFor="profile-first-name">First Name</label>
+          <label className="required-field-label" htmlFor="profile-first-name">First Name</label>
           <input
             id="profile-first-name"
-            readOnly={user?.profileCompleted===true}
+            name="given-name"
+            readOnly={user?.profileCompleted===true && !user?.profileCorrectionOpen}
             value={formData.firstName}
             onChange={(event) => updateField('firstName', event.target.value)}
-            autoComplete="given-name"
+            autoComplete="section-profile given-name"
             required
           />
         </div>
         <div className="form-group">
-          <label htmlFor="profile-last-name">Last Name</label>
+          <label className="required-field-label" htmlFor="profile-last-name">Last Name</label>
           <input
             id="profile-last-name"
-            readOnly={user?.profileCompleted===true}
+            name="family-name"
+            readOnly={user?.profileCompleted===true && !user?.profileCorrectionOpen}
             value={formData.lastName}
             onChange={(event) => updateField('lastName', event.target.value)}
-            autoComplete="family-name"
+            autoComplete="section-profile family-name"
             required
           />
         </div>
       </div>
 
-      <p className="profile-field-note">Your company administrator manages your job title, employee ID, and joining date.</p>
-      <p className="profile-field-note">{user?.profileCompleted ? 'Your submitted name and date of birth are locked.' : 'Your name and date of birth will be locked when you save this profile.'}</p>
 
       <div className="form-row">
         <div className="form-group">
-          <label htmlFor="profile-dob">DOB</label>
-          <input
+          <label className="required-field-label" htmlFor="profile-dob">DOB</label>
+          <DateInput pickerLabel="Choose date of birth"
             id="profile-dob"
             readOnly={user?.profileCompleted===true}
             type="date"
@@ -211,17 +221,7 @@ export default function ProfileForm({ user, onSave, submitLabel = 'Save Profile'
             required
           />
         </div>
-        {user?.platformAdmin!==true && <div className="form-group">
-          <label htmlFor="profile-ssn-last4">4 Digits of SSN</label>
-          <input
-            id="profile-ssn-last4"
-            value={formData.ssnLast4}
-            onChange={(event) => updateField('ssnLast4', event.target.value.replace(/\D/g, '').slice(0, 4))}
-            inputMode="numeric"
-            maxLength="4"
-            autoComplete="off"
-          />
-        </div>}
+
       </div>
 
       <fieldset className="profile-details-section">
@@ -235,25 +235,26 @@ export default function ProfileForm({ user, onSave, submitLabel = 'Save Profile'
         </div>
       </fieldset>
 
-      <fieldset className="profile-details-section">
+      {showBloodGroup && <fieldset className="profile-details-section">
         <legend>Personal details</legend>
         <div className="form-group">
           <label htmlFor="profile-blood-group">Blood group</label>
-          <select id="profile-blood-group" value={formData.bloodGroup} onChange={(event) => updateField('bloodGroup', event.target.value)}>
+          <select id="profile-blood-group" disabled={user?.profileDetailsSubmitted===true && !user?.profileCorrectionOpen && !!user?.bloodGroup} value={formData.bloodGroup} onChange={(event) => updateField('bloodGroup', event.target.value)}>
             <option value="">Unknown / Prefer not to say</option>
             {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((group) => <option key={group} value={group}>{group}</option>)}
           </select>
         </div>
-      </fieldset>
+      </fieldset>}
       {additionalSections.map(([title, fields]) => (
         <fieldset className="profile-details-section" key={title}>
           <legend>{title}</legend>
+          {title === 'Address' && !readOnly && <p className="address-autofill-hint">Choose a saved address from your browser’s suggestions, or enter your address below.</p>}
           <div className="profile-details-grid">
             {fields.map(([field, label, type = 'text', autoComplete = 'off']) => (
               <div className="form-group" key={field}>
-                <label htmlFor={`profile-${field}`}>{label}</label>
-                <input id={`profile-${field}`} type={type} autoComplete={autoComplete}
-                  maxLength={additionalFieldLimits[field]} value={formData[field]}
+                <label className={field !== 'addressLine2' ? 'required-field-label' : undefined} htmlFor={`profile-${field}`}>{label}{field === 'addressLine2' ? ' (optional)' : ''}</label>
+                <input id={`profile-${field}`} name={autoComplete === 'off' ? field : autoComplete} type={type} autoComplete={autoComplete === 'off' ? 'off' : `section-profile ${autoComplete}`}
+                  required={field !== 'addressLine2'} maxLength={additionalFieldLimits[field]} value={formData[field]}
                   onChange={(event) => updateField(field, event.target.value)} />
               </div>
             ))}
@@ -261,11 +262,13 @@ export default function ProfileForm({ user, onSave, submitLabel = 'Save Profile'
         </fieldset>
       ))}
 
-      <div className="action-bar compact-actions">
+      </fieldset>
+      {!readOnly && <div className="action-bar compact-actions">
         <button type="submit" className="button button-primary" disabled={saving}>
           {saving ? <LoadingIndicator label="Saving..." /> : submitLabel}
         </button>
       </div>
+      }
     </form>
   );
 }

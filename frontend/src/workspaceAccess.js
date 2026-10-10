@@ -15,7 +15,7 @@ export function canOpenWorkspaceRoute(pathname, context) {
     ? context.platformCapabilities?.canCreateCompanies === true || context.platformCapabilities?.canManageCompanyPlans === true
     : Boolean(context.currentCompany);
   if (context.platformAdmin || !context.currentCompany) return false;
-  if (path === '/billing') return has(context, 'canViewCompanyBilling');
+  if ((path === '/billing' || path === '/billing/payment')) return has(context, 'canViewCompanyBilling');
   if (path === '/settings') return has(context, 'canManageCompanySettings');
   if (path === '/workplace-reports' && context.companyRoles?.includes('COMPANY_ADMIN')) return false;
   if(['/vacation','/requests','/announcements','/feedback','/performance-reviews','/workplace-reports','/audit'].includes(path))return true;
@@ -52,7 +52,7 @@ export function workspaceNavigation(context) {
     if (!context.companyRoles?.includes('COMPANY_ADMIN')) primary.push(['/vacation','My leave','calendar'],['/requests','My letters','file']);
     primary.push(['/announcements','Announcements','bell'],['/feedback','Feedback','mail'],['/performance-reviews','Performance reviews','chart']);
     if (!context.companyRoles?.includes('COMPANY_ADMIN')) primary.push(['/workplace-reports','Workplace reports','file']);
-    for(const [path,label,icon] of [['/letter-management','Letter management','file'],['/sensitive-access','Sensitive access','users'],['/confidential-reports','Confidential cases','file']])if(canOpenWorkspaceRoute(path,context))management.push([path,label,icon]);
+    for(const [path,label,icon] of [['/letter-management','Letter management','file'],['/sensitive-access','Sensitive access','users'],['/confidential-reports','Workplace reports','file']])if(canOpenWorkspaceRoute(path,context))management.push([path,label,icon]);
     if(has(context,'canViewCompanyAudit'))management.push(['/audit','Company audit','file']);else primary.push(['/audit','My activity','file']);
     for(const [path,label,icon] of [['/leave-management','Leave management','calendar'],['/team-leave-calendar','Team leave calendar','calendar'],['/reports','Reports','chart'],['/missing-timesheets','Missing timesheets','clock']])if(canOpenWorkspaceRoute(path,context))management.push([path,label,icon]);
     if (canOpenWorkspaceRoute('/settings', context)) management.push(['/settings', 'Company settings', 'settings']);

@@ -30,9 +30,9 @@ public class SecurityConfig {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(authz -> authz
-                        .requestMatchers(org.springframework.http.HttpMethod.GET,"/billing/catalog").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.GET,"/billing/catalog", "/contact/status").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.POST,"/billing/stripe/webhook").permitAll()
-                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/auth/login", "/auth/invitations/validate", "/auth/activate", "/auth/forgot-password", "/auth/reset-password", "/auth/reset-password/validate", "/companies/invitations/preview", "/companies/invitations/claim", "/companies/access-requests").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/auth/login", "/auth/invitations/validate", "/auth/activate", "/auth/forgot-password", "/auth/reset-password", "/auth/reset-password/validate", "/companies/invitations/preview", "/companies/invitations/claim", "/companies/access-requests", "/contact/inquiries").permitAll()
                         // Only the two endpoints used by local monitoring are anonymous.
                         // All other Actuator endpoints remain unexposed and unauthorized.
                         .requestMatchers("/health", "/actuator/health", "/actuator/prometheus").permitAll()
@@ -43,6 +43,7 @@ public class SecurityConfig {
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(org.springframework.security.config.http.SessionCreationPolicy.STATELESS))
                 .addFilterAfter(new com.maxwell.chronos.security.ActiveUserFilter(users, sessions), org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter.class)
+                .addFilterBefore(new com.maxwell.chronos.security.ContactRateLimitFilter(), org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter.class)
                 .addFilterBefore(new com.maxwell.chronos.security.AuthenticationRateLimitFilter(), org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter.class)
                 .csrf(csrf -> csrf.disable());
 

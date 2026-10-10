@@ -1,6 +1,6 @@
 # Chronos user flows
 
-Company-owned plans, platform-admin complimentary plans, paid employee pools, extra seats, trials and billing recovery are described in [Company billing](../company-billing.md). Its implemented policy supersedes older plan/limit wording in the diagrams below.
+Company-owned plans, platform-admin complimentary plans, paid employee pools, extra seats, trials and billing recovery are described in [Company billing](../company-billing.md). Its implemented policy supersedes older plan/limit wording in the diagrams below. Free now lasts sixty days, trials end by the original Free deadline, and expired access retains history and pending review workflows. Payment review is a separate screen even when online payment is unavailable. Platform company administration includes directory filters, contacts, plan/usage/expiry, company audit and delivery recovery metadata.
 
 Seven Archify workflow diagrams based on the permission matrix. These are policy-oriented user journeys, not a claim that every target rule is already implemented. Consult the migration progress document for implementation status.
 
@@ -36,3 +36,9 @@ All seven delivered diagrams passed 9/9 showcase checks with zero composition er
 [Complete handoff receipts and SHA-256 hashes](handoff.json).
 
 Timesheet and pricing regression coverage, validation results, and remaining test boundaries are documented in [timesheet/pricing validation](../../reports/timesheet-pricing-edge-validation.md). Reproduction commands are in the [E2E README](../../frontend/e2e/README.md).
+
+Profile submission requires gender, race, ethnicity, joining date, phone number, personal email, address line 1, city, state/province, postal code, country, and the emergency contact’s name, relationship, phone, and email. Gender, race, and ethnicity use dropdowns; race and ethnicity include a “Prefer not to say” choice. Address line 2 and blood group remain optional. Submitted personal details stay locked, while previously missing details can be completed.
+
+Company Admins can use View Profile for active members in their selected company. It displays personal identity, demographics, address, contact and emergency contact fields; SSN, blood group and credentials are excluded. Profile viewing is audited and view-only; administrators edit company employment details separately. Submitted personal details remain locked, except employees may maintain phone, address and emergency contacts. Company-only User and Project Manager invitations create membership without project roles; project assignment can happen later.
+
+Employment details freeze after the first admin save. A correction request records its reason and requires approval by a different Company Admin (never the subject or requester). Approval permits one personal-profile save by the employee or one employment save by a Company Admin; the save completes the request and relocks the fields. Existing employment records with a prior edit are locked at migration.

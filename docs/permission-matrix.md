@@ -2,7 +2,7 @@
 
 Date: 2026-10-05
 
-Billing extension (October 7, 2026): Company Admins have explicit company-scoped billing, purchase, seat, receipt, refund and reissue capabilities. Project roles and Moderator grants do not inherit them. A suspended company exposes only billing history/refund capabilities to its Company Admins. Platform tools expose payment metadata and audited verified-event retries without operational/private access. See [company billing](company-billing.md); manual grants are separate from verified purchases. Never-self-approval remains universal.
+Billing extension (October 7, 2026): Company Admins have explicit company-scoped billing, purchase, seat, receipt, refund and reissue capabilities. Project roles and Moderator grants do not inherit them. A suspended company exposes only billing history/refund capabilities to its Company Admins. Platform tools expose payment metadata and audited verified-event retries without operational/private access. See [company billing](company-billing.md); manual grants are separate from verified purchases. Never-self-approval remains universal. Free access lasts sixty days (existing companies from rollout), trials cannot extend it, and expiry preserves history, exports, billing and pending reviews. Platform Free extensions require a future expiry date and audited reason.
 
 Status: implementation baseline for the migration. This document specifies target behavior; it does not describe permissions already enforced by the application. No application or database changes are part of Chunk 1.
 
@@ -54,7 +54,7 @@ Legend: Platform = platform scope; Company = selected authorized company; Projec
 | View platform operational audit and system health | Platform | No | No | No | No | No | No |
 | View company operational records without a company role | Support grant only | Not applicable | Not applicable | Not applicable | Not applicable | Not applicable | Not applicable |
 
-Workspace IDs remain immutable in the first migration release because invitations and access requests depend on them.0000000l Renaming can be added later with a documented alias policy.
+Workspace IDs remain immutable in the first migration release because invitations and access requests depend on them. Renaming can be added later with a documented alias policy.
 
 ## People and role administration
 
@@ -73,7 +73,7 @@ Workspace IDs remain immutable in the first migration release because invitation
 | Issue password recovery for a company member | No | Company, deliver to verified account email | No | No | No | No | Own self-service recovery |
 | Set/read another person's password or reset token | No | No | No | No | No | No | No |
 | Change global login identity or suspend a global account | Platform account-support permission | No | No | No | No | No | Own verified identity change, if supported |
-| View sensitive personal fields | No by default | Separate restricted grant | No | No | No | No | Own fields |
+| View sensitive personal fields | No by default | Approved member profile fields; SSN and blood group excluded | No | No | No | No | Own fields |
 
 Company Admins manage company membership rather than global identity. Company admins may not reset another user's password directly or change their login email. A minimal directory contains only business identity information; it excludes leave balances, personal contact details, medical information, and confidential reports.
 
@@ -127,11 +127,11 @@ A Company Admin's own leave or letter request requires a different eligible Comp
 
 ## Confidential reports and restricted access
 
-These permissions are additional grants, not automatic consequences of the roles above:
+Company Admins automatically handle workplace reports. Other sensitive permissions use explicit grants:
 
 | Permission | Who may hold it | Scope and restrictions |
 |---|---|---|
-| Handle confidential workplace reports | Explicitly designated active company members | One company; access case content, attachments, history, and decisions only when authorized for the case. |
+| Handle confidential workplace reports | Company Admins and explicitly designated active company members | One company; access case content, attachments, history, and decisions only when authorized for the case. |
 | Manage confidential-report handler grants | Company Admin | One company; grants and revocations audited. Another Company Admin must authorize a grant to the acting admin themselves. |
 | View restricted personal fields | Explicitly designated company administrators | Specific field set, legitimate business purpose, company membership, and audited access. |
 | Manage company performance reviews | Company Admin or designated reviewer | Company/team/employee scope must be explicit; no self-review publication. |
@@ -139,7 +139,7 @@ These permissions are additional grants, not automatic consequences of the roles
 
 Confidential reports do not appear in generic project reports, ordinary audit exports, or platform dashboards. Report subjects do not gain case access by holding an administrative role. Anonymous reporter identity stays hidden from company reviewers; do not expose it through exports or audit events. Reporters see only the case status and information explicitly shared with them. Attachments use the same authorization as the case.
 
-Company administrators must designate an eligible confidential-report handler during configuration. If none is configured, expose the configuration gap and retain submitted reports without routing their contents to platform admins or arbitrary managers. Cases involving a handler require recusal and another eligible handler.
+Company Admins can review their company's workplace reports without a separate grant. They may designate additional confidential-report handlers. If no eligible admin or handler is available, expose the configuration gap and retain submitted reports without routing their contents to platform admins or arbitrary managers. Cases involving a handler require recusal and another eligible handler.
 
 Support access is a future capability. Until the grant and audit mechanism is implemented, deny platform access to operational company content. No persistent, invisible super-admin bypass. Company consent is the default for support grants; any exceptional recovery process must be documented and separately audited.
 
@@ -201,3 +201,7 @@ Chunk 1 provides the role model, operation matrix, scope rules, escalation rules
 Recommended defaults adopted in this baseline: Company Admin may create projects but appoints an explicit owner; operational approval remains delegated; confidential and restricted personal data require additional grants; platform support is read-only by default and explicitly authorized.
 
 Next: Chunk 2 implements company selection and validated company context. Chunk 3 implements scoped capabilities. Chunk 4 changes menus only where the matching API already enforces these boundaries. Each later chunk implements and tests its own matrix rows.
+
+October 9 profile update: Company Admins may view active members’ personal profiles in their selected company, including birth date, demographics, address and emergency contacts. This expressly replaces the separate-grant rule for these profile fields only; SSN, blood group, credentials and confidential reports remain excluded. Profile access is audited and personal profiles are view-only for admins. Personal identity and demographics lock on save; employees may maintain contact/address/emergency information. Employment edits lock on save and need a reasoned, separately approved correction before reopening once. Company-only User/Project Manager invitations enroll membership without granting unscoped project roles.
+
+Correction requests never permit self-approval. Company Admins authorize a single employee personal correction or a single company employment correction; both relock after saving and record requester, approver, decision reason and completion. Credentials, SSN and blood group remain excluded from admin profile access.

@@ -36,6 +36,7 @@ public class AuthResponse {
     private String gender;
     private String race;
     private String ethnicity;
+    private boolean profileCorrectionOpen;
     private Boolean profileDetailsSubmitted;
 
     private String emergencyContactName;

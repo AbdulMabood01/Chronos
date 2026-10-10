@@ -12,3 +12,9 @@
 .employment-saved { color: var(--primary-dark); }
 .profile-page > .employment-details { margin: 1.5rem 0; }
 @media (max-width: 480px) { .employment-metrics { grid-template-columns: 1fr; gap: 0; } }
+
+.detail-corrections { border-top:1px solid var(--border-color); margin-top:24px; padding-top:20px; }
+.detail-corrections form { display:grid; gap:12px; margin:16px 0; }
+.detail-corrections label { display:grid; gap:8px; }
+.detail-corrections textarea { width:100%; min-height:90px; box-sizing:border-box; padding:12px; border:1px solid var(--border-color); border-radius:8px; background:var(--surface-color); color:var(--text-primary); font:inherit; }
+.detail-corrections article { border:1px solid var(--border-color); border-radius:10px; padding:16px; margin:12px 0; }

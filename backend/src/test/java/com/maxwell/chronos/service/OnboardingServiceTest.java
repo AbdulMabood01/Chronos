@@ -93,6 +93,12 @@ class OnboardingServiceTest {
         invitation.setCreatedAt(Instant.now()); assertThrows(IllegalArgumentException.class,()->service.invite(1L));
         verifyNoInteractions(email);
     }
+    @Test void activationRequiresCurrentTermsAndRecordsAcceptance(){
+        assertThrows(IllegalArgumentException.class,()->service.activateAccepted(token,"StrongPassword123","old"));
+        assertNull(invitation.getUsedAt());assertNull(user.getPasswordHash());
+        service.activateAccepted(token,"StrongPassword123",LegalTerms.VERSION);
+        assertEquals(LegalTerms.VERSION,user.getTermsVersion());assertNotNull(user.getTermsAcceptedAt());assertNotNull(invitation.getUsedAt());
+    }
     @Test void activationHashesPasswordAndConsumesToken() {
         service.activate(token,"StrongPassword123");
         assertNotEquals("StrongPassword123",user.getPasswordHash()); assertTrue(encoder.matches("StrongPassword123",user.getPasswordHash()));

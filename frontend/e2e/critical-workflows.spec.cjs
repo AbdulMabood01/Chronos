@@ -85,6 +85,7 @@ test('company admin invites user; user creates account, joins project and signs 
     await join.getByLabel('First name', { exact: true }).fill('New');
     await join.getByLabel('Last name', { exact: true }).fill('Employee');
     await join.getByLabel('Password', { exact: true }).fill('Activated-E2E-123!');
+    await join.getByRole('checkbox').check();
     await join.getByRole('button', { name: 'Create account and join', exact: true }).click();
     await expect(join).toHaveURL(/\/dashboard$/);
     const bearer = await loginByApi(request, { email, password: 'Activated-E2E-123!' });

@@ -162,11 +162,11 @@ class ScopedPermissionsLocalDbTest {
         });
     }
 
-    @Test void companyAdminDoesNotAutomaticallyReceiveRestrictedGrants() {
+    @Test void companyAdminHandlesReportsWithoutReceivingOtherRestrictedGrants() {
         run(f -> {
             f.role(f.a,null,"COMPANY_ADMIN");
             var capabilities = f.permissions(f.a).capabilities();
-            assertFalse(capabilities.get("canHandleConfidentialReports"));
+            assertTrue(capabilities.get("canHandleConfidentialReports"));
             assertFalse(capabilities.get("canManagePerformanceReviews"));
             assertFalse(capabilities.get("canViewRestrictedPersonalFields"));
         });

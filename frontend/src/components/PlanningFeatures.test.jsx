@@ -42,11 +42,13 @@ it('handles an unset budget without a misleading zero percent', () => {
   expect(screen.queryByRole('progressbar')).toBeNull();
 });
 it('focuses missing fields and updates checklist progress while editing', () => {
-  render(<ProfileForm user={{ firstName: 'Alice', lastName: 'Smith', jobTitle: 'Engineer', dateOfBirth: '1990-01-01' }} onSave={vi.fn()} />);
+  render(<ProfileForm user={{ firstName: 'Alice', lastName: 'Smith', jobTitle: 'Engineer', dateOfBirth: '1990-01-01', gender: 'Female', race: 'Asian', ethnicity: 'Not Hispanic or Latino', joiningDate: '2024-01-01' }} onSave={vi.fn()} />);
   expect(screen.getByRole('progressbar', { name: 'Profile completeness' }).value).toBe(1);
-  fireEvent.click(screen.getByRole('button', { name: 'Review phone number' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Review contact details' }));
   expect(document.activeElement).toBe(screen.getByLabelText('Phone number'));
   fireEvent.change(screen.getByLabelText('Phone number'), { target: { value: '555-0101' } });
+  expect(screen.getByRole('progressbar', { name: 'Profile completeness' }).value).toBe(1);
+  fireEvent.change(screen.getByLabelText('Personal email'), { target: { value: 'alice@example.com' } });
   expect(screen.getByRole('progressbar', { name: 'Profile completeness' }).value).toBe(2);
   fireEvent.click(screen.getByRole('button', { name: 'Continue profile' }));
   expect(document.activeElement).toBe(screen.getByLabelText('Address line 1'));

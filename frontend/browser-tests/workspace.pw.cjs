@@ -22,7 +22,7 @@ async function mockWorkspace(page, role = 'EMPLOYEE') {
     else if (url.pathname === '/api/timesheets/my') data = [sheet];
     else if (url.pathname === '/api/timesheets') data = sheet;
     else if (/\/timesheets\/(\d|id)/.test(url.pathname)) data = sheet;
-    else if (url.pathname === '/api/projects/assigned') data = [{ id: 4, code: 'ATLAS', name: 'Atlas Platform', projectManagerName: 'Taylor Morgan' }];
+    else if (url.pathname === '/api/projects/assigned') data = [{ id: 4, code: 'ATLAS', name: 'Atlas Platform',status:'ACTIVE',isActive:true,assignments:[{userId:1,isActive:true}], projectManagerName: 'Taylor Morgan' }];
     else if (url.pathname === '/api/vacation/my') data = [{ id: 1, status: 'APPROVED', hours: 24, startDate: '2026-08-17', endDate: '2026-08-19', vacationType: 'VACATION' }];
     else if (url.pathname === '/api/letter-requests/my') data = [{ id: 1, status: 'APPROVED', requestType: 'EMPLOYMENT_VERIFICATION' }];
     await route.fulfill({ json: data });
@@ -45,6 +45,7 @@ test('employee overview, keyboard navigation, theme and approved timesheet', asy
   await screenshot(page, 'employee-dark');
   await page.getByRole('button', { name: 'Switch to light theme' }).click();
   await page.getByRole('navigation',{name:'Main navigation'}).getByRole('link', { name: 'Timesheets', exact: true }).click();
+  await page.getByText('More actions',{exact:true}).click();
   await expect(page.getByRole('button', { name: 'Export PDF' })).toBeEnabled();
   await screenshot(page, 'timesheet-desktop');
   expect(errors).toEqual([]);
@@ -62,6 +63,7 @@ test('mobile navigation, responsive dashboard and calendar', async ({ page }) =>
   await expect(page.getByRole('button', { name: 'Open navigation' })).toBeFocused();
   await page.getByRole('button', { name: 'Open navigation' }).click();
   await page.getByRole('navigation',{name:'Main navigation'}).getByRole('link', { name: 'Timesheets', exact: true }).click();
+  await page.getByText('More actions',{exact:true}).click();
   await expect(page.getByRole('button', { name: 'Export PDF' })).toBeEnabled();
   await screenshot(page, 'timesheet-mobile');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
